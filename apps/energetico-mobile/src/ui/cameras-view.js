@@ -1,11 +1,16 @@
 const GRID_LIMIT = 8;
 const THUMBNAIL_PREFIX = 'energetico:camera-preview:v1:';
+const CAMERA_NAME_PREFIX = 'energetico:camera-name:v1:';
 const HLS_MIME = 'application/vnd.apple.mpegurl';
 const HEVC_MIME = 'video/mp4; codecs="hvc1.1.6.L120.B0"';
 const GRID_RECONNECT_DELAY_MS = 12000;
 
 function thumbnailStoragePrefix(accountKey) {
   return accountKey ? `${THUMBNAIL_PREFIX}${encodeURIComponent(accountKey)}:` : '';
+}
+
+function cameraNameStoragePrefix(accountKey) {
+  return accountKey ? `${CAMERA_NAME_PREFIX}${encodeURIComponent(accountKey)}:` : '';
 }
 
 function isThumbnail(value) {
@@ -40,12 +45,25 @@ export function createCamerasView(documentRef) {
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
     let player, gridRequest, playback = [], channels = [], choosing = false;
+    let nameEditor = null, nameEditorReturnFocus = null, nameEditorChannelId = null;
     let playerReturnFocus = null, playerReturnChannelId = null;
     let thumbnailsChanged = false;
     const selected = new Set();
     const thumbnails = new Map();
     const windowRef = documentRef.defaultView;
     const storagePrefix = thumbnailStoragePrefix(accountKey);
+    const nameStoragePrefix = cameraNameStoragePrefix(accountKey);
+
+    function loadCameraNames() {
+      if (!nameStoragePrefix) return;
+      try {
+        const storage = windowRef?.localStorage;
+        for (const channel of channels) {
+          const saved = storage?.getItem(nameStoragePrefix + channel.id);
+          if (typeof saved === 'string' && saved.trim() && saved.trim().length <= 120) channel.label = saved.trim();
+        }
+      } catch { /* Camera names remain usable when storage is unavailable. */ }
+    }
 
     function loadThumbnails() {
       if (!storagePrefix) return;
@@ -106,6 +124,78 @@ export function createCamerasView(documentRef) {
       return node;
     };
 
+    function closeNameEditor({ restoreFocus = true } = {}) {
+      if (!nameEditor) return;
+      const editor = nameEditor;
+      const channelId = nameEditorChannelId;
+      nameEditor = null;
+      nameEditorChannelId = null;
+      if (editor.open && typeof editor.close === 'function') editor.close();
+      editor.remove();
+      if (restoreFocus) {
+        const target = nameEditorReturnFocus?.isConnected ? nameEditorReturnFocus
+          : dialog.querySelector(`[data-camera-rename="${channelId}"]`);
+        target?.focus?.({ preventScroll: true });
+      }
+      nameEditorReturnFocus = null;
+    }
+
+    function editCameraName(channel, trigger) {
+      if (nameEditor) return;
+      const editor = documentRef.createElement('dialog');
+      editor.className = 'camera-name-editor';
+      editor.dataset.cameraNameEditor = '';
+      editor.setAttribute('aria-labelledby', 'camera-name-editor-title');
+      editor.innerHTML = `
+        <form class="camera-name-editor__form" data-camera-name-form>
+          <h2 id="camera-name-editor-title">Editar nome da câmera</h2>
+          <label for="camera-name-editor-input">Nome da câmera</label>
+          <input id="camera-name-editor-input" data-camera-name-input type="text" maxlength="120" autocomplete="off">
+          <p class="camera-name-editor__error" role="alert" aria-live="polite"></p>
+          <div class="camera-name-editor__actions">
+            <button type="button" data-camera-name-cancel>Cancelar</button>
+            <button type="submit">Salvar</button>
+          </div>
+        </form>`;
+      const form = editor.querySelector('[data-camera-name-form]');
+      const input = editor.querySelector('[data-camera-name-input]');
+      const error = editor.querySelector('[role="alert"]');
+      input.value = channel.label;
+      nameEditor = editor;
+      nameEditorReturnFocus = trigger;
+      nameEditorChannelId = channel.id;
+      editor.addEventListener('cancel', event => {
+        event.preventDefault();
+        closeNameEditor();
+      });
+      editor.querySelector('[data-camera-name-cancel]').addEventListener('click', () => closeNameEditor());
+      form.addEventListener('submit', event => {
+        event.preventDefault();
+        error.textContent = '';
+        const label = input.value.trim();
+        if (!label || label.length > 120) {
+          error.textContent = 'Digite um nome para a câmera com até 120 caracteres.';
+          input.focus();
+          return;
+        }
+        try {
+          if (!nameStoragePrefix || !windowRef?.localStorage) throw new Error('Camera name storage is unavailable.');
+          windowRef.localStorage.setItem(nameStoragePrefix + channel.id, label);
+        } catch {
+          error.textContent = 'Não foi possível salvar o nome da câmera neste dispositivo.';
+          input.focus();
+          return;
+        }
+        channel.label = label;
+        render();
+        closeNameEditor();
+      });
+      documentRef.body.append(editor);
+      editor.showModal();
+      input.focus({ preventScroll: true });
+      input.select();
+    }
+
     function render() {
       cards.replaceChildren();
       selection.hidden = !choosing;
@@ -117,7 +207,13 @@ export function createCamerasView(documentRef) {
         const heading = make('div', 'camera-card__heading');
         const symbol = make('span', 'camera-card__wifi', '◉'); symbol.setAttribute('aria-hidden', 'true');
         const title = make('strong', '', channel.label);
-        heading.append(symbol, title);
+        const rename = make('button', 'camera-card__rename');
+        rename.type = 'button'; rename.dataset.cameraRename = channel.id;
+        rename.setAttribute('aria-label', `Editar nome da câmera ${channel.label}`);
+        rename.title = 'Editar nome da câmera';
+        rename.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 16.5V20h3.5L18.7 8.8l-3.5-3.5L4 16.5Zm17-10.1a1 1 0 0 0 0-1.4l-2-2a1 1 0 0 0-1.4 0l-1.7 1.7 3.5 3.5L21 6.4Z"/></svg>';
+        rename.addEventListener('click', () => editCameraName(channel, rename));
+        heading.append(symbol, title, rename);
         if (choosing) {
           const checkbox = documentRef.createElement('input');
           checkbox.type = 'checkbox'; checkbox.dataset.cameraSelect = channel.id;
@@ -187,7 +283,7 @@ export function createCamerasView(documentRef) {
       if (hadPlayer && !preserveReturnFocus) { playerReturnFocus = null; playerReturnChannelId = null; }
     }
     function close() {
-      page.abort(); stopPlayer({ restoreFocus: false });
+      page.abort(); closeNameEditor({ restoreFocus: false }); stopPlayer({ restoreFocus: false });
       documentRef.removeEventListener('visibilitychange', visibilityChanged);
       windowRef?.removeEventListener('pagehide', saveCurrentThumbnails);
       dialog.remove(); dialog = null; closeCurrent = null;
@@ -636,7 +732,12 @@ export function createCamerasView(documentRef) {
     closeCurrent = close;
     documentRef.addEventListener('visibilitychange', visibilityChanged);
     windowRef?.addEventListener('pagehide', saveCurrentThumbnails);
-    dialog.addEventListener('cancel', event => { event.preventDefault(); if (player) stopPlayer(); else close(); });
+    dialog.addEventListener('cancel', event => {
+      event.preventDefault();
+      if (nameEditor) closeNameEditor();
+      else if (player) stopPlayer();
+      else close();
+    });
     dialog.querySelector('[data-camera-back]').addEventListener('click', close);
     gridButton.addEventListener('click', () => { choosing = !choosing; selected.clear(); render(); });
     gridOpen.addEventListener('click', () => openPlayer(channels.filter(channel => selected.has(channel.id)), gridOpen));
@@ -644,7 +745,8 @@ export function createCamerasView(documentRef) {
     status.textContent = 'Carregando câmeras…';
     Promise.resolve().then(() => list({ signal: page.signal })).then(result => {
       if (page.signal.aborted) return;
-      channels = result;
+      channels = result.map(channel => ({ ...channel }));
+      loadCameraNames();
       loadThumbnails();
       status.textContent = channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.';
       render();

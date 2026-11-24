@@ -79,6 +79,23 @@
 .camera-card__heading strong { flex: 1; overflow-wrap: anywhere; }
 .camera-card__heading input { width: 22px; height: 22px; accent-color: #3279e8; }
 .camera-card__wifi { color: #31b8a5; font-size: 18px; }
+.camera-card__rename {
+  display: grid;
+  flex: 0 0 38px;
+  place-items: center;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #687078;
+  cursor: pointer;
+}
+.camera-card__rename svg { width: 18px; height: 18px; fill: currentColor; }
+.camera-card__rename:hover { background: #edf3fc; color: #2674e8; }
+.camera-card__rename:focus-visible { outline: 2px solid #2674e8; outline-offset: 2px; }
 .camera-card__preview {
   position: relative;
   display: grid;
@@ -106,6 +123,51 @@
   font-size: 18px;
 }
 .camera-card__caption { font-size: 13px; }
+dialog.camera-name-editor {
+  width: min(420px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - max(32px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+  box-sizing: border-box;
+  overflow: auto;
+  margin: auto;
+  padding: 22px;
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  color: #16191d;
+  box-shadow: 0 16px 48px #0004;
+}
+dialog.camera-name-editor::backdrop { background: #101113a8; }
+.camera-name-editor__form { display: grid; gap: 12px; }
+.camera-name-editor__form h2 { margin: 0; font-size: 19px; }
+.camera-name-editor__form label { font-size: 14px; font-weight: 650; }
+.camera-name-editor__form input {
+  width: 100%;
+  min-height: 46px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid #b8c0c8;
+  border-radius: 9px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.camera-name-editor__form input:focus-visible { outline: 2px solid #2674e8; outline-offset: 1px; }
+.camera-name-editor__error { margin: 0; color: #b42318; font-size: 13px; }
+.camera-name-editor__error:empty { display: none; }
+.camera-name-editor__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.camera-name-editor__actions button {
+  min-width: 90px;
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 9px;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.camera-name-editor__actions [data-camera-name-cancel] { background: #eef0f3; color: #343a40; }
+.camera-name-editor__actions button[type="submit"] { background: #2674e8; color: #fff; }
 .cameras-selection {
   position: absolute;
   z-index: 2;
