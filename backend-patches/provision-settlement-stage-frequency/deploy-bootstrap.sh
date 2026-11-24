@@ -25,6 +25,7 @@ PROVISION_STAGE_FREQUENCY_WATCHDOG_ARMED=0
 PROVISION_STAGE_FREQUENCY_GATE_UNIT="provision-stage-frequency-release-$$"
 PROVISION_STAGE_FREQUENCY_TRANSACTION_LOCK="$SNAPSHOT/transaction.lock"
 PROVISION_STAGE_FREQUENCY_SNAPSHOT="$SNAPSHOT"
+PROVISION_STAGE_FREQUENCY_MUTATION_MARKER="$SNAPSHOT/mutation-started"
 cleanup() {
   if [[ "$TRANSACTION_FD_OPEN" == 1 ]]; then
     exec 9>&-
@@ -81,12 +82,12 @@ flock -n 9
 PROVISION_STAGE_FREQUENCY_STAGE="$SNAPSHOT" \
   "$PYTHON" -I -B "$SNAPSHOT/deploy.py" --check "$MANIFEST_SHA"
 
-DEPLOYMENT_PINS="$("$PYTHON" -I -B -c 'import json,sys; m=json.load(open(sys.argv[1])); print(m["files"]["worker/workflow.py"]["before"],m["files"]["worker/workflow.py"]["after"],m["mirror"]["worker/workflow.py"])' "$SNAPSHOT/deploy-manifest.json")"
-read -r PROVISION_STAGE_FREQUENCY_BEFORE_SHA PROVISION_STAGE_FREQUENCY_AFTER_SHA PROVISION_STAGE_FREQUENCY_MIRROR_SHA <<< "$DEPLOYMENT_PINS"
+PROVISION_STAGE_FREQUENCY_MIRROR_SHA="$("$PYTHON" -I -B -c 'import json,sys; print(json.load(open(sys.argv[1]))["mirror"]["worker/workflow.py"])' "$SNAPSHOT/deploy-manifest.json")"
 source "$SNAPSHOT/deployment_gate.sh"
 provision_stage_frequency_block_ingress
 provision_stage_frequency_drain_requests
 PROVISION_STAGE_FREQUENCY_GATE=$$ \
   PROVISION_STAGE_FREQUENCY_STAGE="$SNAPSHOT" \
   PROVISION_STAGE_FREQUENCY_TRANSACTION_LOCK="$PROVISION_STAGE_FREQUENCY_TRANSACTION_LOCK" \
+  PROVISION_STAGE_FREQUENCY_MUTATION_MARKER="$PROVISION_STAGE_FREQUENCY_MUTATION_MARKER" \
   "$PYTHON" -I -B "$SNAPSHOT/deploy.py" --deploy "$MANIFEST_SHA"

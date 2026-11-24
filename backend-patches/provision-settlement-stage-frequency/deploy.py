@@ -207,6 +207,29 @@ def main():
         runner.BACKUPS = BACKUPS / "provision-settlement-stage-frequency"
         runner.restart = restart_with_transaction_lock
         runner.wait_health = lambda: wait_health(runner)
+        if not check_only:
+            mutation_marker = Path(os.environ.get("PROVISION_STAGE_FREQUENCY_MUTATION_MARKER", ""))
+            if mutation_marker.parent != STAGE or mutation_marker.name != "mutation-started":
+                raise RuntimeError("Unexpected mutation marker path")
+            atomic_copy = runner.atomic_copy
+
+            def mark_before_first_write(source, target, attributes=None):
+                try:
+                    marker_fd = os.open(
+                        mutation_marker,
+                        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                        0o600,
+                    )
+                except FileExistsError:
+                    pass
+                else:
+                    with os.fdopen(marker_fd, "wb") as marker:
+                        marker.write(b"source installation started\n")
+                        marker.flush()
+                        os.fsync(marker.fileno())
+                return atomic_copy(source, target, attributes)
+
+            runner.atomic_copy = mark_before_first_write
         result = runner.execute(manifest["files"], check_only=check_only)
         mirror_guard()
         print(json.dumps(result))

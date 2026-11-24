@@ -42,7 +42,7 @@
 - [x] Fazer a checagem de implantação; confirmar baseline e saúde antes de instalar. A instalação aguarda até 60 segundos pelo cold start do bridge.
 - [x] Instalar sob o lock e gate existentes, manter backup, reiniciar o serviço de chat e confirmar hash ativo, espelho inalterado, saúde do serviço e HTTPS.
 - [x] Registrar revisão, backup, hashes e saúde em `backend-patches/provision-settlement-stage-frequency/verification.md`.
-- [x] Endurecer a publicação: usar launcher root-owned fora da pasta de upload, propagar o lock até o comando de reinício e manter o watchdog armado antes do gate, com retry para remover a regra.
+- [x] Endurecer a publicação: usar launcher root-owned fora da pasta de upload, marcar a primeira gravação, propagar o lock até o comando de reinício e serializar a checagem final com o lock compartilhado.
 - [ ] Fazer revisão independente dos ajustes do launcher/watchdog, conferir os hashes do pacote, commitá-los e publicar o branch no GitHub.
 
 **Resultado esperado:** a lista de etapas da baixa mostra as mais usadas primeiro, sem alterar as opções, os valores escolhidos ou os dados financeiros.
