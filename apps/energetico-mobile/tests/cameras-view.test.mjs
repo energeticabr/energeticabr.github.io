@@ -213,7 +213,6 @@ test('grade seleciona até oito câmeras e abre todas simultaneamente', async t 
     document.querySelectorAll('[data-camera-select]')[i].click();
   }
   assert.equal(document.querySelectorAll('[data-camera-select]')[8].disabled, true);
-  document.querySelectorAll('[data-camera-open]')[8].click();
   assert.equal(document.querySelector('[data-camera-count]').textContent, '8 de 8 selecionadas');
   document.querySelector('[data-camera-open-grid]').click(); await flush();
   const selected = Array.from({ length: 8 }, (_, index) => `site-${index + 1}`);

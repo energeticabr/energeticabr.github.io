@@ -142,11 +142,7 @@ export function createCamerasView(documentRef) {
         const caption = make('span', 'camera-card__caption', 'Toque para ver ao vivo');
         openButton.append(play, caption);
         openButton.addEventListener('click', () => {
-          if (choosing) {
-            if (selected.has(channel.id)) selected.delete(channel.id);
-            else if (selected.size < GRID_LIMIT) selected.add(channel.id);
-            render();
-          } else openPlayer([channel]);
+          openPlayer([channel]);
         });
         card.append(heading, openButton);
         cards.append(card);
