@@ -19,6 +19,7 @@ import { scannedPages } from './helpers/scanned-pages.mjs';
 test('retomada aguarda o PDF pendente antes de consultar a pergunta e preserva rascunho', async t => {
   const h = makeHarness(); t.after(() => h.controller.stop());
   await h.controller.start();
+  h.store.ingestRemoteMessages([], { activeFlow: { id: 'construction_diary_fill', title: 'PREENCHER DIÁRIO DE OBRAS' } });
   h.store.setDraft('observação preservada');
   let release;
   const pending = new Promise(resolve => { release = resolve; });
