@@ -1,4 +1,5 @@
 import json
+import secrets
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,10 +28,11 @@ class YooseeSourceTest(unittest.TestCase):
     def test_loads_only_service_credential_file(self):
         with tempfile.TemporaryDirectory() as directory:
             location = Path(directory) / "yoosee.json"
-            location.write_text(json.dumps({"account": "camera@example.test", "password": "pass"}),
+            secret = secrets.token_urlsafe(16)
+            location.write_text(json.dumps({"account": "camera@example.test", "password": secret}),
                                 encoding="utf-8")
-            self.assertEqual(load_credentials(Path(directory)), ("camera@example.test", "pass"))
-            location.write_text('{"password":"pass"}', encoding="utf-8")
+            self.assertEqual(load_credentials(Path(directory)), ("camera@example.test", secret))
+            location.write_text(json.dumps({"password": secret}), encoding="utf-8")
             with self.assertRaises(ValueError):
                 load_credentials(Path(directory))
 
