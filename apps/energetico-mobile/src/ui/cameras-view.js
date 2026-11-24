@@ -202,8 +202,12 @@ export function createCamerasView(documentRef) {
         void connect(item, channel, null, startCompatible);
       };
       try {
-        const url = recordingId ? await playRecording(channel.id, recordingId, { signal })
-          : await startPlayback(channel.id, { signal, codecs: item.codecs });
+        const nativeHls = item.video.canPlayType(HLS_MIME);
+        const [url, playerModule] = await Promise.all([
+          recordingId ? playRecording(channel.id, recordingId, { signal })
+            : startPlayback(channel.id, { signal, codecs: item.codecs }),
+          nativeHls ? null : import('hls.js'),
+        ]);
         if (signal.aborted) return;
         const failed = () => {
           if (signal.aborted) return;
@@ -215,10 +219,9 @@ export function createCamerasView(documentRef) {
           item.status.textContent = 'Transmissão interrompida. Volte e tente novamente.';
         };
         item.onPlaybackError = failed;
-        if (item.video.canPlayType(HLS_MIME)) item.video.src = url;
+        if (nativeHls) item.video.src = url;
         else {
-          const { default: Hls } = await import('hls.js');
-          if (signal.aborted) return;
+          const { default: Hls } = playerModule;
           if (!Hls.isSupported()) throw new Error('Reprodução não disponível neste dispositivo.');
           item.hls = new Hls(item.preview
             ? { maxBufferLength: 6, maxMaxBufferLength: 8, backBufferLength: 4 }

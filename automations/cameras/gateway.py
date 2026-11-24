@@ -25,6 +25,7 @@ MAX_STREAMS = 8
 MAX_STARTING_PREVIEWS = 2
 START_TIMEOUT_SECONDS = 75
 IDLE_SECONDS = 12
+SINGLE_REOPEN_SECONDS = 45
 PREVIEW_IDLE_SECONDS = 24
 
 
@@ -75,9 +76,10 @@ class Stream:
         self.startup_deadline = now + START_TIMEOUT_SECONDS
         self.expires = now + 20 * 60
         width, fps = (384, 6) if preview else (640, 10)
+        segment_seconds = 1 if self.mode == "live" and not preview and not self.direct else 2
         bitrate = ["-crf", "28", "-maxrate", "320k", "-bufsize", "320k"] if preview else []
-        playlist_size = "12" if preview else "4"
-        retention = ["-hls_delete_threshold", "16"] if preview else []
+        playlist_size = "12" if preview else str(8 // segment_seconds)
+        retained_segments = "16" if preview else str(2 // segment_seconds)
         if self.direct:
             # Preserve timing the demuxer knows and fill missing Annex B timestamps.
             video = ["-map", "0:v:0", "-c:v", "copy", "-bsf:v",
@@ -85,7 +87,7 @@ class Stream:
         else:
             video = ["-vf", f"scale={width}:-2,fps={fps}", "-c:v", "libx264",
                      "-preset", "ultrafast", "-threads", "1", "-pix_fmt", "yuv420p",
-                     *bitrate, "-g", str(fps * 2), "-sc_threshold", "0"]
+                     *bitrate, "-g", str(fps * segment_seconds), "-sc_threshold", "0"]
         fmp4 = self.direct and entry["format"] == "hevc"
         container = ["-tag:v", "hvc1", "-hls_segment_type", "fmp4",
                      "-hls_fmp4_init_filename", "init.mp4"] if fmp4 else []
@@ -106,7 +108,8 @@ class Stream:
                  "-fflags", "+genpts", "-analyzeduration", "1500000", "-probesize", "65536",
                  "-f", entry["format"], "-i", "pipe:0",
                  "-an", *video, "-f", "hls", *container,
-                 "-hls_time", "2", "-hls_list_size", playlist_size, *retention,
+                 "-hls_time", str(segment_seconds), "-hls_list_size", playlist_size,
+                 "-hls_delete_threshold", retained_segments,
                  "-hls_flags", "delete_segments+temp_file+independent_segments",
                  "-hls_segment_filename", segment, self.playlist],
                 cwd=self.directory.name, stdin=self.source.stdout, stdout=subprocess.DEVNULL,
@@ -223,6 +226,8 @@ class Gateway:
         try:
             with self.lock:
                 self.expire()
+                if len(self.streams) == 2:
+                    self._release_idle_single()
                 if len(self.streams) > 1:
                     raise PlaybackError(429)
                 self.query_active = True
@@ -295,6 +300,20 @@ class Gateway:
         self.streams[key] = stream
         return stream
 
+    @staticmethod
+    def _is_warm_single(stream, now):
+        return (IDLE_SECONDS < now - stream.last_request <= SINGLE_REOPEN_SECONDS
+                and not stream.preview and stream.mode == "live" and stream.has_video)
+
+    def _release_idle_single(self, protected=()):
+        now = time.monotonic()
+        key = next((key for key, stream in self.streams.items()
+                    if key not in protected and self._is_warm_single(stream, now)), None)
+        if key is None:
+            return False
+        self.streams.pop(key).close()
+        return True
+
     def start_grid(self, channels, viewer, *, codecs=()):
         if (not isinstance(channels, list) or not 1 <= len(channels) <= MAX_STREAMS
                 or not all(isinstance(channel, str) and channel in self.entries for channel in channels)
@@ -307,15 +326,15 @@ class Gateway:
             paths = {}
             prepared = []
             busy = []
-            for channel in channels:
-                key = self._stream_key(channel, viewer, codecs)
+            requested = {channel: self._stream_key(channel, viewer, codecs) for channel in channels}
+            for channel, key in requested.items():
                 stream = self.streams.get(key)
                 if stream and stream.mode != "live":
                     del self.streams[key]
                     stream.close()
                     stream = None
                 if stream is None:
-                    if len(self.streams) >= MAX_STREAMS:
+                    if len(self.streams) >= MAX_STREAMS and not self._release_idle_single(requested.values()):
                         busy.append(channel)
                         continue
                     try:
@@ -347,11 +366,12 @@ class Gateway:
                 del self.streams[key]
                 stream = None
             if not stream:
-                if len(self.streams) >= MAX_STREAMS:
+                if len(self.streams) >= MAX_STREAMS and not self._release_idle_single():
                     raise PlaybackError(429)
                 stream = self._open_stream(key, recording=recording)
             if stream.startup_deadline is None:
                 self._launch_preview(stream)
+            stream.last_request = time.monotonic()
         deadline = time.monotonic() + START_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
             with self.lock:
@@ -415,9 +435,12 @@ class Gateway:
 
     def expire(self):
         now = time.monotonic()
+        warm = max((stream for stream in self.streams.values()
+                    if self._is_warm_single(stream, now) and now <= stream.expires and stream.alive()),
+                   key=lambda stream: stream.last_request, default=None)
         for key, stream in list(self.streams.items()):
             idle_seconds = PREVIEW_IDLE_SECONDS if stream.preview else IDLE_SECONDS
-            if (now - stream.last_request > idle_seconds
+            if ((stream is not warm and now - stream.last_request > idle_seconds)
                     or now > stream.expires or not stream.alive()):
                 del self.streams[key]
                 stream.close()
