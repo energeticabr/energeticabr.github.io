@@ -9,6 +9,8 @@ import {createGalleryRecordActions} from './gallery-record-actions.js';
 const LOGO=new URL('../../../../assets/logo-energetica-oficial.png',import.meta.url).href;
 const monthLabel=value=>value?`${value.slice(5)}/${value.slice(0,4)}`:'Todos';
 const money=cents=>cents===null||cents===undefined?'Não calculado':(cents/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const SALARY_TYPE='SALÁRIO';
+const isSalaryType=type=>typeof type==='string'&&type.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()==='SALARIO';
 const cancelled=()=>new DOMException('Consulta cancelada.','AbortError');
 const ICONS={sheet:'M6 2h8l4 4v16H6z M14 2v5h4 M9 11h6 M9 15h6 M9 19h4',coins:'M17 5c0 2-3 3-6 3s-6-1-6-3 3-3 6-3 6 1 6 3z M5 5v5c0 2 3 3 6 3s6-1 6-3V5 M5 10v5c0 2 3 3 6 3s6-1 6-3v-5 M5 15v4c0 2 3 3 6 3s6-1 6-3v-4',payment:'M3 5h18v14H3z M3 9h18 M6 14h5'};
 function abortable(promise,signal){
@@ -96,20 +98,36 @@ export function createSupplierPayrollReportView({document:doc=globalThis.documen
  function displayPayments(entry,rows){
   const totals=summarizePayrollPayments(rows);entry.rows=rows;entry.loaded=true;
   entry.totalValue.textContent=money(totals.totalCents);entry.countValue.textContent=String(rows.length);entry.metrics.removeAttribute('aria-busy');
-  const rubrics=summarizePayrollPaymentsByType(rows);
+  const expected=entry.group.expectedSalaryCents;
+  const hasExpected=Number.isSafeInteger(expected)&&expected>=0;
+  const hasUnclassifiedPayment=hasExpected&&rows.some(row=>
+   (typeof row?.type!=='string'||!row.type.trim())&&summarizePayrollPayments([row]).totalCents!==0);
+  const rubrics=summarizePayrollPaymentsByType(rows.map(row=>
+   row?.type!==SALARY_TYPE&&isSalaryType(row?.type)?{...row,type:SALARY_TYPE}:row));
+  if(hasExpected&&!rubrics.some(rubric=>rubric.type===SALARY_TYPE)) {
+   rubrics.unshift({type:SALARY_TYPE,totalCents:hasUnclassifiedPayment?null:0});
+  }
   entry.rubrics.replaceChildren();
   for(const rubric of rubrics){
    const item=make('span','spr-rubric-row'),value=make('strong','spr-rubric-value');paint(item,rubric.type);item.setAttribute('role','listitem');
-   const salary=rubric.type.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toUpperCase()==='SALARIO';
-   if(salary){
+   item.append(make('span','spr-rubric-label',`${rubric.type}: `),value);
+   if(rubric.type===SALARY_TYPE){
     item.classList.add('spr-rubric-row--salary');value.classList.add('spr-salary-values');
     const paid=make('span','spr-salary-paid',money(rubric.totalCents)),comparison=make('span','spr-salary-comparison');
-    const expected=entry.group.expectedSalaryCents;
-    const amount=make('span','spr-salary-expected',Number.isSafeInteger(expected)&&expected>=0?money(expected):'Não informado');
+    const amount=make('span','spr-salary-expected',hasExpected?money(expected):'Não informado');
     paid.setAttribute('aria-label','Salário pago');amount.setAttribute('aria-label','Salário esperado');
     comparison.append(doc.createTextNode(' / '),amount);value.append(paid,comparison);
+
+    const difference=hasExpected&&!hasUnclassifiedPayment&&Number.isSafeInteger(rubric.totalCents)
+     ?Math.max(0,expected-rubric.totalCents):null;
+    const balance=Number.isSafeInteger(difference)?difference:null;
+    const remaining=make('span','spr-salary-remaining');
+    remaining.dataset.balance=balance===null?'unknown':balance===0?'settled':'due';
+    remaining.append(make('span','spr-salary-remaining-label','Falta pagar'),doc.createTextNode(' '),
+     make('strong','spr-salary-remaining-value',money(balance)));
+    item.append(doc.createTextNode(' '),remaining);
    }else value.textContent=money(rubric.totalCents);
-   item.append(make('span','spr-rubric-label',`${rubric.type}: `),value);entry.rubrics.append(item);
+   entry.rubrics.append(item);
   }
   if(!rubrics.length)entry.rubrics.textContent='Sem pagamentos';
   fitSalaryRubrics(entry.rubrics);

@@ -93,7 +93,7 @@ test('collapsed supplier header puts rubric totals between total paid and paymen
   assert.equal(rubrics.previousElementSibling.classList.contains('spr-total-paid'), true);
   assert.equal(rubrics.nextElementSibling.classList.contains('spr-payment-count'), true);
   assert.deepEqual([...rubrics.querySelectorAll('[role=listitem]')].map(text), [
-    'AJUDA DE CUSTO: R$ 204,56', 'SALÁRIO: R$ 1.198,25 / Não informado',
+    'AJUDA DE CUSTO: R$ 204,56', 'SALÁRIO: R$ 1.198,25 / Não informado Falta pagar Não calculado',
   ]);
   assert.equal(text(rubrics.querySelector('.spr-salary-paid')), 'R$ 1.198,25');
   assert.equal(text(rubrics.querySelector('.spr-salary-expected')), 'Não informado');

@@ -33,7 +33,7 @@ try {
   }), { action: 'open-supplier-payroll-report' }), { action: 'open-supplier-payroll-report', onNavigate: async () => {} });
   await view.open();
   const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  for (let i = 0; i < 80 && view.element.querySelectorAll('.spr-salary-expected').length < 3; i++) await frame();
+  for (let i = 0; i < 80 && view.element.querySelectorAll('.spr-salary-remaining').length < 4; i++) await frame();
   await Promise.all([...view.element.querySelectorAll('img')].map(image => image.decode().catch(() => {})));
   await document.fonts.ready; await frame();
   const root = view.element, content = root.querySelector('.spr-content'), portrait = root.dataset.reportPortrait === 'true';
@@ -48,10 +48,16 @@ try {
         oneLine: new Set(fragments.map(rect => Math.round(portrait ? rect.left : rect.top))).size === 1,
         fitsValue: fragments.every(rect => contains(valueBox, rect)), fitsRow: fragments.every(rect => contains(rowBox, rect)), color: getComputedStyle(node).color };
     });
-    return { text: plain(value), width: row.clientWidth, scrollWidth: row.scrollWidth, atoms };
+    const balance = row.querySelector('.spr-salary-remaining'), balanceBox = balance.getBoundingClientRect();
+    return { width: row.clientWidth, scrollWidth: row.scrollWidth, atoms, balance: {
+      text: plain(balance.querySelector('.spr-salary-remaining-value')), fitsRow: contains(rowBox, balanceBox),
+      fitsContent: balance.scrollWidth <= balance.clientWidth + 1,
+      background: getComputedStyle(balance).backgroundColor, parentBackground: getComputedStyle(row).backgroundColor,
+    } };
   });
   const cards = [...root.querySelectorAll('.spr-supplier')];
-  const unaffected = cards.find(card => card.querySelector('.spr-name').textContent.startsWith('DELTA'));
+  const unaffected = cards.find(card => card.querySelector('.spr-name').textContent.startsWith('DELTA'))
+    .querySelector('.spr-rubric-row:not(.spr-rubric-row--salary)');
   const result = { portrait, pageHorizontalOverflow: document.documentElement.scrollWidth > innerWidth + 1,
     contentHorizontalOverflow: content.scrollWidth > content.clientWidth + 1,
     salaryTexts: salaryRows.map(row => plain(row.querySelector('.spr-rubric-value'))), amounts,
