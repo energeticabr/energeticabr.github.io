@@ -36,8 +36,12 @@
 .cameras-player__tiles[data-count="6"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .cameras-player__tiles[data-count="7"],
 .cameras-player__tiles[data-count="8"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cameras-player__tiles[data-focused="true"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 .cameras-player__tile { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #1e2b33; }
+.cameras-player__tile[hidden] { display: none; }
 .cameras-player__tile video { width: 100%; height: 100%; object-fit: contain; }
+.cameras-player__video--focusable { touch-action: manipulation; cursor: zoom-in; }
+.cameras-player__tiles[data-focused="true"] .cameras-player__video--focusable { cursor: zoom-out; }
 .cameras-player__label, .cameras-player__status { position: absolute; left: 8px; padding: 4px 6px; background: #0009; color: white; border-radius: 3px; font-size: 12px; pointer-events: none; }
 .cameras-player__label { top: 8px; }
 .cameras-player__status { bottom: 8px; }
