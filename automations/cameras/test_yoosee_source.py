@@ -10,6 +10,16 @@ from unittest.mock import AsyncMock, Mock, patch
 from yoosee_source import Hub, load_credentials, parse_request, remember_video, sdk_input
 
 
+def make_hub(device):
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        return Hub(Path("."), [device])
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
+
+
 class YooseeReconnectTest(unittest.IsolatedAsyncioTestCase):
     async def test_sends_initial_video_and_keeps_subscribers_when_the_sdk_disconnects(self):
         device = 7312456789
@@ -37,7 +47,7 @@ class YooseeReconnectTest(unittest.IsolatedAsyncioTestCase):
 class YooseeSourceTest(unittest.TestCase):
     def test_status_snapshot_uses_existing_video_activity_and_preserves_last_online_time(self):
         device = 7312456789
-        hub = Hub(Path("."), [device])
+        hub = make_hub(device)
         hub.started_at = 0.0
         hub.last_video_at[device] = 100.0
         hub.last_online_at[device] = "2026-11-24T12:00:00Z"
@@ -50,7 +60,7 @@ class YooseeSourceTest(unittest.TestCase):
 
     def test_status_snapshot_waits_for_the_startup_grace_when_no_frame_has_arrived(self):
         device = 7312456789
-        hub = Hub(Path("."), [device])
+        hub = make_hub(device)
         hub.started_at = 0.0
         self.assertEqual(hub.status_snapshot(now=129.9)[str(device)]["status"], "unknown")
         self.assertEqual(hub.status_snapshot(now=130.0)[str(device)], {
@@ -59,7 +69,7 @@ class YooseeSourceTest(unittest.TestCase):
 
     def test_unix_socket_status_request_returns_json_without_subscribing_video(self):
         device = 7312456789
-        hub = Hub(Path("."), [device])
+        hub = make_hub(device)
         hub.started_at = 0.0
         reader = SimpleNamespace(readline=AsyncMock(return_value=b"STATUS\n"), read=AsyncMock())
         writer = Mock()

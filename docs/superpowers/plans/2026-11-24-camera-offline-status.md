@@ -64,7 +64,7 @@
 ### Task 4 — Operação, publicação e verificação final
 
 - [x] Configurar `StateDirectory` e documentar consulta/IPC, sem criar dependência da API XMEye de desenvolvedor.
-- [x] Rodar a trava de gestos, testes focados da interface, layout mobile/desktop e builds web/PWA/iOS; a suíte Python anterior passou, mas dois novos testes do leitor PTZ aguardam validação no CI.
+- [x] Rodar a trava de gestos, os 45 testes Python na versão 3.9, testes focados da interface, layout mobile/desktop e builds web/PWA/iOS.
 - [ ] Aguardar CI da revisão, publicar web/Google Play internal/TestFlight e implantar o gateway nos dois serviços systemd com backup e health verificado.
 
 ## Completion
