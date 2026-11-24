@@ -1,10 +1,33 @@
 import { bindReportLandscape } from "./report-landscape.js";
 
 const GRID_LIMIT = 8;
+const THUMBNAIL_PREFIX = 'energetico:camera-preview:v1:';
+
+function thumbnailStoragePrefix(accountKey) {
+  return accountKey ? `${THUMBNAIL_PREFIX}${encodeURIComponent(accountKey)}:` : '';
+}
+
+function isThumbnail(value) {
+  return typeof value === 'string' && value.length <= 128_000
+    && /^data:image\/jpeg;base64,[a-z0-9+/]+=*$/i.test(value);
+}
+
 export function createCamerasView(documentRef) {
   let dialog, closeCurrent;
 
-  function open({ list, start, prepareGrid, move, listRecordings, playRecording }) {
+  function clearPreviews(accountKey) {
+    const prefix = thumbnailStoragePrefix(accountKey);
+    if (!prefix) return;
+    try {
+      const storage = documentRef.defaultView?.localStorage;
+      for (let index = (storage?.length ?? 0) - 1; index >= 0; index--) {
+        const key = storage.key(index);
+        if (key?.startsWith(prefix)) storage.removeItem(key);
+      }
+    } catch { /* Preview storage is optional. */ }
+  }
+
+  function open({ accountKey, list, start, prepareGrid, move, listRecordings, playRecording }) {
     if (dialog) return true;
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
@@ -12,6 +35,43 @@ export function createCamerasView(documentRef) {
     let thumbnailsChanged = false;
     const selected = new Set();
     const thumbnails = new Map();
+    const windowRef = documentRef.defaultView;
+    const storagePrefix = thumbnailStoragePrefix(accountKey);
+
+    function loadThumbnails() {
+      if (!storagePrefix) return;
+      try {
+        const storage = windowRef?.localStorage;
+        for (const channel of channels) {
+          const image = storage?.getItem(storagePrefix + channel.id);
+          if (isThumbnail(image)) thumbnails.set(channel.id, image);
+        }
+      } catch { /* Preview storage is optional. */ }
+    }
+
+    function saveThumbnail(item) {
+      const { video, channelId } = item;
+      if (!item.connected || item.mode !== 'live' || item.controller.signal.aborted
+          || video.readyState < 2 || !video.videoWidth || !video.videoHeight
+          || item.thumbnailTime === video.currentTime) return;
+      try {
+        const canvas = documentRef.createElement('canvas');
+        const scale = Math.min(1, 384 / Math.max(video.videoWidth, video.videoHeight));
+        canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+        canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        const image = canvas.toDataURL('image/jpeg', 0.65);
+        if (!isThumbnail(image)) return;
+        thumbnails.set(channelId, image);
+        item.thumbnailTime = video.currentTime;
+        thumbnailsChanged = true;
+        if (storagePrefix) windowRef?.localStorage?.setItem(storagePrefix + channelId, image);
+      } catch { /* Canvas or storage access may be unavailable while video can still play. */ }
+    }
+
+    function saveCurrentThumbnails() {
+      playback.forEach(saveThumbnail);
+    }
 
     dialog = documentRef.createElement("dialog");
     dialog.className = "cameras-view";
@@ -84,6 +144,7 @@ export function createCamerasView(documentRef) {
     }
 
     function stopPlayer() {
+      saveCurrentThumbnails();
       gridRequest?.abort(); gridRequest = null;
       for (const item of playback) {
         item.controller.abort();
@@ -102,6 +163,7 @@ export function createCamerasView(documentRef) {
     function close() {
       page.abort(); stopPlayer();
       documentRef.removeEventListener('visibilitychange', visibilityChanged);
+      windowRef?.removeEventListener('pagehide', saveCurrentThumbnails);
       dialog.remove(); dialog = null; closeCurrent = null;
       previousFocus?.focus?.();
     }
@@ -112,11 +174,13 @@ export function createCamerasView(documentRef) {
       }
     }
     async function connect(item, channel, recordingId = null, startPlayback = start) {
+      saveThumbnail(item);
       item.controller.abort();
       item.hls?.destroy(); item.hls = null;
       item.video.pause(); item.video.removeAttribute('src'); item.video.load();
       item.controller = new AbortController();
       item.mode = recordingId ? 'playback' : 'live';
+      item.thumbnailTime = null;
       item.connected = false; item.updateControls?.();
       const { signal } = item.controller;
       item.status.textContent = recordingId ? 'Abrindo gravação…' : 'Conectando…';
@@ -165,7 +229,8 @@ export function createCamerasView(documentRef) {
         const label = make('span', 'cameras-player__label', channel.label);
         const notice = make('span', 'cameras-player__status'); notice.setAttribute('role', 'status');
         video.addEventListener('error', () => { if (!item.controller.signal.aborted) notice.textContent = 'Transmissão interrompida. Volte e tente novamente.'; });
-        const item = { controller: new AbortController(), video, status: notice, hls: null, mode: 'live', connected: false, preview };
+        const item = { controller: new AbortController(), video, channelId: channel.id, status: notice,
+          hls: null, mode: 'live', connected: false, preview, thumbnailTime: null };
         if (preview) {
           const resume = () => {
             if (item.connected && video.paused) void video.play().then(() => { notice.textContent = ''; }).catch(() => {});
@@ -180,15 +245,7 @@ export function createCamerasView(documentRef) {
           });
         }
         video.addEventListener('playing', () => {
-          if (thumbnails.has(channel.id) || !video.videoWidth || !video.videoHeight) return;
-          try {
-            const canvas = documentRef.createElement('canvas');
-            canvas.width = Math.min(video.videoWidth, 480);
-            canvas.height = Math.round(canvas.width * video.videoHeight / video.videoWidth);
-            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-            thumbnails.set(channel.id, canvas.toDataURL('image/jpeg', 0.7));
-            thumbnailsChanged = true;
-          } catch { /* A source without canvas access still plays normally. */ }
+          if (item.thumbnailTime === null) saveThumbnail(item);
         });
         playback.push(item); tile.append(video, label, notice);
         if (chosen.length > 1 && (move || listRecordings)) {
@@ -266,6 +323,7 @@ export function createCamerasView(documentRef) {
     }
     closeCurrent = close;
     documentRef.addEventListener('visibilitychange', visibilityChanged);
+    windowRef?.addEventListener('pagehide', saveCurrentThumbnails);
     dialog.addEventListener('cancel', event => { event.preventDefault(); if (player) stopPlayer(); else close(); });
     dialog.querySelector('[data-camera-back]').addEventListener('click', close);
     gridButton.addEventListener('click', () => { choosing = !choosing; selected.clear(); render(); });
@@ -275,10 +333,11 @@ export function createCamerasView(documentRef) {
     Promise.resolve().then(() => list({ signal: page.signal })).then(result => {
       if (page.signal.aborted) return;
       channels = result;
+      loadThumbnails();
       status.textContent = channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.';
       render();
     }).catch(error => { if (!page.signal.aborted) status.textContent = error.message || 'Não foi possível carregar as câmeras.'; });
     return true;
   }
-  return { open, close: () => closeCurrent?.() };
+  return { open, close: () => closeCurrent?.(), clearPreviews };
 }

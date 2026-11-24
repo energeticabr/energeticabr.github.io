@@ -11725,8 +11725,13 @@ export function createAppController({
     }
   }
 
+  function cameraPreviewAccountKey() {
+    return account?.homeAccountId || account?.localAccountId || account?.idTokenClaims?.oid;
+  }
+
   async function signOut() {
     view.closeCameras?.();
+    view.clearCameraPreviews?.(cameraPreviewAccountKey());
     cancelMascotOrientationTransition();
     disposePendingPayrollLinks();
     pendingPayrollRecovery.clear();
@@ -12698,6 +12703,7 @@ export function createAppController({
       if (command.replyId === "action_cameras") {
         if (!account || stopped || !client.listCameraChannels) return false;
         return view.openCameras?.({
+          accountKey: cameraPreviewAccountKey(),
           list: client.listCameraChannels,
           start: client.startCameraPlayback,
           prepareGrid: client.prepareCameraGrid,
