@@ -1,6 +1,7 @@
 """Accept a healthy source installed by another verified shared deployment."""
 
 import json
+import os
 from pathlib import Path
 import re
 import stat
@@ -11,19 +12,48 @@ BACKUPS = Path("/var/backups/energetica-whatsapp")
 TARGET = "/opt/energetica-whatsapp/worker/workflow.py"
 
 
-def trusted_json(path):
-    info = path.lstat()
-    if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1
-            or stat.S_IMODE(info.st_mode) & 0o022):
-        return None
+def trusted_directory(path):
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        info = path.lstat()
+    except OSError:
+        return None
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid != 0
+            or stat.S_IMODE(info.st_mode) & 0o022):
+        return False
+    return True
+
+
+def trusted_json(path):
+    try:
+        relative = path.relative_to(BACKUPS)
+    except ValueError:
+        return None
+    if not trusted_directory(BACKUPS):
+        return None
+    parent = BACKUPS
+    for part in relative.parts[:-1]:
+        parent = parent / part
+        if not trusted_directory(parent):
+            return None
+    descriptor = None
+    try:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        info = os.fstat(descriptor)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1
+                or stat.S_IMODE(info.st_mode) & 0o022):
+            return None
+        with os.fdopen(descriptor, "rb") as stream:
+            descriptor = None
+            return json.loads(stream.read().decode("utf-8"))
     except (OSError, ValueError, UnicodeDecodeError):
         return None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
 
 def main(expected):
-    if BACKUPS.is_symlink() or not BACKUPS.is_dir():
+    if not trusted_directory(BACKUPS):
         return 1
     for receipt_path in BACKUPS.rglob("receipt.json"):
         if receipt_path.is_symlink():

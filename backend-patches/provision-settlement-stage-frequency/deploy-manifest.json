@@ -15,6 +15,6 @@
     "patch_backend.py": "65e4c543509bf64a4ce1665129097b929e150188a4486a4a004f1959b78a4d16",
     "shared-deploy.py": "01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2",
     "source.patch": "959862dcc6592c2a471a80d87c8d2f74d44f0061a89674a7001468565eef2280",
-    "verify_successor.py": "fbbb0bc9659d86c28fea947e91cfd6fe373334fb1317cfea6967947043ef8e2b"
+    "verify_successor.py": "b9b15f1777ea0457e43fe69354b97b2b1cb45e478f8fa782d10bc361843584ad"
   }
 }
