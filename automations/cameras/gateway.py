@@ -70,6 +70,8 @@ class Stream:
         self.expires = now + 20 * 60
         width, fps = (384, 6) if preview else (640, 10)
         bitrate = ["-crf", "28", "-maxrate", "320k", "-bufsize", "320k"] if preview else []
+        playlist_size = "12" if preview else "4"
+        retention = ["-hls_delete_threshold", "16"] if preview else []
         try:
             # The executable is selected by server configuration. No request
             # data can alter the argument list or the input sent to the adapter.
@@ -87,7 +89,7 @@ class Stream:
                  "-an", "-vf", f"scale={width}:-2,fps={fps}", "-c:v", "libx264",
                  "-preset", "ultrafast", "-threads", "1", "-pix_fmt", "yuv420p",
                  *bitrate, "-g", str(fps * 2), "-sc_threshold", "0", "-f", "hls",
-                 "-hls_time", "2", "-hls_list_size", "4",
+                 "-hls_time", "2", "-hls_list_size", playlist_size, *retention,
                  "-hls_flags", "delete_segments+temp_file+independent_segments",
                  "-hls_segment_filename", "segment-%08d.ts", "index.m3u8"],
                 cwd=self.directory.name, stdin=self.source.stdout, stdout=subprocess.DEVNULL,
@@ -378,12 +380,12 @@ class Gateway:
     def get(self, capability, filename):
         with self.lock:
             stream = self._find_stream(capability)
-            try:
-                payload = stream.read(filename)
-            except FileNotFoundError:
-                raise PlaybackError(404) from None
             stream.last_request = time.monotonic()
-            return payload
+        # A slow segment read should not hold up readers of other streams.
+        try:
+            return stream.read(filename)
+        except FileNotFoundError:
+            raise PlaybackError(404) from None
 
     def expire(self):
         now = time.monotonic()
