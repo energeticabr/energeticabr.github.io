@@ -14,16 +14,26 @@ Manter cópias privadas do arquivo ativo em `baseline/worker/workflow.py` e `can
 python -B package.py --baseline <baseline> --candidate <candidate> --stage /home/opc/provision-settlement-stage-frequency-20261124-r2/release
 ```
 
-Enviar apenas o conteúdo de `<release-local>` para `/home/opc/provision-settlement-stage-frequency-20261124-r1/release`.
+Enviar apenas o conteúdo de `<release-local>` para `/home/opc/provision-settlement-stage-frequency-20261124-r2/release`.
 
 ## Publicação
 
-Com o pacote no diretório fixado, executar como root:
+O `deploy-bootstrap.sh` fica fora do pacote de upload. Instalar uma cópia do checkout revisado em um caminho root-owned que `opc` não possa alterar. Não executar como root um script vindo da pasta de upload. Exemplo no servidor de publicação:
 
 ```sh
-sudo -n bash /home/opc/provision-settlement-stage-frequency-20261124-r2/release/deploy.sh <SHA256_DO_MANIFESTO>
+sudo install -o root -g root -m 0755 \
+  <checkout-revisado>/backend-patches/provision-settlement-stage-frequency/deploy-bootstrap.sh \
+  /usr/local/sbin/provision-settlement-stage-frequency-deploy
 ```
 
-O pacote valida o manifesto fornecido e copia todos os arquivos de entrada para um snapshot privado de root em `/run`; confere os hashes do snapshot antes de executar o código Python. O carregador verifica e executa os mesmos bytes lidos. A implantação compila o candidato, adquire o lock compartilhado, bloqueia novas requisições do bridge e aguarda o esvaziamento antes de instalar atomicamente. Mantém backup recuperável, reinicia o bridge, confirma que o worker WhatsApp continua ativo e aguarda até 60 segundos pela saúde local após cold start. Se houver falha, restaura o arquivo, reinicia o bridge e aguarda a saúde da versão restaurada antes de liberar o tráfego. O watchdog acompanha a vida do processo de implantação; não abre o tráfego por um prazo fixo durante a drenagem ou o rollback. O mirror é apenas verificado.
+Conferir o hash do launcher instalado contra o checkout revisado e confirmar que o dono é root e o modo não permite escrita por grupo/outros. Depois, executar:
+
+```sh
+sudo -n /usr/local/sbin/provision-settlement-stage-frequency-deploy \
+  /home/opc/provision-settlement-stage-frequency-20261124-r2/release \
+  <SHA256_DO_MANIFESTO>
+```
+
+O launcher autentica o manifesto e copia os arquivos do pacote para um snapshot root-owned em `/run`; confere cada hash antes de executar código do pacote. O carregador verifica e executa os mesmos bytes lidos. Um lock de transação herdado pelo launcher, pelo Python e pelo comando de reinício mantém o watchdog ativo até instalação ou rollback terminar. O watchdog é armado antes do bloqueio do ingress e repete a remoção da regra até confirmar que ela saiu. A implantação compila o candidato, adquire também o lock compartilhado, bloqueia novas requisições do bridge e espera o esvaziamento antes de instalar atomicamente. Mantém backup recuperável, reinicia o bridge, confirma que o worker WhatsApp continua ativo e espera até 60 segundos pela saúde local após cold start. Se houver falha, restaura o arquivo, reinicia o bridge e espera a saúde da versão restaurada antes de liberar o tráfego. O mirror é apenas verificado.
 
 Após o deploy, confirmar também `https://163-176-171-217.sslip.io/health` e os hashes ativos de produção e do mirror; registrar o recibo antes de concluir.

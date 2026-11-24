@@ -31,7 +31,7 @@
 
 **Arquivos:**
 - Criar `backend-patches/provision-settlement-stage-frequency/patch_backend.py` para estender a guarda e o ranking.
-- Criar `source.patch`, `deploy.py`, `package.py`, `deployment_gate.sh`, `deploy.sh`, `deploy-manifest.json`, `README.md` e `verification.md` para registrar e instalar somente `worker/workflow.py`.
+- Criar `source.patch`, `deploy.py`, `package.py`, `deployment_gate.sh`, o launcher root-owned, `deploy-manifest.json`, `README.md` e `verification.md` para registrar e instalar somente `worker/workflow.py`.
 - Atualizar o design e este plano com os hashes e o resultado da publicação.
 
 **Interface:** `_rank_recent_launch_stage_options(state, step, options)` continua recebendo e retornando a lista existente; a fonte permanece `LANCAMENTOS/ETAPA`.
@@ -42,7 +42,7 @@
 - [x] Fazer a checagem de implantação; confirmar baseline e saúde antes de instalar. A instalação aguarda até 60 segundos pelo cold start do bridge.
 - [x] Instalar sob o lock e gate existentes, manter backup, reiniciar o serviço de chat e confirmar hash ativo, espelho inalterado, saúde do serviço e HTTPS.
 - [x] Registrar revisão, backup, hashes e saúde em `backend-patches/provision-settlement-stage-frequency/verification.md`.
-- [x] Revisar o instalador e corrigir o watchdog para acompanhar o processo até o fim do rollback; validar hashes e executar o Python a partir do snapshot privado.
-- [ ] Fazer revisão independente dos ajustes do instalador, commitá-los e publicar o branch no GitHub.
+- [x] Endurecer a publicação: usar launcher root-owned fora da pasta de upload, propagar o lock até o comando de reinício e manter o watchdog armado antes do gate, com retry para remover a regra.
+- [ ] Fazer revisão independente dos ajustes do launcher/watchdog, conferir os hashes do pacote, commitá-los e publicar o branch no GitHub.
 
 **Resultado esperado:** a lista de etapas da baixa mostra as mais usadas primeiro, sem alterar as opções, os valores escolhidos ou os dados financeiros.

@@ -10,6 +10,7 @@ import pwd
 import re
 import signal
 import stat
+import subprocess
 import sys
 import time
 import types
@@ -27,7 +28,7 @@ FILES = ("worker/workflow.py",)
 BEFORE = {"worker/workflow.py": "131b5f5956c0d2b4bac60a7de380e81a3b8700ea8eeae8033962f4f709b9caef"}
 MIRROR_PINS = {"worker/workflow.py": "a77df64274c20e1ae175d074ae7b96cb51cf6b5e7ba4ca0c917783d94a16dbc3"}
 SHARED_RUNNER_SHA = "01d979e4e9d525d35ab522e017d3454be75514f4fc42a1274cc89e7b0a21bbe2"
-INPUTS = {"patch_backend.py", "deploy.py", "deploy.sh", "deployment_gate.sh", "shared-deploy.py", "source.patch"}
+INPUTS = {"patch_backend.py", "deploy.py", "deployment_gate.sh", "shared-deploy.py", "source.patch"}
 
 
 def digest(path):
@@ -160,6 +161,16 @@ def wait_health(runner):
             time.sleep(min(1, remaining))
 
 
+def restart_with_transaction_lock():
+    """Keep the gate watchdog informed while systemd completes a restart."""
+    subprocess.run(
+        ["systemctl", "restart", "energetica-channel-bridge.service"],
+        check=True,
+        capture_output=True,
+        pass_fds=(9,),
+    )
+
+
 def main():
     if len(sys.argv) != 3 or sys.argv[1] not in {"--check", "--deploy"}:
         raise SystemExit("Usage: deploy.py --check|--deploy reviewed_manifest_sha256")
@@ -172,7 +183,17 @@ def main():
     check_only = sys.argv[1] == "--check"
     if not check_only:
         if os.geteuid() != 0 or os.environ.get("PROVISION_STAGE_FREQUENCY_GATE") != str(os.getppid()):
-            raise RuntimeError("Use deploy.sh to gate and drain bridge ingress")
+            raise RuntimeError("Use the root-owned bootstrap to gate and drain bridge ingress")
+        transaction_lock = Path(os.environ.get("PROVISION_STAGE_FREQUENCY_TRANSACTION_LOCK", ""))
+        try:
+            descriptor = os.fstat(9)
+            path_info = transaction_lock.stat()
+        except (OSError, ValueError) as error:
+            raise RuntimeError("Transaction lock descriptor missing") from error
+        if (not stat.S_ISREG(descriptor.st_mode) or descriptor.st_uid != 0
+                or (descriptor.st_dev, descriptor.st_ino) != (path_info.st_dev, path_info.st_ino)):
+            raise RuntimeError("Transaction lock descriptor mismatch")
+        fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
         for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             signal.signal(signum, interrupted)
     with deployment_lock(check_only=check_only):
@@ -184,6 +205,7 @@ def main():
         runner.STAGE = candidate_root
         runner.FILES = FILES
         runner.BACKUPS = BACKUPS / "provision-settlement-stage-frequency"
+        runner.restart = restart_with_transaction_lock
         runner.wait_health = lambda: wait_health(runner)
         result = runner.execute(manifest["files"], check_only=check_only)
         mirror_guard()
