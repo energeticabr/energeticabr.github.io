@@ -4,6 +4,8 @@ import { createCamerasView } from '/src/ui/cameras-view.js';
 createCamerasView(document).open({
   list: async () => Array.from({ length: 9 }, (_, index) => ({
     id: 'camera-' + (index + 1), label: 'Obra Xavante • canal ' + (index + 1),
+    status: index === 0 ? 'offline' : 'online',
+    lastOnlineAt: index === 0 ? '2026-11-24T12:00:00Z' : null,
   })),
   start: async () => new Promise(() => {}),
   move: async () => {},
@@ -40,6 +42,11 @@ if (location.search.includes('single')) {
 const dialog=document.querySelector('.cameras-view'), player=document.querySelector('.cameras-player');
 const rect=node=>{const r=node.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
 document.documentElement.dataset.layout=JSON.stringify({viewport:rect(dialog), cards:[...document.querySelectorAll('.camera-card')].map(rect),
+  offlineStatus:document.querySelector('[data-camera-status]') && {
+    ribbon:rect(document.querySelector('[data-camera-status]')),
+    lastOnline:rect(document.querySelector('.camera-card__last-online')),
+    preview:rect(document.querySelector('.camera-card__preview')),
+  },
   player:player && rect(player), portrait:String(window.matchMedia('(orientation: portrait)').matches), tiles:[...document.querySelectorAll('.cameras-player__tile')].map(rect),
   controls:document.querySelector('.cameras-player__actions') && rect(document.querySelector('.cameras-player__actions')),
   drawer:document.querySelector('.cameras-player__drawer') && rect(document.querySelector('.cameras-player__drawer')),

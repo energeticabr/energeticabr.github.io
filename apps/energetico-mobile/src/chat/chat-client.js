@@ -931,7 +931,17 @@ export function createChatClient({
     const result = await cameraRequest({ action: "list" }, signal);
     if (!Array.isArray(result?.channels)) throw new Error("Não foi possível carregar as câmeras.");
     return result.channels.filter(channel => /^[a-z0-9-]{1,48}$/.test(channel?.id)
-      && typeof channel.label === "string" && channel.label.length <= 120);
+      && typeof channel.label === "string" && channel.label.length <= 120).map(channel => {
+      const lastOnlineAt = typeof channel.lastOnlineAt === "string"
+        && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(channel.lastOnlineAt)
+        && Number.isFinite(Date.parse(channel.lastOnlineAt)) ? channel.lastOnlineAt : null;
+      return {
+        id: channel.id,
+        label: channel.label,
+        status: channel.status === "online" || channel.status === "offline" ? channel.status : "unknown",
+        lastOnlineAt,
+      };
+    });
   }
 
   function cameraPlaylistUrl(path) {

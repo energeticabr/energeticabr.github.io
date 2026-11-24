@@ -3,6 +3,7 @@ const THUMBNAIL_PREFIX = 'energetico:camera-preview:v1:';
 const HLS_MIME = 'application/vnd.apple.mpegurl';
 const HEVC_MIME = 'video/mp4; codecs="hvc1.1.6.L120.B0"';
 const GRID_RECONNECT_DELAY_MS = 12000;
+const CAMERA_STATUS_REFRESH_MS = 60_000;
 
 function thumbnailStoragePrefix(accountKey) {
   return accountKey ? `${THUMBNAIL_PREFIX}${encodeURIComponent(accountKey)}:` : '';
@@ -18,6 +19,11 @@ function canPlayHevc(video) {
   const window = video.ownerDocument.defaultView;
   const mediaSource = window?.ManagedMediaSource ?? window?.MediaSource ?? window?.WebKitMediaSource;
   return mediaSource?.isTypeSupported(HEVC_MIME) === true;
+}
+
+function formatCameraLastOnline(value) {
+  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return null;
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 }
 
 export function createCamerasView(documentRef) {
@@ -40,6 +46,7 @@ export function createCamerasView(documentRef) {
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
     let player, gridRequest, playback = [], playerChannels = [], channels = [], choosing = false;
+    let refreshTimer = null, refreshing = false, channelsLoaded = false;
     let playerReturnFocus = null, playerReturnChannelId = null;
     let playerSuspended = false;
     let thumbnailsChanged = false;
@@ -114,9 +121,12 @@ export function createCamerasView(documentRef) {
       count.textContent = `${selected.size} de ${GRID_LIMIT} selecionadas`;
       gridOpen.disabled = selected.size === 0;
       for (const channel of channels) {
+        const cameraStatus = channel.status === 'online' || channel.status === 'offline' ? channel.status : 'unknown';
         const card = make('article', 'camera-card');
         const heading = make('div', 'camera-card__heading');
-        const symbol = make('span', 'camera-card__wifi', '◉'); symbol.setAttribute('aria-hidden', 'true');
+        const symbol = make('span', `camera-card__wifi camera-card__wifi--${cameraStatus}`, '◉');
+        symbol.setAttribute('aria-label', cameraStatus === 'online' ? 'On-line'
+          : cameraStatus === 'offline' ? 'Off-line' : 'Status desconhecido');
         const title = make('strong', '', channel.label);
         heading.append(symbol, title);
         if (choosing) {
@@ -133,11 +143,20 @@ export function createCamerasView(documentRef) {
         }
         const openButton = make('button', 'camera-card__preview');
         openButton.type = 'button'; openButton.dataset.cameraOpen = channel.id;
-        openButton.setAttribute('aria-label', `Abrir ${channel.label}`);
+        const lastOnline = cameraStatus === 'offline' ? formatCameraLastOnline(channel.lastOnlineAt) : null;
+        openButton.setAttribute('aria-label', `Abrir ${channel.label}${cameraStatus === 'offline'
+          ? `, câmera off-line. ${lastOnline ? `Última vez on-line: ${lastOnline}` : 'Sem registro de conexão'}` : ''}`);
         if (thumbnails.has(channel.id)) {
           const image = documentRef.createElement('img');
           image.className = 'camera-card__image'; image.src = thumbnails.get(channel.id); image.alt = '';
           openButton.append(image);
+        }
+        if (cameraStatus === 'offline') {
+          const ribbon = make('span', 'camera-card__status-ribbon', 'OFF-LINE');
+          ribbon.dataset.cameraStatus = '';
+          ribbon.setAttribute('role', 'status');
+          openButton.append(ribbon, make('span', 'camera-card__last-online', lastOnline
+            ? `Última vez on-line: ${lastOnline}` : 'Sem registro de conexão'));
         }
         const play = make('span', 'camera-card__play', '▶'); play.setAttribute('aria-hidden', 'true');
         const caption = make('span', 'camera-card__caption', 'Toque para ver ao vivo');
@@ -151,6 +170,45 @@ export function createCamerasView(documentRef) {
         });
         card.append(heading, openButton);
         cards.append(card);
+      }
+    }
+
+    function sameChannels(next) {
+      return channels.length === next.length && channels.every((channel, index) => {
+        const current = next[index];
+        return channel.id === current.id && channel.label === current.label
+          && channel.status === current.status && channel.lastOnlineAt === current.lastOnlineAt;
+      });
+    }
+
+    async function refreshChannels({ initial = false } = {}) {
+      if (page.signal.aborted || player || (!initial && documentRef.hidden) || refreshing) return;
+      refreshing = true;
+      try {
+        const result = await list({ signal: page.signal });
+        if (page.signal.aborted) return;
+        const changed = !channelsLoaded || !sameChannels(result);
+        channelsLoaded = true;
+        if (changed) {
+          const focused = documentRef.activeElement;
+          const focusedOpenId = focused?.dataset?.cameraOpen;
+          const focusedSelectId = focused?.dataset?.cameraSelect;
+          const focusGrid = focused === gridButton;
+          channels = result;
+          for (const id of selected) if (!channels.some(channel => channel.id === id)) selected.delete(id);
+          loadThumbnails();
+          status.textContent = channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.';
+          render();
+          if (focusGrid) gridButton.focus({ preventScroll: true });
+          else if (focusedOpenId) Array.from(dialog.querySelectorAll('[data-camera-open]'))
+            .find(button => button.dataset.cameraOpen === focusedOpenId)?.focus({ preventScroll: true });
+          else if (focusedSelectId) Array.from(dialog.querySelectorAll('[data-camera-select]'))
+            .find(input => input.dataset.cameraSelect === focusedSelectId)?.focus({ preventScroll: true });
+        }
+      } catch (error) {
+        if (initial && !page.signal.aborted) status.textContent = error.message || 'Não foi possível carregar as câmeras.';
+      } finally {
+        refreshing = false;
       }
     }
 
@@ -231,7 +289,10 @@ export function createCamerasView(documentRef) {
       connectPlayer();
     }
     function close() {
-      page.abort(); stopPlayer({ restoreFocus: false });
+      page.abort();
+      if (refreshTimer !== null) windowRef?.clearInterval(refreshTimer);
+      refreshTimer = null;
+      stopPlayer({ restoreFocus: false });
       documentRef.removeEventListener('visibilitychange', visibilityChanged);
       windowRef?.removeEventListener('pagehide', pageHidden);
       windowRef?.removeEventListener('pageshow', pageShown);
@@ -697,13 +758,8 @@ export function createCamerasView(documentRef) {
     gridOpen.addEventListener('click', () => openPlayer(channels.filter(channel => selected.has(channel.id)), gridOpen));
     documentRef.body.append(dialog); dialog.showModal();
     status.textContent = 'Carregando câmeras…';
-    Promise.resolve().then(() => list({ signal: page.signal })).then(result => {
-      if (page.signal.aborted) return;
-      channels = result;
-      loadThumbnails();
-      status.textContent = channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.';
-      render();
-    }).catch(error => { if (!page.signal.aborted) status.textContent = error.message || 'Não foi possível carregar as câmeras.'; });
+    Promise.resolve().then(() => refreshChannels({ initial: true }));
+    if (windowRef?.setInterval) refreshTimer = windowRef.setInterval(() => { void refreshChannels(); }, CAMERA_STATUS_REFRESH_MS);
     return true;
   }
   return {

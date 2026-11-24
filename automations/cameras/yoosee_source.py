@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+from datetime import datetime, timezone
 import json
 import os
 import re
@@ -13,6 +14,7 @@ from ctypes import c_int64
 from pathlib import Path
 
 SOCKET = "/run/energetico-yoosee/live.sock"
+OFFLINE_AFTER_SECONDS = 130
 MAX_START_BUFFER = 512 * 1024
 HEVC_VPS = b"\x00\x00\x01\x40"
 
@@ -93,6 +95,9 @@ class Hub:
         self.root = root
         self.clients = {device: set() for device in devices}
         self.buffers = {device: bytearray() for device in devices}
+        self.started_at = time.monotonic()
+        self.last_video_at = {device: None for device in devices}
+        self.last_online_at = {device: None for device in devices}
         self.workers = {}
         self.session = None
         self.session_at = 0.0
@@ -113,6 +118,11 @@ class Hub:
         watchers = None
         try:
             line = await asyncio.wait_for(reader.readline(), 4)
+            if line == b"STATUS\n":
+                payload = json.dumps(self.status_snapshot(), separators=(",", ":")).encode("utf-8") + b"\n"
+                writer.write(payload)
+                await writer.drain()
+                return
             if not re.fullmatch(rb"[0-9]{1,20}\n", line):
                 return
             device = int(line)
@@ -131,6 +141,18 @@ class Hub:
             writer.close()
             with contextlib.suppress(OSError):
                 await writer.wait_closed()
+
+    def status_snapshot(self, now=None):
+        current = time.monotonic() if now is None else now
+        result = {}
+        for device in self.clients:
+            last_video = self.last_video_at[device]
+            if last_video is None:
+                status = "unknown" if current - self.started_at < OFFLINE_AFTER_SECONDS else "offline"
+            else:
+                status = "online" if current - last_video < OFFLINE_AFTER_SECONDS else "offline"
+            result[str(device)] = {"status": status, "lastOnlineAt": self.last_online_at[device]}
+        return result
 
     async def pump(self, device, watchers):
         while True:
@@ -190,6 +212,8 @@ class Hub:
                 sys.stderr.buffer.flush()
 
     def publish(self, device, watchers, packet):
+        self.last_video_at[device] = time.monotonic()
+        self.last_online_at[device] = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
         remember_video(self.buffers[device], packet)
         for writer in tuple(watchers):
             if writer.transport.get_write_buffer_size() > 1024 * 1024:

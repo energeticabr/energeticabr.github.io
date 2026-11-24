@@ -4,11 +4,16 @@ import { JSDOM } from 'jsdom';
 import { createCamerasView } from '../src/ui/cameras-view.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, readinessError } = {}) {
+function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, readinessError,
+  cameraList, timerControl } = {}) {
   const dom = new JSDOM('<button>Menu</button>', { url: 'https://example.com' });
   t.after(() => dom.window.close());
   const { document, HTMLMediaElement, HTMLDialogElement } = dom.window;
   if (storage) Object.defineProperty(dom.window, 'localStorage', { value: storage });
+  if (timerControl) {
+    dom.window.setInterval = (callback, delay) => { timerControl.callback = callback; timerControl.delay = delay; return 41; };
+    dom.window.clearInterval = id => { timerControl.cleared.push(id); };
+  }
   HTMLDialogElement.prototype.showModal ??= function () { this.open = true; };
   HTMLMediaElement.prototype.canPlayType = type => type.startsWith('video/mp4') && !supportsHevc ? '' : 'maybe';
   HTMLMediaElement.prototype.play = async () => {};
@@ -22,9 +27,9 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, 
     return codecs.includes('hevc') ? 'https://video.example/hevc.m3u8' : 'https://video.example/index.m3u8';
   };
   const view = createCamerasView(document);
-  view.open({ accountKey, list: async () => Array.from({ length: 10 }, (_, index) => ({
+  view.open({ accountKey, list: cameraList ?? (async () => Array.from({ length: 10 }, (_, index) => ({
     id: `site-${index + 1}`, label: `Obra ${index + 1}`,
-  })),
+  }))),
     start,
     prepareGrid: useGrid ? (ids, { signal, previousUrl }) => {
       grids.push({ ids, signal, previousUrl });
@@ -35,6 +40,56 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, 
     playRecording: async (id, record, {signal}) => { archives.push({id,record,signal}); return 'https://video.example/archive.m3u8'; } });
   return { document, starts, grids, moves, searches, archives, view };
 }
+
+test('exibe tarja off-line e a data local da última conexão', async t => {
+  const { document } = setup(t, { cameraList: async () => [{ id: 'cam-1', label: 'Obra', status: 'offline',
+    lastOnlineAt: '2026-11-24T12:00:00Z' }] });
+  await flush();
+  const ribbon = document.querySelector('[data-camera-status]');
+  assert.equal(ribbon.textContent, 'OFF-LINE');
+  assert.match(document.querySelector('.camera-card__last-online').textContent, /Última vez on-line:/i);
+  assert.match(document.querySelector('.camera-card__last-online').textContent, /24\/11\/2026/);
+  assert.match(document.querySelector('[data-camera-open="cam-1"]').getAttribute('aria-label'), /Última vez on-line:.*24\/11\/2026/i);
+});
+
+test('status desconhecido sem histórico não mostra uma última conexão inventada', async t => {
+  const { document } = setup(t, { cameraList: async () => [{ id: 'cam-1', label: 'Obra', status: 'unknown',
+    lastOnlineAt: null }] });
+  await flush();
+  assert.equal(document.querySelector('[data-camera-status]'), null);
+  assert.equal(document.querySelector('.camera-card__last-online'), null);
+  assert.equal(document.querySelector('.camera-card__wifi').getAttribute('aria-label'), 'Status desconhecido');
+});
+
+test('câmera off-line sem horário conhecido informa que ainda não há histórico', async t => {
+  const { document } = setup(t, { cameraList: async () => [{ id: 'cam-1', label: 'Obra', status: 'offline',
+    lastOnlineAt: null }] });
+  await flush();
+  assert.equal(document.querySelector('[data-camera-status]').textContent, 'OFF-LINE');
+  assert.equal(document.querySelector('.camera-card__last-online').textContent, 'Sem registro de conexão');
+  assert.match(document.querySelector('[data-camera-open="cam-1"]').getAttribute('aria-label'), /Sem registro de conexão/i);
+});
+
+test('atualiza status a cada minuto enquanto a lista está aberta e cancela ao fechar', async t => {
+  const timerControl = { cleared: [] };
+  let reads = 0;
+  const { document, view } = setup(t, { timerControl, cameraList: async () => {
+    reads++;
+    return [{ id: 'cam-1', label: 'Obra', status: reads === 1 ? 'online' : 'offline',
+      lastOnlineAt: '2026-11-24T12:00:00Z' }];
+  } });
+  await flush();
+  Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+  assert.equal(timerControl.delay, 60_000);
+  await timerControl.callback();
+  await flush();
+  assert.equal(reads, 2);
+  assert.equal(document.querySelector('[data-camera-status]').textContent, 'OFF-LINE');
+  view.close();
+  assert.deepEqual(timerControl.cleared, [41]);
+  await timerControl.callback();
+  assert.equal(reads, 2);
+});
 function simulateFrame(document, video, image) {
   Object.defineProperties(video, {
     readyState: { value: 2, configurable: true },
