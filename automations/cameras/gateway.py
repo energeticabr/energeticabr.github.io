@@ -3,6 +3,7 @@
 import contextlib
 from datetime import date
 import json
+import math
 import os
 import re
 import secrets
@@ -23,7 +24,11 @@ CHANNEL_ID = re.compile(r"[a-z0-9-]{1,48}")
 GRAPH_ME = "https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,userType"
 MAX_STREAMS = 8
 MAX_STARTING_PREVIEWS = 2
+MAX_STARTING_WITH_SLOW_PREVIEWS = 3
+SLOW_PREVIEW_SECONDS = 12
 START_TIMEOUT_SECONDS = 75
+PREVIEW_STALL_SECONDS = 130
+PREVIEW_REPLACEMENT_GRACE_SECONDS = 5
 IDLE_SECONDS = 12
 SINGLE_REOPEN_SECONDS = 45
 PREVIEW_IDLE_SECONDS = 24
@@ -51,6 +56,7 @@ class Stream:
         self.entry = entry
         self.ffmpeg = ffmpeg
         self.preview = preview
+        self.shared = False
         self.channel = entry["id"]
         self.viewer = viewer
         self.mode = entry.get("input", {}).get("operation", "live")
@@ -60,8 +66,11 @@ class Stream:
         self.last_request = time.monotonic()
         self.capability = secrets.token_urlsafe(32)
         self.expires = self.last_request + 20 * 60
+        self.started_at = None
         self.startup_deadline = None
         self.has_video = False
+        self.last_video_at = None
+        self.latest_segment = None
         if not preview:
             self.launch()
 
@@ -73,6 +82,7 @@ class Stream:
         entry, ffmpeg, preview = self.entry, self.ffmpeg, self.preview
         self.directory = tempfile.TemporaryDirectory(prefix="energetico-camera-")
         now = time.monotonic()
+        self.started_at = now
         self.startup_deadline = now + START_TIMEOUT_SECONDS
         self.expires = now + 20 * 60
         width, fps = (384, 6) if preview else (640, 10)
@@ -146,9 +156,24 @@ class Stream:
         if not self.has_video and self.startup_deadline is not None:
             try:
                 self.has_video = b"#EXTINF" in self.read(self.playlist)
+                if self.has_video:
+                    self.last_video_at = time.monotonic()
             except FileNotFoundError:
                 pass
         return self.has_video
+
+    def stalled_preview(self, now):
+        if not self.preview or self.mode != "live" or not self.has_video:
+            return False
+        try:
+            lines = self.read(self.playlist).splitlines()
+        except FileNotFoundError:
+            lines = ()
+        latest = next((line for line in reversed(lines) if line and not line.startswith(b"#")), None)
+        if latest and latest != self.latest_segment:
+            self.latest_segment = latest
+            self.last_video_at = now
+        return now - self.last_video_at >= PREVIEW_STALL_SECONDS
 
     def close(self):
         for process in (self.encoder, self.source):
@@ -314,7 +339,21 @@ class Gateway:
         self.streams.pop(key).close()
         return True
 
-    def start_grid(self, channels, viewer, *, codecs=()):
+    def _replace_idle_preview(self, key, path):
+        viewer, channel, direct = key
+        previous_key = viewer, channel, True
+        previous = self.streams.get(previous_key)
+        # A reused stream may be playing in another tab or device of this account.
+        if (direct or not previous or previous.shared or not previous.preview
+                or previous.mode != "live" or previous.path != path):
+            return None
+        remaining = PREVIEW_REPLACEMENT_GRACE_SECONDS - (time.monotonic() - previous.last_request)
+        if remaining > 0:
+            return math.ceil(remaining * 1000)
+        self.streams.pop(previous_key).close()
+        return 0
+
+    def start_grid(self, channels, viewer, *, codecs=(), replace_path=None):
         if (not isinstance(channels, list) or not 1 <= len(channels) <= MAX_STREAMS
                 or not all(isinstance(channel, str) and channel in self.entries for channel in channels)
                 or len(set(channels)) != len(channels)):
@@ -326,6 +365,7 @@ class Gateway:
             paths = {}
             prepared = []
             busy = []
+            retry_after = None
             requested = {channel: self._stream_key(channel, viewer, codecs) for channel in channels}
             for channel, key in requested.items():
                 stream = self.streams.get(key)
@@ -335,20 +375,28 @@ class Gateway:
                     stream = None
                 if stream is None:
                     if len(self.streams) >= MAX_STREAMS and not self._release_idle_single(requested.values()):
-                        busy.append(channel)
-                        continue
+                        retry_after = (self._replace_idle_preview(key, replace_path)
+                                       if len(channels) == 1 and isinstance(replace_path, str) else None)
+                        if retry_after != 0:
+                            busy.append(channel)
+                            continue
                     try:
                         stream = self._open_stream(key, preview=True)
                     except PlaybackError:
                         continue
+                else:
+                    stream.shared = True
                 prepared.append(stream)
                 paths[channel] = stream.path
-            if not prepared and busy:
+            if not prepared and busy and retry_after is None:
                 raise PlaybackError(429)
             now = time.monotonic()
             for stream in prepared:
                 stream.last_request = now
-            return {"paths": paths, "busy": busy}
+            result = {"paths": paths, "busy": busy}
+            if retry_after:
+                result["retryAfterMs"] = retry_after
+            return result
 
     def start(self, channel, viewer, recording=None, *, codecs=()):
         if not isinstance(channel, str) or channel not in self.entries:
@@ -369,6 +417,8 @@ class Gateway:
                 if len(self.streams) >= MAX_STREAMS and not self._release_idle_single():
                     raise PlaybackError(429)
                 stream = self._open_stream(key, recording=recording)
+            else:
+                stream.shared = True
             if stream.startup_deadline is None:
                 self._launch_preview(stream)
             stream.last_request = time.monotonic()
@@ -409,17 +459,15 @@ class Gateway:
                 raise PlaybackError(404)
             stream.last_request = time.monotonic()
             if stream.startup_deadline is None:
-                starting = sum(item.startup_deadline is not None and not item.ready()
-                               for item in self.streams.values())
-                if starting >= MAX_STARTING_PREVIEWS:
+                now = stream.last_request
+                pending = [item for item in self.streams.values()
+                           if item.started_at is not None and not item.ready()]
+                active = sum(now - item.started_at < SLOW_PREVIEW_SECONDS for item in pending)
+                if active >= MAX_STARTING_PREVIEWS or len(pending) >= MAX_STARTING_WITH_SLOW_PREVIEWS:
                     return False
                 self._launch_preview(stream)
             ready = stream.ready()
             now = time.monotonic()
-            if not ready and now > stream.startup_deadline:
-                del self.streams[(stream.viewer, stream.channel, stream.direct)]
-                stream.close()
-                raise PlaybackError(503)
             stream.last_request = now
             return ready
 
@@ -433,7 +481,7 @@ class Gateway:
         except FileNotFoundError:
             raise PlaybackError(404) from None
 
-    def expire(self):
+    def expire(self, *, check_progress=False):
         now = time.monotonic()
         warm = max((stream for stream in self.streams.values()
                     if self._is_warm_single(stream, now) and now <= stream.expires and stream.alive()),
@@ -441,7 +489,10 @@ class Gateway:
         for key, stream in list(self.streams.items()):
             idle_seconds = PREVIEW_IDLE_SECONDS if stream.preview else IDLE_SECONDS
             if ((stream is not warm and now - stream.last_request > idle_seconds)
-                    or now > stream.expires or not stream.alive()):
+                    or now > stream.expires or not stream.alive()
+                    or (stream.preview and stream.startup_deadline is not None
+                        and now >= stream.startup_deadline and not stream.ready())
+                    or (check_progress and stream.stalled_preview(now))):
                 del self.streams[key]
                 stream.close()
 
@@ -449,7 +500,7 @@ class Gateway:
         while True:
             time.sleep(2)
             with self.lock:
-                self.expire()
+                self.expire(check_progress=True)
 
 
 def handler_for(gateway):
@@ -507,7 +558,8 @@ def handler_for(gateway):
                 elif data.get("action") == "play":
                     result = {"path": gateway.start(data.get("channelId"), viewer, codecs=codecs)}
                 elif data.get("action") == "play-grid":
-                    result = gateway.start_grid(data.get("channelIds"), viewer, codecs=codecs)
+                    result = gateway.start_grid(data.get("channelIds"), viewer, codecs=codecs,
+                                                replace_path=data.get("replacePath"))
                 elif data.get("action") == "move":
                     gateway.move(data.get("channelId"), viewer, data.get("direction"))
                     result = {"accepted": True}

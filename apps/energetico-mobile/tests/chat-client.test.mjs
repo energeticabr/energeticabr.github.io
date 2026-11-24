@@ -58,6 +58,23 @@ test('a grade repete a abertura uma vez para câmeras que aguardavam vagas', asy
   assert.deepEqual(waits, [25000]);
 });
 
+test('o fallback de um canal espera apenas a liberação da playlist anterior', async () => {
+  const previous = `/api/portal-camera-media/${'a'.repeat(43)}/hevc.m3u8`;
+  const replacement = `/api/portal-camera-media/${'b'.repeat(43)}/index.m3u8`;
+  const waits = [];
+  let opens = 0;
+  const client = clientWith(async (_url, options) => {
+    if (options.method === 'GET') return new Response(null, { status: 204 });
+    assert.equal(JSON.parse(options.body).replacePath, previous);
+    opens++;
+    return jsonResponse(opens === 1 ? { paths: {}, busy: ['ch-1'], retryAfterMs: 2400 }
+      : { paths: { 'ch-1': replacement }, busy: [] });
+  }, { retryDelay: async ms => { waits.push(ms); } });
+  const start = client.prepareCameraGrid(['ch-1'], { codecs: [], previousUrl: API_BASE + previous });
+  assert.equal(await start('ch-1'), API_BASE + replacement);
+  assert.deepEqual(waits, [2400]);
+});
+
 test('um comando de movimento não é reenviado após falha de rede incerta', async () => {
   let attempts = 0;
   const client = clientWith(async () => { attempts++; throw new TypeError('rede'); }, { retryDelay: async () => {} });

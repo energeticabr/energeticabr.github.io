@@ -4,6 +4,7 @@ const GRID_LIMIT = 8;
 const THUMBNAIL_PREFIX = 'energetico:camera-preview:v1:';
 const HLS_MIME = 'application/vnd.apple.mpegurl';
 const HEVC_MIME = 'video/mp4; codecs="hvc1.1.6.L120.B0"';
+const GRID_RECONNECT_DELAY_MS = 12000;
 
 function thumbnailStoragePrefix(accountKey) {
   return accountKey ? `${THUMBNAIL_PREFIX}${encodeURIComponent(accountKey)}:` : '';
@@ -152,14 +153,21 @@ export function createCamerasView(documentRef) {
       }
     }
 
+    function detachVideo(item) {
+      item.hls?.destroy();
+      item.hls = null;
+      item.video.pause();
+      item.video.removeAttribute('src');
+      item.video.load();
+    }
+
     function stopPlayer() {
       saveCurrentThumbnails();
       gridRequest?.abort(); gridRequest = null;
       for (const item of playback) {
         item.controller.abort();
         item.searchController?.abort();
-        item.hls?.destroy();
-        item.video.pause(); item.video.removeAttribute('src'); item.video.load();
+        detachVideo(item);
       }
       playback = [];
       player?.remove(); player = null;
@@ -182,24 +190,50 @@ export function createCamerasView(documentRef) {
         status.textContent = 'Transmissão pausada. Selecione uma câmera para retomar.';
       }
     }
+    function clearWaiting(item) {
+      if (item.waitingTimer === null) return;
+      windowRef.clearTimeout(item.waitingTimer);
+      item.waitingTimer = null;
+    }
     async function connect(item, channel, recordingId = null, startPlayback = start) {
       saveThumbnail(item);
       item.controller.abort();
       item.onPlaybackError = null;
-      item.hls?.destroy(); item.hls = null;
-      item.video.pause(); item.video.removeAttribute('src'); item.video.load();
+      detachVideo(item);
       item.controller = new AbortController();
       item.mode = recordingId ? 'playback' : 'live';
       item.thumbnailTime = null;
+      item.played = false;
       item.connected = false; item.updateControls?.();
+      item.reconnect = null;
       const { signal } = item.controller;
-      item.status.textContent = recordingId ? 'Abrindo gravação…' : 'Conectando…';
-      const retryCompatible = () => {
-        item.codecs = [];
-        const startCompatible = item.preview && prepareGrid
-          ? (id, options) => prepareGrid([id], options)(id, options)
+      signal.addEventListener('abort', () => clearWaiting(item), { once: true });
+      item.status.textContent = recordingId ? 'Abrindo gravação…'
+        : item.retriedNetwork ? 'Reconectando…' : 'Conectando…';
+      const reopenLive = previousUrl => {
+        const open = item.preview && prepareGrid
+          ? (id, options) => prepareGrid([id], { ...options, previousUrl })(id, options)
           : start;
-        void connect(item, channel, null, startCompatible);
+        void connect(item, channel, null, open);
+      };
+      const retryCompatible = previousUrl => {
+        item.codecs = [];
+        reopenLive(previousUrl);
+      };
+      const showDisconnected = message => {
+        saveThumbnail(item);
+        item.connected = false;
+        item.onPlaybackError = null;
+        detachVideo(item);
+        item.updateControls?.();
+        item.status.textContent = message;
+        if (item.preview && !recordingId) {
+          item.reconnect = () => {
+            item.retriedNetwork = false;
+            reopenLive();
+          };
+          item.status.textContent += ' Toque no vídeo para tentar novamente.';
+        }
       };
       try {
         const nativeHls = item.video.canPlayType(HLS_MIME);
@@ -209,14 +243,19 @@ export function createCamerasView(documentRef) {
           nativeHls ? null : import('hls.js'),
         ]);
         if (signal.aborted) return;
-        const failed = () => {
+        const failed = (network = false) => {
           if (signal.aborted) return;
-          if (!recordingId && item.codecs.length && /\/(?:h264|hevc)\.m3u8$/.test(new URL(url).pathname)) {
-            retryCompatible();
+          clearWaiting(item);
+          if (!recordingId && item.preview && network && item.played && !item.retriedNetwork) {
+            item.retriedNetwork = true;
+            reopenLive();
             return;
           }
-          item.connected = false; item.updateControls?.();
-          item.status.textContent = 'Transmissão interrompida. Volte e tente novamente.';
+          if (!recordingId && !network && item.codecs.length && /\/(?:h264|hevc)\.m3u8$/.test(new URL(url).pathname)) {
+            retryCompatible(url);
+            return;
+          }
+          showDisconnected('Transmissão interrompida.');
         };
         item.onPlaybackError = failed;
         if (nativeHls) item.video.src = url;
@@ -227,11 +266,10 @@ export function createCamerasView(documentRef) {
             ? { maxBufferLength: 6, maxMaxBufferLength: 8, backBufferLength: 4 }
             : { maxBufferLength: 8 });
           item.hls.on(Hls.Events.ERROR, (_event, details) => {
-            if (details.fatal) failed();
+            if (details.fatal) failed(details.type === Hls.ErrorTypes.NETWORK_ERROR);
           });
           item.hls.loadSource(url); item.hls.attachMedia(item.video);
         }
-        item.status.textContent = '';
         item.connected = true; item.updateControls?.();
         void item.video.play().catch(error => {
           if (!signal.aborted && error.name === 'NotAllowedError') item.status.textContent = 'Toque no vídeo para reproduzir.';
@@ -242,8 +280,7 @@ export function createCamerasView(documentRef) {
           retryCompatible();
           return;
         }
-        item.status.textContent = error.message || 'Não foi possível abrir esta câmera.';
-        item.updateControls?.();
+        showDisconnected(error.message || 'Não foi possível abrir esta câmera.');
       }
     }
     function openPlayer(chosen) {
@@ -269,10 +306,20 @@ export function createCamerasView(documentRef) {
         const notice = make('span', 'cameras-player__status'); notice.setAttribute('role', 'status');
         const item = { controller: new AbortController(), video, channelId: channel.id, status: notice,
           hls: null, mode: 'live', connected: false, preview, thumbnailTime: null,
+          played: false, retriedNetwork: false, waitingTimer: null, reconnect: null,
           codecs: canPlayHevc(video) ? ['h264', 'hevc'] : ['h264'] };
-        video.addEventListener('error', () => item.onPlaybackError?.());
+        video.addEventListener('error', () => item.onPlaybackError?.(video.error?.code === 2));
         if (preview) {
+          video.addEventListener('waiting', () => {
+            if (!item.connected) return;
+            if (item.played || item.retriedNetwork) notice.textContent = 'Reconectando…';
+            if (item.waitingTimer === null) {
+              item.waitingTimer = windowRef.setTimeout(() => item.onPlaybackError?.(true), GRID_RECONNECT_DELAY_MS);
+            }
+          });
+          video.addEventListener('ended', () => item.onPlaybackError?.(true));
           const resume = () => {
+            if (item.reconnect) { item.reconnect(); return; }
             if (item.connected && video.paused) void video.play().then(() => { notice.textContent = ''; }).catch(() => {});
           };
           video.tabIndex = 0;
@@ -285,6 +332,10 @@ export function createCamerasView(documentRef) {
           });
         }
         video.addEventListener('playing', () => {
+          if (!item.connected) return;
+          clearWaiting(item);
+          item.played = true;
+          notice.textContent = '';
           if (item.thumbnailTime === null) saveThumbnail(item);
         });
         playback.push(item); tile.append(video, label, notice);

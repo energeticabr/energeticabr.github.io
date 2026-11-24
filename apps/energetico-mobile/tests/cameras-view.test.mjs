@@ -26,8 +26,8 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, 
     id: `site-${index + 1}`, label: `Obra ${index + 1}`,
   })),
     start,
-    prepareGrid: useGrid ? (ids, { signal }) => {
-      grids.push({ ids, signal });
+    prepareGrid: useGrid ? (ids, { signal, previousUrl }) => {
+      grids.push({ ids, signal, previousUrl });
       return start;
     } : undefined,
     move: async (id, direction) => { moves.push({ id, direction }); },
@@ -70,6 +70,61 @@ test('recupera somente a câmera que falhou antes de receber a playlist e manté
   await flush();
   assert.deepEqual(grids.map(grid => grid.ids), [['site-1', 'site-2'], ['site-1']]);
   assert.deepEqual(starts.filter(item => item.id === 'site-1').map(item => item.codecs), [['h264'], []]);
+});
+
+test('a grade reconecta uma transmissão interrompida sem reabrir os demais canais', async t => {
+  const { document, grids, starts } = setup(t, { useGrid: true, supportsHevc: true });
+  await flush();
+  document.querySelector('[data-camera-grid]').click();
+  for (let index = 0; index < 2; index++) document.querySelectorAll('[data-camera-select]')[index].click();
+  document.querySelector('[data-camera-open-grid]').click();
+  await flush();
+  const video = document.querySelector('video');
+  const notice = video.parentElement.querySelector('[role="status"]');
+  const { Event } = document.defaultView;
+  let reconnectTimer;
+  document.defaultView.setTimeout = (callback, delay) => {
+    assert.equal(delay, 12000);
+    reconnectTimer = callback;
+    return 1;
+  };
+  document.defaultView.clearTimeout = () => { reconnectTimer = null; };
+  video.dispatchEvent(new Event('playing'));
+  video.dispatchEvent(new Event('waiting'));
+  assert.equal(notice.textContent, 'Reconectando…');
+  video.dispatchEvent(new Event('playing'));
+  assert.equal(reconnectTimer, null);
+  video.dispatchEvent(new Event('waiting'));
+  reconnectTimer();
+  await flush();
+  assert.deepEqual(grids.map(grid => grid.ids), [['site-1', 'site-2'], ['site-1']]);
+  assert.deepEqual(starts.at(-1).codecs, ['h264', 'hevc']);
+  video.dispatchEvent(new Event('playing'));
+  video.dispatchEvent(new Event('waiting'));
+  reconnectTimer();
+  await flush();
+  assert.equal(grids.length, 2);
+  assert.match(notice.textContent, /Toque no vídeo para tentar novamente/);
+  video.click();
+  await flush();
+  assert.equal(grids.length, 3);
+  assert.equal(starts.filter(item => item.id === 'site-2').length, 1);
+});
+
+test('a troca de codec envia a playlist antiga somente para a câmera afetada', async t => {
+  const { document, grids } = setup(t, { useGrid: true, supportsHevc: true });
+  await flush();
+  document.querySelector('[data-camera-grid]').click();
+  for (let index = 0; index < 2; index++) document.querySelectorAll('[data-camera-select]')[index].click();
+  document.querySelector('[data-camera-open-grid]').click();
+  await flush();
+  const video = document.querySelector('video');
+  const oldUrl = video.src;
+  video.dispatchEvent(new document.defaultView.Event('error'));
+  await flush();
+  assert.deepEqual(grids.map(({ ids, previousUrl }) => [ids, previousUrl]),
+    [[['site-1', 'site-2'], undefined], [['site-1'], oldUrl]]);
+  assert.match(video.src, /index\.m3u8$/);
 });
 
 test('lista dispositivos e abre uma câmera em paisagem, retornando à lista', async t => {

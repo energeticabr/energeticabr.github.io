@@ -2,6 +2,7 @@ import http.client
 import json
 import secrets
 import threading
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -82,7 +83,7 @@ class CameraGatewayTest(unittest.TestCase):
 
     def test_fragmented_mp4_media_uses_scoped_paths_and_correct_mime(self):
         capability = secrets.token_urlsafe(32)
-        stream = MagicMock(capability=capability, playlist="hevc.m3u8")
+        stream = MagicMock(capability=capability, playlist="hevc.m3u8", startup_deadline=1)
         stream.read.return_value = b"fixture"
         self.gateway.streams[("owner", "ch-1", True)] = stream
         stream.last_request = stream.expires = float("inf")
@@ -145,8 +146,10 @@ class CameraGatewayTest(unittest.TestCase):
                 stream.playlist = "index.m3u8"
                 stream.path = f"{MEDIA}/{stream.capability}/{stream.playlist}"
                 stream.last_request = monotonic()
+                stream.started_at = None
                 stream.startup_deadline = None if preview else stream.last_request + 40
                 def launch():
+                    stream.started_at = monotonic()
                     stream.startup_deadline = monotonic() + 40
                 stream.launch.side_effect = launch
                 stream.expires = stream.last_request + 60
@@ -186,6 +189,128 @@ class CameraGatewayTest(unittest.TestCase):
             self.assertEqual(self.request("GET", paths[channels[0]])[0], 200)
             self.assertEqual(self.request("POST", CATALOG, "owner",
                                           {"action": "play-grid", "channelIds": channels + [channels[0]]})[0], 400)
+
+    def test_slow_previews_leave_one_opening_slot_and_expire_without_their_own_poll(self):
+        import gateway
+        from types import SimpleNamespace
+
+        now = 100
+        names = [f"ch-{index}" for index in range(1, 5)]
+        streams = {}
+        for name in names:
+            self.gateway.entries[name] = {**self.gateway.entries["ch-1"], "id": name}
+
+        def open_stream(entry, _ffmpeg, viewer, *, preview, direct):
+            name = entry["id"]
+            stream = SimpleNamespace(
+                viewer=viewer, channel=name, direct=direct, preview=preview, mode="live",
+                last_request=now, expires=300, startup_deadline=None, started_at=None, has_video=False,
+                capability=secrets.token_urlsafe(32), playlist="index.m3u8",
+                alive=lambda: True, ready=lambda: name == "ch-3", close=MagicMock(),
+            )
+            stream.path = f"{MEDIA}/{stream.capability}/{stream.playlist}"
+
+            def launch():
+                stream.started_at = now
+                stream.startup_deadline = now + 75
+
+            stream.launch = launch
+            streams[name] = stream
+            return stream
+
+        with (patch.object(gateway.time, "monotonic", side_effect=lambda: now),
+              patch("gateway.Stream", side_effect=open_stream)):
+            self.gateway.start_grid(names, "owner")
+            poll = lambda name: self.gateway.preview_ready(streams[name].capability)
+            self.assertFalse(poll("ch-1"))
+            self.assertFalse(poll("ch-2"))
+            self.assertFalse(poll("ch-3"))
+            self.assertIsNone(streams["ch-3"].started_at)
+            now = 113
+            self.assertTrue(poll("ch-3"))
+            self.assertEqual(streams["ch-3"].started_at, now)
+            for now in (120, 132, 145, 158, 170):
+                streams["ch-1"].last_request = streams["ch-2"].last_request = now - 2
+                self.assertFalse(poll("ch-4"))
+                streams["ch-1"].close.assert_not_called()
+                streams["ch-2"].close.assert_not_called()
+            now = 175
+            self.assertFalse(poll("ch-4"))
+            streams["ch-1"].close.assert_called_once()
+            streams["ch-2"].close.assert_called_once()
+
+    def test_frozen_playlist_expires_while_manifest_downloads_keep_the_session_active(self):
+        entry = self.gateway.entries["ch-1"]
+        stream = Stream(entry, "/unused", "owner", preview=True)
+        stream.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(stream.close)
+        stream.startup_deadline = 145
+        stream.alive = lambda: True
+        stream.expires = 300
+        self.gateway.streams[("owner", "ch-1", False)] = stream
+        manifest = Path(stream.directory.name) / stream.playlist
+        with patch("gateway.time.monotonic") as clock:
+            clock.return_value = 100
+            manifest.write_text("#EXTM3U\n#EXTINF:2\nsegment-00000010.ts\n")
+            self.assertTrue(stream.ready())
+            self.gateway.expire(check_progress=True)
+            clock.return_value = 140
+            manifest.write_text("#EXTM3U\n#EXTINF:2\nsegment-00000011.ts\n")
+            self.gateway.expire(check_progress=True)
+            clock.return_value = 260
+            stream.last_request = 260
+            self.assertTrue(self.gateway.get(stream.capability, stream.playlist))
+            self.gateway.expire(check_progress=True)
+            self.assertTrue(self.gateway.streams)
+            clock.return_value = 270
+            self.gateway.expire(check_progress=True)
+            self.assertFalse(self.gateway.streams)
+
+    def test_decoder_fallback_reuses_only_an_inactive_preview_from_the_same_account(self):
+        import gateway
+
+        entry = self.gateway.entries["ch-1"]
+        previous = MagicMock(preview=True, mode="live", last_request=98, expires=200,
+                             startup_deadline=None, shared=False,
+                             path=f"{MEDIA}/{secrets.token_urlsafe(32)}/hevc.m3u8")
+        previous.alive.return_value = True
+        others = {("owner", f"ch-{index}", True): MagicMock(preview=True, last_request=99, expires=200,
+                                                          startup_deadline=None)
+                  for index in range(2, 9)}
+        self.gateway.streams = {("owner", "ch-1", True): previous, **others}
+        with patch("gateway.time.monotonic", return_value=100):
+            with self.assertRaises(gateway.PlaybackError) as denied:
+                self.gateway.start_grid(["ch-1"], "another", replace_path=previous.path)
+            self.assertEqual(denied.exception.status, 429)
+            result = self.gateway.start_grid(["ch-1"], "owner", replace_path=previous.path)
+            self.assertEqual(result, {"paths": {}, "busy": ["ch-1"], "retryAfterMs": 3000})
+            previous.close.assert_not_called()
+        with (patch("gateway.time.monotonic", return_value=103),
+              patch("gateway.Stream", return_value=MagicMock(path=f"{MEDIA}/compatible/index.m3u8"))):
+            result = self.gateway.start_grid(["ch-1"], "owner", replace_path=previous.path)
+            self.assertEqual(result["paths"], {"ch-1": f"{MEDIA}/compatible/index.m3u8"})
+            self.assertEqual(len(self.gateway.streams), 8)
+            previous.close.assert_called_once()
+            for stream in others.values():
+                stream.close.assert_not_called()
+
+    def test_decoder_fallback_preserves_a_preview_opened_in_a_second_tab(self):
+        import gateway
+
+        previous = MagicMock(preview=True, mode="live", last_request=98, expires=200,
+                             startup_deadline=None, shared=False,
+                             path=f"{MEDIA}/{secrets.token_urlsafe(32)}/hevc.m3u8")
+        self.gateway.streams[("owner", "ch-1", True)] = previous
+        with (patch.object(gateway, "MAX_STREAMS", 1),
+              patch("gateway.time.monotonic") as clock):
+            clock.return_value = 100
+            self.gateway.start_grid(["ch-1"], "owner", codecs=("hevc",))
+            self.assertTrue(previous.shared)
+            clock.return_value = 106
+            with self.assertRaises(gateway.PlaybackError) as busy:
+                self.gateway.start_grid(["ch-1"], "owner", replace_path=previous.path)
+            self.assertEqual(busy.exception.status, 429)
+        previous.close.assert_not_called()
 
     def test_eight_streams_remain_available_until_individually_expired(self):
         import gateway
