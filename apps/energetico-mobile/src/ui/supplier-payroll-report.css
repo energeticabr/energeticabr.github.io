@@ -37,6 +37,26 @@
 .spr-rubric-row--salary-wide { grid-column:1/-1; }
 .spr-rubric-value.spr-salary-values { display:flex; flex-wrap:wrap; column-gap:.25em; justify-content:flex-end; flex-shrink:1; min-width:0; max-width:100%; white-space:normal; }
 .spr-salary-paid,.spr-salary-comparison { white-space:nowrap; flex-shrink:0; }
+.spr-salary-remaining {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:1px 5px;
+  width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  padding:3px 4px;
+  border:1px solid #dba385;
+  border-radius:4px;
+  background:#fff0e6;
+  color:#8a3218;
+  overflow-wrap:anywhere;
+}
+.spr-salary-remaining-label { font-weight:700; }
+.spr-salary-remaining-value { font-size:1.13em; }
+.spr-salary-remaining[data-balance="settled"] { background:#f4fcf7; border-color:#9ac8ad; color:#16613d; }
+.spr-salary-remaining[data-balance="unknown"] { background:#f5f7f8; border-color:#b6c4cc; color:#435566; }
 .spr-overlay[data-report-max-850="true"][data-report-min-650="true"] .spr-rubric-row--salary:not(.spr-rubric-row--salary-wide) { padding-block:1px; }
 .spr-metric { display:flex; align-items:center; gap:10px; min-width:0; }
 .spr-total-paid { background:#ffe9ee; border-radius:7px; padding:8px; }
@@ -77,6 +97,7 @@
 .spr-overlay[data-report-max-850="true"] .spr-payment-count { padding-left:5px; }
 .spr-overlay[data-report-max-850="true"] .spr-total-paid { padding:5px; }
 .spr-overlay[data-report-max-850="true"] .spr-rubrics { padding-left:5px; }
+.spr-overlay[data-report-max-850="true"] .spr-salary-remaining { padding:1px 3px; gap:0 3px; }
 .spr-overlay[data-report-max-850="true"] .spr-row-actions .gallery-record-action { width:23px; height:28px; font-size:14px; }
 .spr-overlay[data-report-max-850="true"] .spr-payments :is(th,td) { padding:5px 3px; }
 .spr-overlay[data-report-max-850="true"] .spr-detail { padding-inline:5px; }

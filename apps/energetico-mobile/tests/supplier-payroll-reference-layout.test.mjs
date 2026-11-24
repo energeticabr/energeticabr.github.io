@@ -74,6 +74,6 @@ test('dashboard with eight types and edit actions fits phones tablets desktop wi
    assert.ok(header.fragments.length>0,`header ${header.text} remains visible at ${width}px`);
    assert.ok(header.fragments.every(fragment=>fragment.left>=header.left-1&&fragment.right<=header.right+1),`header ${header.text} stays inside its column at ${width}px`);
   }
-  if(width===844)assert.ok(layout.summaryHeight<190,'eight standard types keep the phone header compact');
+  if(width===844)assert.ok(layout.summaryHeight<220,'eight standard types and the salary balance keep the phone header compact');
  }}finally{await server.close();rmSync(cache,{recursive:true,force:true,maxRetries:5,retryDelay:250});}
 });
