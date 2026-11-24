@@ -4,7 +4,7 @@
 
 **Goal:** Remove the unnecessary diary-status round trip from ordinary app reopen.
 
-**Architecture:** `resumeConversation` retains its existing safe default. `app-controller.js` supplies an explicit opt-out only when current state, saved recovery, and pending files show no diary or uncertain work.
+**Architecture:** `resumeConversation` retains its existing safe default. Only the automatic cold-start menu resume supplies an explicit opt-out when current state, saved recovery, and pending files show no diary or uncertain work. Manual retries keep the preflight.
 
 **Tech Stack:** JavaScript ES modules, Node.js test runner, pnpm.
 
@@ -20,6 +20,7 @@
 ## Review Focus
 
 - Main-menu startup skips the unnecessary preflight; cover with a controller test.
+- Manual retry still waits for the diary-evidence check; cover with the existing PDF-pending controller test.
 - Active diary startup keeps the preflight; cover with a controller test.
 - Direct `resumeConversation` callers keep the safe default; cover with a unit test.
 - Uncertain recovery and pending uploads keep the preflight; cover with controller tests or explicit assertions.
