@@ -5,6 +5,15 @@ import { createChatClient } from "../src/chat/chat-client.js";
 
 const API_BASE = "https://163-176-171-217.sslip.io";
 
+test('live HEVC is opt-in and uses the same scoped media URL', async () => {
+  const path = `/api/portal-camera-media/${'q'.repeat(43)}/hevc.m3u8`;
+  const client = clientWith(async (_url, options) => {
+    assert.deepEqual(JSON.parse(options.body), { action: 'play', channelId: 'ch-1', codecs: ['h264', 'hevc'] });
+    return jsonResponse({ path });
+  });
+  assert.equal(await client.startCameraPlayback('ch-1', { codecs: ['h264', 'hevc'] }), API_BASE + path);
+});
+
 test('a grade abre as prévias com uma única autenticação e aguarda cada vídeo', async () => {
   const calls = [];
   const path1 = `/api/portal-camera-media/${'a'.repeat(43)}/index.m3u8`;

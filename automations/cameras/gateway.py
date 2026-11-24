@@ -17,8 +17,8 @@ from pathlib import Path
 
 CATALOG = "/api/portal-cameras"
 MEDIA = "/api/portal-camera-media"
-MEDIA_FILE = re.compile(r"index\.m3u8|segment-[0-9]+\.ts")
-MEDIA_ROUTE = re.compile(rf"{MEDIA}/([A-Za-z0-9_-]{{43}})/(index\.m3u8|segment-[0-9]+\.ts)")
+MEDIA_FILE = re.compile(r"(?:index|h264|hevc)\.m3u8|init\.mp4|segment-[0-9]+\.(?:ts|m4s)")
+MEDIA_ROUTE = re.compile(rf"{MEDIA}/([A-Za-z0-9_-]{{43}})/({MEDIA_FILE.pattern})")
 CHANNEL_ID = re.compile(r"[a-z0-9-]{1,48}")
 GRAPH_ME = "https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,userType"
 MAX_STREAMS = 8
@@ -44,7 +44,7 @@ def graph_identity(token):
 
 
 class Stream:
-    def __init__(self, entry, ffmpeg, viewer, *, preview=False):
+    def __init__(self, entry, ffmpeg, viewer, *, preview=False, direct=False):
         self.directory = None
         self.source = self.encoder = None
         self.entry = entry
@@ -53,6 +53,8 @@ class Stream:
         self.channel = entry["id"]
         self.viewer = viewer
         self.mode = entry.get("input", {}).get("operation", "live")
+        self.direct = direct
+        self.playlist = f'{entry["format"]}.m3u8' if direct else "index.m3u8"
         self.last_move = 0
         self.last_request = time.monotonic()
         self.capability = secrets.token_urlsafe(32)
@@ -61,6 +63,10 @@ class Stream:
         self.has_video = False
         if not preview:
             self.launch()
+
+    @property
+    def path(self):
+        return f"{MEDIA}/{self.capability}/{self.playlist}"
 
     def launch(self):
         entry, ffmpeg, preview = self.entry, self.ffmpeg, self.preview
@@ -72,6 +78,18 @@ class Stream:
         bitrate = ["-crf", "28", "-maxrate", "320k", "-bufsize", "320k"] if preview else []
         playlist_size = "12" if preview else "4"
         retention = ["-hls_delete_threshold", "16"] if preview else []
+        if self.direct:
+            # Preserve timing the demuxer knows and fill missing Annex B timestamps.
+            video = ["-map", "0:v:0", "-c:v", "copy", "-bsf:v",
+                     r"setts=pts=if(eq(PTS\,NOPTS)\,N*DURATION\,PTS):dts=if(eq(DTS\,NOPTS)\,N*DURATION\,DTS)"]
+        else:
+            video = ["-vf", f"scale={width}:-2,fps={fps}", "-c:v", "libx264",
+                     "-preset", "ultrafast", "-threads", "1", "-pix_fmt", "yuv420p",
+                     *bitrate, "-g", str(fps * 2), "-sc_threshold", "0"]
+        fmp4 = self.direct and entry["format"] == "hevc"
+        container = ["-tag:v", "hvc1", "-hls_segment_type", "fmp4",
+                     "-hls_fmp4_init_filename", "init.mp4"] if fmp4 else []
+        segment = "segment-%08d.m4s" if fmp4 else "segment-%08d.ts"
         try:
             # The executable is selected by server configuration. No request
             # data can alter the argument list or the input sent to the adapter.
@@ -87,12 +105,10 @@ class Stream:
                  "-threads", "1", "-filter_threads", "1",
                  "-fflags", "+genpts", "-analyzeduration", "1500000", "-probesize", "65536",
                  "-f", entry["format"], "-i", "pipe:0",
-                 "-an", "-vf", f"scale={width}:-2,fps={fps}", "-c:v", "libx264",
-                 "-preset", "ultrafast", "-threads", "1", "-pix_fmt", "yuv420p",
-                 *bitrate, "-g", str(fps * 2), "-sc_threshold", "0", "-f", "hls",
+                 "-an", *video, "-f", "hls", *container,
                  "-hls_time", "2", "-hls_list_size", playlist_size, *retention,
                  "-hls_flags", "delete_segments+temp_file+independent_segments",
-                 "-hls_segment_filename", "segment-%08d.ts", "index.m3u8"],
+                 "-hls_segment_filename", segment, self.playlist],
                 cwd=self.directory.name, stdin=self.source.stdout, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL, close_fds=True,
             )
@@ -126,7 +142,7 @@ class Stream:
     def ready(self):
         if not self.has_video and self.startup_deadline is not None:
             try:
-                self.has_video = b"#EXTINF" in self.read("index.m3u8")
+                self.has_video = b"#EXTINF" in self.read(self.playlist)
             except FileNotFoundError:
                 pass
         return self.has_video
@@ -254,27 +270,33 @@ class Gateway:
             raise PlaybackError(400)
         with self.lock:
             self.expire()
-            stream = self.streams.get((viewer, channel))
-            if not stream or stream.mode != "live" or stream.startup_deadline is None or not stream.alive():
+            stream = next((item for direct in (True, False)
+                           if (item := self.streams.get((viewer, channel, direct)))
+                           and item.mode == "live" and item.startup_deadline is not None and item.alive()), None)
+            if stream is None:
                 raise PlaybackError(404)
             try:
                 stream.control(direction)
             except (OSError, BrokenPipeError):
                 raise PlaybackError(503) from None
 
-    def _open_stream(self, channel, viewer, *, recording=None, preview=False):
+    def _stream_key(self, channel, viewer, codecs):
+        return viewer, channel, self.entries[channel]["format"] in codecs
+
+    def _open_stream(self, key, *, recording=None, preview=False):
+        viewer, channel, direct = key
         entry = dict(self.entries[channel])
         if recording is not None:
             entry["input"] = {**entry.get("input", {}), "operation": "playback", "recording": recording}
         try:
-            stream = Stream(entry, self.ffmpeg, viewer, preview=preview)
+            stream = Stream(entry, self.ffmpeg, viewer, preview=preview, direct=direct)
         except OSError:
             raise PlaybackError(503) from None
-        self.streams[(viewer, channel)] = stream
+        self.streams[key] = stream
         return stream
 
-    def start_grid(self, channels, viewer):
-        if (not isinstance(channels, list) or not 2 <= len(channels) <= MAX_STREAMS
+    def start_grid(self, channels, viewer, *, codecs=()):
+        if (not isinstance(channels, list) or not 1 <= len(channels) <= MAX_STREAMS
                 or not all(isinstance(channel, str) and channel in self.entries for channel in channels)
                 or len(set(channels)) != len(channels)):
             raise PlaybackError(400)
@@ -286,7 +308,7 @@ class Gateway:
             prepared = []
             busy = []
             for channel in channels:
-                key = (viewer, channel)
+                key = self._stream_key(channel, viewer, codecs)
                 stream = self.streams.get(key)
                 if stream and stream.mode != "live":
                     del self.streams[key]
@@ -297,11 +319,11 @@ class Gateway:
                         busy.append(channel)
                         continue
                     try:
-                        stream = self._open_stream(channel, viewer, preview=True)
+                        stream = self._open_stream(key, preview=True)
                     except PlaybackError:
                         continue
                 prepared.append(stream)
-                paths[channel] = f"{MEDIA}/{stream.capability}/index.m3u8"
+                paths[channel] = stream.path
             if not prepared and busy:
                 raise PlaybackError(429)
             now = time.monotonic()
@@ -309,38 +331,39 @@ class Gateway:
                 stream.last_request = now
             return {"paths": paths, "busy": busy}
 
-    def start(self, channel, viewer, recording=None):
+    def start(self, channel, viewer, recording=None, *, codecs=()):
         if not isinstance(channel, str) or channel not in self.entries:
             raise PlaybackError(404)
         with self.lock:
             self.expire()
-            stream = self.streams.get((viewer, channel))
+            key = self._stream_key(channel, viewer, codecs if recording is None else ())
+            stream = self.streams.get(key)
             desired = "playback" if recording is not None else "live"
             replace = stream and (stream.mode != desired or desired == "playback")
             if self.query_active and (not stream or replace):
                 raise PlaybackError(429)
             if replace:
                 stream.close()
-                del self.streams[(viewer, channel)]
+                del self.streams[key]
                 stream = None
             if not stream:
                 if len(self.streams) >= MAX_STREAMS:
                     raise PlaybackError(429)
-                stream = self._open_stream(channel, viewer, recording=recording)
-            elif stream.startup_deadline is None:
+                stream = self._open_stream(key, recording=recording)
+            if stream.startup_deadline is None:
                 self._launch_preview(stream)
         deadline = time.monotonic() + START_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
             with self.lock:
-                if self.streams.get((viewer, channel)) is not stream or not stream.alive():
+                if self.streams.get(key) is not stream or not stream.alive():
                     raise PlaybackError(503)
                 stream.last_request = time.monotonic()
                 if stream.ready():
-                    return f"{MEDIA}/{stream.capability}/index.m3u8"
+                    return stream.path
             time.sleep(0.25)
         with self.lock:
-            if self.streams.get((viewer, channel)) is stream:
-                del self.streams[(viewer, channel)]
+            if self.streams.get(key) is stream:
+                del self.streams[key]
                 stream.close()
         raise PlaybackError(503)
 
@@ -356,12 +379,14 @@ class Gateway:
         try:
             stream.launch()
         except OSError:
-            del self.streams[(stream.viewer, stream.channel)]
+            del self.streams[(stream.viewer, stream.channel, stream.direct)]
             raise PlaybackError(503) from None
 
-    def preview_ready(self, capability):
+    def preview_ready(self, capability, playlist=None):
         with self.lock:
             stream = self._find_stream(capability)
+            if playlist is not None and playlist != stream.playlist:
+                raise PlaybackError(404)
             stream.last_request = time.monotonic()
             if stream.startup_deadline is None:
                 starting = sum(item.startup_deadline is not None and not item.ready()
@@ -372,7 +397,7 @@ class Gateway:
             ready = stream.ready()
             now = time.monotonic()
             if not ready and now > stream.startup_deadline:
-                del self.streams[(stream.viewer, stream.channel)]
+                del self.streams[(stream.viewer, stream.channel, stream.direct)]
                 stream.close()
                 raise PlaybackError(503)
             stream.last_request = now
@@ -451,12 +476,15 @@ def handler_for(gateway):
                 if not isinstance(data, dict):
                     raise ValueError("request type")
                 viewer = gateway.authorize(self.headers.get("Authorization", ""))
+                offered = data.get("codecs")
+                codecs = tuple(codec for codec in ("h264", "hevc")
+                               if isinstance(offered, list) and codec in offered)
                 if data.get("action") == "list":
                     result = {"channels": gateway.catalog()}
                 elif data.get("action") == "play":
-                    result = {"path": gateway.start(data.get("channelId"), viewer)}
+                    result = {"path": gateway.start(data.get("channelId"), viewer, codecs=codecs)}
                 elif data.get("action") == "play-grid":
-                    result = gateway.start_grid(data.get("channelIds"), viewer)
+                    result = gateway.start_grid(data.get("channelIds"), viewer, codecs=codecs)
                 elif data.get("action") == "move":
                     gateway.move(data.get("channelId"), viewer, data.get("direction"))
                     result = {"accepted": True}
@@ -477,15 +505,16 @@ def handler_for(gateway):
         def do_GET(self):
             path, separator, query = self.path.partition("?")
             route = MEDIA_ROUTE.fullmatch(path)
-            if not route or (separator and (query != "ready=1" or route[2] != "index.m3u8")):
+            if not route or (separator and (query != "ready=1" or not route[2].endswith(".m3u8"))):
                 self.send(404)
                 return
             try:
                 token, filename = route.groups()
                 if separator:
-                    self.send(204 if gateway.preview_ready(token) else 202)
+                    self.send(204 if gateway.preview_ready(token, filename) else 202)
                     return
-                mime = "application/vnd.apple.mpegurl" if filename.endswith(".m3u8") else "video/mp2t"
+                mime = ({".m3u8": "application/vnd.apple.mpegurl", ".ts": "video/mp2t",
+                         ".mp4": "video/mp4", ".m4s": "video/mp4"})[Path(filename).suffix]
                 self.send(200, gateway.get(token, filename), mime)
             except PlaybackError as error:
                 self.send(error.status)
