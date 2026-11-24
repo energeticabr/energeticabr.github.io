@@ -95,6 +95,26 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(self.request("GET", base + "index.m3u8?ready=1")[0], 404)
         self.assertEqual(self.request("GET", base + "../another.mp4")[0], 404)
 
+    def test_single_live_compatibility_produces_a_first_segment_after_one_second(self):
+        entry = self.gateway.entries["ch-1"]
+        for preview, direct, operation, duration, keyframe_interval in (
+            (False, False, "live", "1", "10"),
+            (False, True, "live", "2", None),
+            (True, False, "live", "2", "12"),
+            (False, False, "playback", "2", "20"),
+        ):
+            with self.subTest(preview=preview, direct=direct, operation=operation):
+                with patch("gateway.subprocess.Popen") as spawn:
+                    stream = Stream({**entry, "input": {"operation": operation}},
+                                    "/unused", "owner", preview=preview, direct=direct)
+                    self.addCleanup(stream.close)
+                    if preview:
+                        stream.launch()
+                    command = spawn.call_args.args[0]
+                    self.assertEqual(command[command.index("-hls_time") + 1], duration)
+                    interval = command[command.index("-g") + 1] if "-g" in command else None
+                    self.assertEqual(interval, keyframe_interval)
+
     def test_compatible_preview_does_not_displace_direct_playback_for_the_same_viewer(self):
         channel = "ch-1"
         _, _, direct = self.request("POST", CATALOG, "owner",
@@ -185,6 +205,7 @@ class CameraGatewayTest(unittest.TestCase):
                 self.path = f"{MEDIA}/{self.capability}/index.m3u8"
                 self.startup_deadline = 1
                 self.last_request, self.expires = gateway.time.monotonic(), gateway.time.monotonic() + 60
+                self.has_video = True
                 self.closed = False
             def alive(self): return not self.closed
             def ready(self): return True
@@ -205,6 +226,77 @@ class CameraGatewayTest(unittest.TestCase):
                 server.get(names[0], "segment-1.ts")
             self.assertEqual(expired.exception.status, 404)
             self.assertEqual(server.get(names[8], "segment-1.ts"), b"video")
+
+    def test_only_the_latest_idle_single_live_stream_is_retained_and_yields_to_a_grid(self):
+        import gateway
+
+        def mock_stream(name, used_at, *, preview=False):
+            stream = MagicMock(mode="live", preview=preview, has_video=True,
+                               last_request=used_at, expires=160, startup_deadline=1,
+                               path=f"{MEDIA}/{name}/index.m3u8")
+            stream.alive.return_value = stream.ready.return_value = True
+            return stream
+
+        server = self.gateway
+        for index in range(2, 10):
+            channel = f"ch-{index}"
+            server.entries[channel] = {**server.entries["ch-1"], "id": channel}
+        older, recent = mock_stream("older", 80), mock_stream("recent", 83)
+        older_key, recent_key = ("owner", "ch-1", False), ("owner", "ch-9", False)
+        server.streams.update({older_key: older, recent_key: recent})
+        with patch.object(gateway.time, "monotonic", return_value=100):
+            self.assertEqual(server.start("ch-9", "owner"), recent.path)
+            self.assertNotIn(older_key, server.streams)
+            older.close.assert_called_once()
+            recent.close.assert_not_called()
+
+        with (patch.object(gateway.time, "monotonic", return_value=113),
+              patch("gateway.Stream", side_effect=lambda entry, *args, **kwargs:
+                    mock_stream(entry["id"], 113, preview=kwargs["preview"]))):
+            grid = server.start_grid([f"ch-{index}" for index in range(1, 9)], "owner")
+            self.assertEqual(len(grid["paths"]), 8)
+            self.assertEqual(grid["busy"], [])
+            self.assertNotIn(recent_key, server.streams)
+            recent.close.assert_called_once()
+        expired = mock_stream("expired", 100)
+        server.streams = {recent_key: expired}
+        with patch.object(gateway.time, "monotonic", return_value=146):
+            server.expire()
+        self.assertFalse(server.streams)
+        expired.close.assert_called_once()
+
+    def test_a_reopened_stream_is_claimed_before_a_contending_grid_can_evict_it(self):
+        import gateway
+
+        server = self.gateway
+        server.entries["ch-2"] = {**server.entries["ch-1"], "id": "ch-2"}
+        stream = MagicMock(mode="live", preview=False, has_video=True, last_request=80,
+                           expires=160, startup_deadline=1, path=f"{MEDIA}/existing/index.m3u8")
+        stream.alive.return_value = stream.ready.return_value = True
+        server.streams[("owner", "ch-1", False)] = stream
+        lock = server.lock
+        grid_status = []
+
+        class ContendingGrid:
+            def __enter__(self):
+                lock.acquire()
+
+            def __exit__(self, *_):
+                lock.release()
+                if grid_status:
+                    return
+                grid_status.append(None)
+                try:
+                    server.start_grid(["ch-2"], "owner")
+                except gateway.PlaybackError as error:
+                    grid_status[0] = error.status
+
+        with (patch.object(gateway, "MAX_STREAMS", 1),
+              patch.object(gateway.time, "monotonic", return_value=100),
+              patch.object(server, "lock", ContendingGrid())):
+            self.assertEqual(server.start("ch-1", "owner"), stream.path)
+        self.assertEqual(grid_status, [429])
+        stream.close.assert_not_called()
 
     def test_motion_requires_the_viewers_own_live_stream_and_a_valid_direction(self):
         import gateway
@@ -268,7 +360,11 @@ class CameraGatewayTest(unittest.TestCase):
             {"id": "ch-1", "label": "Camera", "format": "hevc", "command": ["/unused"]}]}
         instance = Gateway(config)
         instance.expire = lambda: None
-        instance.streams = {("owner", "one"): object(), ("owner", "two"): object()}
+        now = gateway.time.monotonic()
+        instance.streams = {
+            ("owner", name, False): MagicMock(last_request=now)
+            for name in ("one", "two")
+        }
         with patch.object(gateway.subprocess, "run") as runner:
             with self.assertRaises(gateway.PlaybackError) as error:
                 instance.recordings("ch-1", "owner", "2026-11-23")
