@@ -142,11 +142,7 @@ export function createCamerasView(documentRef) {
         const caption = make('span', 'camera-card__caption', 'Toque para ver ao vivo');
         openButton.append(play, caption);
         openButton.addEventListener('click', () => {
-          if (choosing) {
-            if (selected.has(channel.id)) selected.delete(channel.id);
-            else if (selected.size < GRID_LIMIT) selected.add(channel.id);
-            render();
-          } else openPlayer([channel]);
+          openPlayer([channel]);
         });
         card.append(heading, openButton);
         cards.append(card);
@@ -292,16 +288,33 @@ export function createCamerasView(documentRef) {
       const header = make('header', 'cameras-player__header');
       const back = make('button', '', '‹ Voltar'); back.type = 'button'; back.dataset.cameraPlayerBack = '';
       back.addEventListener('click', stopPlayer);
-      header.append(back, make('strong', '', chosen.length === 1 ? chosen[0].label : 'Câmeras ao vivo'));
+      const playerTitle = make('strong', '', chosen.length === 1 ? chosen[0].label : 'Câmeras ao vivo');
+      header.append(back, playerTitle);
       const tiles = make('div', 'cameras-player__tiles');
       tiles.dataset.count = String(chosen.length);
       const workspace = make('div', 'cameras-player__workspace');
+      let focusedCameraId = null;
+      let pendingCameraTap = null;
+      function toggleCameraFocus(channel) {
+        const cameraId = String(channel.id);
+        focusedCameraId = focusedCameraId === cameraId ? null : cameraId;
+        tiles.dataset.focused = focusedCameraId ? 'true' : 'false';
+        for (const cameraTile of tiles.children) {
+          cameraTile.hidden = Boolean(focusedCameraId && cameraTile.dataset.cameraId !== focusedCameraId);
+        }
+        playerTitle.textContent = focusedCameraId ? channel.label : 'Câmeras ao vivo';
+      }
       let controls;
       for (const channel of chosen) {
         const tile = make('div', 'cameras-player__tile');
+        tile.dataset.cameraId = String(channel.id);
         const video = documentRef.createElement('video');
         video.playsInline = true; video.controls = !preview; video.defaultMuted = true; video.muted = true;
         video.crossOrigin = 'anonymous'; video.setAttribute('aria-label', channel.label);
+        if (preview && chosen.length > 1) {
+          video.classList.add('cameras-player__video--focusable');
+          video.title = 'Toque duas vezes para ampliar; toque duas vezes novamente para ver todas as câmeras.';
+        }
         const label = make('span', 'cameras-player__label', channel.label);
         const notice = make('span', 'cameras-player__status'); notice.setAttribute('role', 'status');
         const item = { controller: new AbortController(), video, channelId: channel.id, status: notice,
@@ -323,7 +336,20 @@ export function createCamerasView(documentRef) {
             if (item.connected && video.paused) void video.play().then(() => { notice.textContent = ''; }).catch(() => {});
           };
           video.tabIndex = 0;
-          video.addEventListener('click', resume);
+          video.addEventListener('click', event => {
+            resume();
+            if (chosen.length < 2) return;
+            const now = Date.now();
+            const isDoubleTap = pendingCameraTap?.channelId === channel.id
+              && now - pendingCameraTap.time <= 400
+              && Math.hypot(event.clientX - pendingCameraTap.x, event.clientY - pendingCameraTap.y) <= 32;
+            if (isDoubleTap) {
+              pendingCameraTap = null;
+              toggleCameraFocus(channel);
+            } else {
+              pendingCameraTap = { channelId: channel.id, time: now, x: event.clientX, y: event.clientY };
+            }
+          });
           video.addEventListener('keydown', event => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
