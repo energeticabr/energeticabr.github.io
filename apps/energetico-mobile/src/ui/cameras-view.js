@@ -300,7 +300,8 @@ export function createCamerasView(documentRef) {
       let focusedCameraId = null;
       let pendingCameraTap = null;
       function toggleCameraFocus(channel) {
-        focusedCameraId = focusedCameraId === channel.id ? null : channel.id;
+        const cameraId = String(channel.id);
+        focusedCameraId = focusedCameraId === cameraId ? null : cameraId;
         tiles.dataset.focused = focusedCameraId ? 'true' : 'false';
         for (const cameraTile of tiles.children) {
           cameraTile.hidden = Boolean(focusedCameraId && cameraTile.dataset.cameraId !== focusedCameraId);
