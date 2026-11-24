@@ -8,6 +8,16 @@ final class EnergeticoBridgeViewController: CAPBridgeViewController {
         supportedOrientations = [UIInterfaceOrientation.portrait.rawValue]
     }
 
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        // Capacitor ScreenOrientation encodes the "any" lock as .unknown.
+        // Translate it to a real UIKit mask so a camera player can follow the
+        // sensor; the plugin restores the original portrait mask when closed.
+        if supportedOrientations.contains(UIInterfaceOrientation.unknown.rawValue) {
+            return .all
+        }
+        return super.supportedInterfaceOrientations
+    }
+
     override func setNeedsUpdateOfSupportedInterfaceOrientations() {
         // UIKit documents this scope for nonanimated orientation updates.
         // Keep native landscape (and its keyboard) without the spinning window.
