@@ -12700,6 +12700,7 @@ export function createAppController({
         return view.openCameras?.({
           list: client.listCameraChannels,
           start: client.startCameraPlayback,
+          prepareGrid: client.prepareCameraGrid,
           move: client.moveCamera,
           listRecordings: client.listCameraRecordings,
           playRecording: client.playCameraRecording,

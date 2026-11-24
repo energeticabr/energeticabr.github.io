@@ -3,7 +3,7 @@ import json
 import secrets
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from http.server import ThreadingHTTPServer
 
 from gateway import CATALOG, MEDIA, Gateway, handler_for
@@ -55,6 +55,65 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(self.request("GET", MEDIA + "/" + "a" * 43 + "/../gateway.py")[0], 404)
         self.assertEqual(self.request("OPTIONS", CATALOG, origin="https://example.com")[0], 403)
 
+    def test_grid_authorizes_once_and_checks_each_preview_without_authenticating_again(self):
+        import gateway
+        from time import monotonic
+
+        for index in range(2, 9):
+            channel = f"ch-{index}"
+            self.gateway.entries[channel] = {**self.gateway.entries["ch-1"], "id": channel}
+        channels = list(self.gateway.entries)
+        authorize = self.gateway.identity
+        with patch.object(self.gateway, "identity", wraps=authorize) as identity, patch.object(gateway, "Stream") as source:
+            def preview(entry, _ffmpeg, viewer, *, preview):
+                stream = MagicMock()
+                stream.mode = "live"
+                stream.channel, stream.viewer = entry["id"], viewer
+                stream.preview = preview
+                stream.capability = secrets.token_urlsafe(32)
+                stream.last_request = monotonic()
+                stream.startup_deadline = None if preview else stream.last_request + 40
+                def launch():
+                    stream.startup_deadline = monotonic() + 40
+                stream.launch.side_effect = launch
+                stream.expires = stream.last_request + 60
+                stream.alive.return_value = True
+                stream.ready.return_value = False
+                return stream
+            source.side_effect = preview
+            status, _, result = self.request("POST", CATALOG, "owner",
+                                             {"action": "play-grid", "channelIds": channels})
+            self.assertEqual(status, 200)
+            grid = json.loads(result)
+            self.assertEqual(grid["busy"], [])
+            paths = grid["paths"]
+            self.assertEqual(list(paths), channels)
+            self.assertTrue(all(call.kwargs["preview"] for call in source.call_args_list))
+            self.assertEqual(self.request("GET", paths[channels[0]] + "?ready=1")[0], 202)
+            self.assertEqual(self.request("GET", paths[channels[1]] + "?ready=1")[0], 202)
+            self.assertEqual(self.request("GET", paths[channels[2]] + "?ready=1")[0], 202)
+            third = self.gateway.streams[("owner", channels[2])]
+            third.launch.assert_not_called()
+            stream = self.gateway.streams[("owner", channels[0])]
+            stream.ready.return_value = True
+            stream.read.return_value = b"#EXTM3U\n#EXTINF:2"
+            self.assertEqual(self.request("GET", paths[channels[0]] + "?ready=1")[0], 204)
+            self.assertEqual(self.request("GET", paths[channels[2]] + "?ready=1")[0], 202)
+            third.launch.assert_called_once()
+            self.assertEqual(self.request("GET", paths[channels[0]])[0], 200)
+            self.assertEqual(identity.call_count, 1)
+            self.assertEqual(self.gateway.start(channels[0], "owner"), paths[channels[0]])
+            stream.last_request -= 13
+            self.assertEqual(self.request("GET", paths[channels[0]])[0], 200)
+            for channel in channels[1:]:
+                self.gateway.streams.pop(("owner", channel))
+            another_grid = self.gateway.start_grid(channels, "another")
+            self.assertEqual(len(another_grid["paths"]), 7)
+            self.assertEqual(another_grid["busy"], channels[-1:])
+            self.assertEqual(self.request("GET", paths[channels[0]])[0], 200)
+            self.assertEqual(self.request("POST", CATALOG, "owner",
+                                          {"action": "play-grid", "channelIds": channels + [channels[0]]})[0], 400)
+
     def test_eight_streams_remain_available_until_individually_expired(self):
         import gateway
         from concurrent.futures import ThreadPoolExecutor
@@ -64,13 +123,15 @@ class CameraGatewayTest(unittest.TestCase):
             for name in names
         ]}
         class FakeStream:
-            def __init__(self, entry, ffmpeg, viewer):
+            def __init__(self, entry, ffmpeg, viewer, *, preview=False):
                 self.channel, self.viewer = entry["id"], viewer
                 self.mode = entry.get("input", {}).get("operation", "live")
+                self.preview = preview
                 self.capability = self.channel
                 self.last_request, self.expires = gateway.time.monotonic(), gateway.time.monotonic() + 60
                 self.closed = False
             def alive(self): return not self.closed
+            def ready(self): return True
             def read(self, filename): return b"#EXTINF" if filename.endswith(".m3u8") else b"video"
             def close(self): self.closed = True
         with patch.object(gateway, "Stream", FakeStream):
@@ -93,6 +154,7 @@ class CameraGatewayTest(unittest.TestCase):
         import gateway
         class FakeStream:
             channel, viewer, mode = "ch-1", "owner", "live"
+            startup_deadline = 1
             def __init__(self): self.moves = []
             def alive(self): return True
             def control(self, direction): self.moves.append(direction)

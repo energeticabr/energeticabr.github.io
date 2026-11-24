@@ -5,6 +5,50 @@ import { createChatClient } from "../src/chat/chat-client.js";
 
 const API_BASE = "https://163-176-171-217.sslip.io";
 
+test('a grade abre as prévias com uma única autenticação e aguarda cada vídeo', async () => {
+  const calls = [];
+  const path1 = `/api/portal-camera-media/${'a'.repeat(43)}/index.m3u8`;
+  const path2 = `/api/portal-camera-media/${'b'.repeat(43)}/index.m3u8`;
+  let secondPending = true;
+  const client = clientWith(async (url, options) => {
+    calls.push({ url, options });
+    if (options.method === 'POST') {
+      assert.deepEqual(JSON.parse(options.body), { action: 'play-grid', channelIds: ['ch-1','ch-2'] });
+      assert.equal(options.headers.Authorization, 'Bearer graph-token');
+      return jsonResponse({ paths: { 'ch-1': path1, 'ch-2': path2 } });
+    }
+    assert.equal(options.credentials, 'omit');
+    assert.equal(options.headers?.Authorization, undefined);
+    assert.match(url, /index\.m3u8\?ready=1$/);
+    if (url.includes(path2) && secondPending) {
+      secondPending = false;
+      return new Response(null, { status: 202 });
+    }
+    return new Response(null, { status: 204 });
+  }, { retryDelay: async () => {} });
+  const start = client.prepareCameraGrid(['ch-1', 'ch-2']);
+  assert.deepEqual(await Promise.all([start('ch-1'), start('ch-2')]), [API_BASE+path1, API_BASE+path2]);
+  assert.equal(calls.filter(call => call.options.method === 'POST').length, 1);
+  assert.equal(calls.length, 4);
+});
+
+test('a grade repete a abertura uma vez para câmeras que aguardavam vagas', async () => {
+  const paths = Object.fromEntries(['a', 'b', 'c'].map(id => [
+    id, `/api/portal-camera-media/${id.repeat(43)}/index.m3u8`,
+  ]));
+  const waits = [];
+  let opens = 0;
+  const client = clientWith(async (_url, options) => {
+    if (options.method === 'GET') return new Response(null, { status: 204 });
+    opens++;
+    return jsonResponse(opens === 1 ? { paths: { a: paths.a }, busy: ['b', 'c'] } : { paths, busy: [] });
+  }, { retryDelay: async ms => { waits.push(ms); } });
+  const start = client.prepareCameraGrid(['a', 'b', 'c']);
+  assert.deepEqual(await Promise.all(['a', 'b', 'c'].map(id => start(id))), Object.values(paths).map(path => API_BASE + path));
+  assert.equal(opens, 2);
+  assert.deepEqual(waits, [25000]);
+});
+
 test('um comando de movimento não é reenviado após falha de rede incerta', async () => {
   let attempts = 0;
   const client = clientWith(async () => { attempts++; throw new TypeError('rede'); }, { retryDelay: async () => {} });

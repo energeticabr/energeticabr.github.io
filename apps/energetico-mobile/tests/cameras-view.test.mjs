@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { createCamerasView } from '../src/ui/cameras-view.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function setup(t) {
+function setup(t, { useGrid = false } = {}) {
   const dom = new JSDOM('<button>Menu</button>', { url: 'https://example.com' });
   t.after(() => dom.window.close());
   const { document, HTMLMediaElement, HTMLDialogElement } = dom.window;
@@ -14,16 +14,21 @@ function setup(t) {
   HTMLMediaElement.prototype.pause = () => {};
   HTMLMediaElement.prototype.load = () => {};
   document.querySelector('button').focus();
-  const starts = [], moves = [], searches = [], archives = [];
+  const starts = [], grids = [], moves = [], searches = [], archives = [];
+  const start = async (id, { signal }) => { starts.push({ id, signal }); return 'https://video.example/index.m3u8'; };
   const view = createCamerasView(document);
   view.open({ list: async () => Array.from({ length: 10 }, (_, index) => ({
     id: `site-${index + 1}`, label: `Obra ${index + 1}`,
   })),
-    start: async (id, { signal }) => { starts.push({ id, signal }); return 'https://video.example/index.m3u8'; },
+    start,
+    prepareGrid: useGrid ? (ids, { signal }) => {
+      grids.push({ ids, signal });
+      return start;
+    } : undefined,
     move: async (id, direction) => { moves.push({ id, direction }); },
     listRecordings: async (id, day, options) => { searches.push({ id, day, hour:options.hour }); return [{id:'record-1',start:'2026-11-23 10:00:00',end:'2026-11-23 10:05:00'}]; },
     playRecording: async (id, record, {signal}) => { archives.push({id,record,signal}); return 'https://video.example/archive.m3u8'; } });
-  return { document, starts, moves, searches, archives, view };
+  return { document, starts, grids, moves, searches, archives, view };
 }
 test('lista dispositivos e abre uma câmera em paisagem, retornando à lista', async t => {
   const { document, starts } = setup(t); await flush();
@@ -61,7 +66,7 @@ test('movimenta a câmera ao vivo e abre gravação da data escolhida', async t 
   assert.equal(document.querySelector('[data-camera-move="up"]').disabled, false);
 });
 test('grade seleciona até oito câmeras e abre todas simultaneamente', async t => {
-  const { document, starts } = setup(t); await flush();
+  const { document, starts, grids } = setup(t, { useGrid: true }); await flush();
   document.querySelector('[data-camera-grid]').click();
   for (let i = 0; i < 8; i++) {
     document.querySelectorAll('[data-camera-select]')[i].click();
@@ -70,8 +75,13 @@ test('grade seleciona até oito câmeras e abre todas simultaneamente', async t 
   document.querySelectorAll('[data-camera-open]')[8].click();
   assert.equal(document.querySelector('[data-camera-count]').textContent, '8 de 8 selecionadas');
   document.querySelector('[data-camera-open-grid]').click(); await flush();
-  assert.deepEqual(starts.map(item => item.id), Array.from({ length: 8 }, (_, index) => `site-${index + 1}`));
-  assert.equal(document.querySelectorAll('.report-landscape-viewport video').length, 8);
+  const selected = Array.from({ length: 8 }, (_, index) => `site-${index + 1}`);
+  assert.deepEqual(grids.map(grid => grid.ids), [selected]);
+  assert.deepEqual(starts.map(item => item.id), selected);
+  const videos = [...document.querySelectorAll('.report-landscape-viewport video')];
+  assert.equal(videos.length, 8);
+  assert.ok(videos.every(video => !video.controls && video.muted && video.playsInline));
   document.querySelector('[data-camera-player-back]').click();
   assert.ok(starts.every(item => item.signal.aborted));
+  assert.equal(grids[0].signal.aborted, true);
 });

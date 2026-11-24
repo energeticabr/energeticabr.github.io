@@ -918,9 +918,9 @@ export function createChatClient({
       body: JSON.stringify(payload), credentials: "omit", cache: "no-store", redirect: "error", signal,
     }, async response => {
       if (response.status === 403) throw new Error("Sua conta não tem acesso às câmeras.");
-      if (response.status === 429) throw new Error(payload.action === "move"
+      if (response.status === 429) throw Object.assign(new Error(payload.action === "move"
         ? "Aguarde um instante antes de mover novamente."
-        : "O serviço de câmeras está ocupado. Tente novamente em instantes.");
+        : "O serviço de câmeras está ocupado. Tente novamente em instantes."), { status: 429 });
       if (!response.ok) throw new Error("O serviço de câmeras está indisponível. Tente novamente em instantes.");
       return readJson(response);
     }, payload.action !== "move");
@@ -933,13 +933,51 @@ export function createChatClient({
       && typeof channel.label === "string" && channel.label.length <= 120);
   }
 
+  function cameraPlaylistUrl(path) {
+    return typeof path === "string" && /^\/api\/portal-camera-media\/[A-Za-z0-9_-]{43}\/index\.m3u8$/.test(path)
+      ? new URL(path, baseUrl).href : null;
+  }
+
   async function startCameraPlayback(channelId, { signal } = {}) {
     if (!/^[a-z0-9-]{1,48}$/.test(channelId ?? "")) throw new Error("Selecione uma câmera.");
     const result = await cameraRequest({ action: "play", channelId }, signal);
-    const url = typeof result?.path === "string" && /^\/api\/portal-camera-media\/[A-Za-z0-9_-]{43}\/index\.m3u8$/.test(result.path)
-      ? new URL(result.path, baseUrl).href : null;
+    const url = cameraPlaylistUrl(result?.path);
     if (!url) throw new Error("Não foi possível abrir a transmissão.");
     return url;
+  }
+
+  function prepareCameraGrid(channelIds, { signal } = {}) {
+    const payload = { action: "play-grid", channelIds };
+    const open = () => cameraRequest(payload, signal);
+    let retried;
+    const retry = () => {
+      // Let previews from a recently closed player reach the gateway's idle timeout.
+      retried ??= retryDelay(25000).then(open);
+      return retried;
+    };
+    const opened = open().catch(error => {
+      if (error.status !== 429) throw error;
+      return retry();
+    });
+    return async (channelId, { signal } = {}) => {
+      let result = await opened;
+      if (result?.busy?.includes(channelId)) result = await retry();
+      if (result?.busy?.includes(channelId)) throw new Error("O serviço de câmeras está ocupado. Tente novamente em instantes.");
+      const url = cameraPlaylistUrl(result?.paths?.[channelId]);
+      if (!url) throw new Error("Não foi possível abrir esta câmera.");
+      for (let poll = 0; poll < 160; poll++) {
+        const ready = await request(url + "?ready=1", {
+          method: "GET", cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal,
+        }, response => {
+          if (response.status === 204) return true;
+          if (response.status === 202) return false;
+          throw new Error("Não foi possível abrir esta câmera.");
+        }, true);
+        if (ready) return url;
+        await retryDelay(2000);
+      }
+      throw new Error("A câmera demorou para responder. Tente novamente.");
+    };
   }
 
   async function moveCamera(channelId, direction, { signal } = {}) {
@@ -963,9 +1001,9 @@ export function createChatClient({
     if (!/^[a-z0-9-]{1,48}$/.test(channelId ?? "") || !/^[A-Za-z0-9_-]{22}$/.test(recordingId ?? ""))
       throw new Error("Selecione uma gravação.");
     const result = await cameraRequest({ action: "play-recording", channelId, recordingId }, signal);
-    if (typeof result?.path !== "string" || !/^\/api\/portal-camera-media\/[A-Za-z0-9_-]{43}\/index\.m3u8$/.test(result.path))
-      throw new Error("Não foi possível abrir a gravação.");
-    return new URL(result.path, baseUrl).href;
+    const url = cameraPlaylistUrl(result?.path);
+    if (!url) throw new Error("Não foi possível abrir a gravação.");
+    return url;
   }
 
   async function fetchMedia(message = {}, { signal, maxBytes, onProgress } = {}) {
@@ -999,5 +1037,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ listCameraChannels, startCameraPlayback, moveCamera, listCameraRecordings, playCameraRecording, swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ listCameraChannels, startCameraPlayback, prepareCameraGrid, moveCamera, listCameraRecordings, playCameraRecording, swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }
