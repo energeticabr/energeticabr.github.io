@@ -1,0 +1,34 @@
+[Unit]
+Description=Fonte de vídeo Yoosee do Energético
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=energetico-cameras
+DynamicUser=yes
+WorkingDirectory=/opt/energetico-cameras/yoosee
+StateDirectory=energetico-cameras-yoosee
+StateDirectoryMode=0700
+RuntimeDirectory=energetico-yoosee
+RuntimeDirectoryMode=0700
+LoadCredential=yoosee.json:/etc/energetico-cameras/yoosee.json
+Environment=PYTHONPATH=/opt/energetico-cameras/deps
+Environment=YOOSEE_STREAM_QUALITY=sd
+ExecStart=/usr/bin/python3 -B /opt/energetico-cameras/yoosee/yoosee_source.py /opt/energetico-cameras/yoosee serve
+Restart=on-failure
+RestartSec=4
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+MemoryMax=256M
+CPUQuota=65%
+TasksMax=80
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
