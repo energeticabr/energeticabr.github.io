@@ -129,6 +129,19 @@ def install_transport(api, pins):
     api._create_tcp_connection = public_relay_only
 
 
+def run_live_source(attempt, reset, stop, *, preview, capture_error):
+    try:
+        result = attempt()
+    except capture_error:
+        if not preview or stop.is_set():
+            raise
+        result = None
+    if preview and not stop.wait(2):
+        reset()
+        return attempt()
+    return result
+
+
 def main():
     # Keep any messages printed by the vendor runtime out of its media output.
     media = os.fdopen(os.dup(sys.stdout.fileno()), "wb", buffering=0)
@@ -224,6 +237,10 @@ def main():
             media.write(video)
         return bool(video)
 
+    def reset_assembler():
+        nonlocal assembler
+        assembler = LiveXStreamHevcAssembler(track_timestamps=True)
+
     def status(state, _details):
         if state == "Live":
             print(state, file=sys.stderr, flush=True)
@@ -241,10 +258,14 @@ def main():
             result = service.run_recording_playback_stream(config, record, data_frame_callback=receive,
                                                            status_callback=status, stop_event=stop, attempts=1)
         else:
-            result = service.run_monitor_live_stream(config, quality="sd", data_frame_callback=receive,
-                                                     status_callback=status, stop_event=stop, attempts=1,
-                                                     ptz_queue=ptz)
-        if os.environ.get("ENERGETICO_CAMERA_DIAGNOSTIC") == "1":
+            def attempt_live():
+                return service.run_monitor_live_stream(config, quality="sd", data_frame_callback=receive,
+                                                       status_callback=status, stop_event=stop, attempts=1,
+                                                       ptz_queue=ptz)
+            result = run_live_source(attempt_live, reset_assembler, stop,
+                                     preview=os.environ.get("ENERGETICO_CAMERA_LIVE_PREVIEW") == "1",
+                                     capture_error=service.MonitorCaptureError)
+        if result is not None and os.environ.get("ENERGETICO_CAMERA_DIAGNOSTIC") == "1":
             print("Source stage:", service._detect_failure_stage(result.result).get("stage"),
                   file=sys.stderr, flush=True)
     finally:
