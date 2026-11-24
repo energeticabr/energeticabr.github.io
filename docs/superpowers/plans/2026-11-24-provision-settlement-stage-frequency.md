@@ -43,6 +43,6 @@
 - [x] Instalar sob o lock e gate existentes, manter backup, reiniciar o serviço de chat e confirmar hash ativo, espelho inalterado, saúde do serviço e HTTPS.
 - [x] Registrar revisão, backup, hashes e saúde em `backend-patches/provision-settlement-stage-frequency/verification.md`.
 - [x] Endurecer a publicação: usar launcher root-owned fora da pasta de upload, marcar a primeira gravação, propagar o lock até o comando de reinício, serializar a checagem final e aceitar concorrência somente com recibo saudável verificado.
-- [ ] Fazer revisão independente dos ajustes do launcher/watchdog, conferir os hashes do pacote, commitá-los e publicar o branch no GitHub.
+- [x] Revisar independentemente os ajustes do launcher/watchdog, conferir os hashes do pacote, commitá-los e publicar o branch no GitHub.
 
 **Resultado esperado:** a lista de etapas da baixa mostra as mais usadas primeiro, sem alterar as opções, os valores escolhidos ou os dados financeiros.
