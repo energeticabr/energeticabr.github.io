@@ -46,7 +46,7 @@ test('a grade repete a abertura uma vez para câmeras que aguardavam vagas', asy
   const start = client.prepareCameraGrid(['a', 'b', 'c']);
   assert.deepEqual(await Promise.all(['a', 'b', 'c'].map(id => start(id))), Object.values(paths).map(path => API_BASE + path));
   assert.equal(opens, 2);
-  assert.deepEqual(waits, [13000]);
+  assert.deepEqual(waits, [25000]);
 });
 
 test('um comando de movimento não é reenviado após falha de rede incerta', async () => {

@@ -103,6 +103,7 @@ class CameraGatewayTest(unittest.TestCase):
             self.assertEqual(self.request("GET", paths[channels[0]])[0], 200)
             self.assertEqual(identity.call_count, 1)
             self.assertEqual(self.gateway.start(channels[0], "owner"), paths[channels[0]])
+            stream.last_request -= 13
             self.assertEqual(self.request("GET", paths[channels[0]])[0], 200)
             for channel in channels[1:]:
                 self.gateway.streams.pop(("owner", channel))

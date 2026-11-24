@@ -952,7 +952,7 @@ export function createChatClient({
     let retried;
     const retry = () => {
       // Let previews from a recently closed player reach the gateway's idle timeout.
-      retried ??= retryDelay(13000).then(open);
+      retried ??= retryDelay(25000).then(open);
       return retried;
     };
     const opened = open().catch(error => {

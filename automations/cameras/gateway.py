@@ -24,6 +24,8 @@ GRAPH_ME = "https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,use
 MAX_STREAMS = 8
 MAX_STARTING_PREVIEWS = 2
 START_TIMEOUT_SECONDS = 75
+IDLE_SECONDS = 12
+PREVIEW_IDLE_SECONDS = 24
 
 
 class PlaybackError(Exception):
@@ -386,7 +388,8 @@ class Gateway:
     def expire(self):
         now = time.monotonic()
         for key, stream in list(self.streams.items()):
-            if (now - stream.last_request > 12
+            idle_seconds = PREVIEW_IDLE_SECONDS if stream.preview else IDLE_SECONDS
+            if (now - stream.last_request > idle_seconds
                     or now > stream.expires or not stream.alive()):
                 del self.streams[key]
                 stream.close()
