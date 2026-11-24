@@ -42,6 +42,7 @@
 - [x] Fazer a checagem de implantação; confirmar baseline e saúde antes de instalar. A instalação aguarda até 60 segundos pelo cold start do bridge.
 - [x] Instalar sob o lock e gate existentes, manter backup, reiniciar o serviço de chat e confirmar hash ativo, espelho inalterado, saúde do serviço e HTTPS.
 - [x] Registrar revisão, backup, hashes e saúde em `backend-patches/provision-settlement-stage-frequency/verification.md`.
-- [ ] Commitar o registro no branch e fazer push para o GitHub.
+- [x] Revisar o instalador e corrigir o watchdog para acompanhar o processo até o fim do rollback; validar hashes e executar o Python a partir do snapshot privado.
+- [ ] Fazer revisão independente dos ajustes do instalador, commitá-los e publicar o branch no GitHub.
 
 **Resultado esperado:** a lista de etapas da baixa mostra as mais usadas primeiro, sem alterar as opções, os valores escolhidos ou os dados financeiros.

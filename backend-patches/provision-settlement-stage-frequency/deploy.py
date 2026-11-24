@@ -17,7 +17,10 @@ import types
 
 ROOT = Path("/opt/energetica-whatsapp")
 MIRROR = Path("/home/opc/energetica-build")
-STAGE = Path("/home/opc/provision-settlement-stage-frequency-20261124-r1/release")
+STAGE = Path(os.environ.get(
+    "PROVISION_STAGE_FREQUENCY_STAGE",
+    "/home/opc/provision-settlement-stage-frequency-20261124-r2/release",
+))
 BACKUPS = Path("/var/backups/energetica-whatsapp")
 LOCK = Path("/tmp/energetica-whatsapp-deploy.lock")
 FILES = ("worker/workflow.py",)
@@ -43,9 +46,10 @@ def plain(path):
 
 def pinned(path, expected, message):
     plain(path)
-    if digest(path) != expected:
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != expected:
         raise RuntimeError(message + ": " + str(path))
-    return path.read_bytes()
+    return data
 
 
 def mirror_guard():
@@ -161,6 +165,10 @@ def main():
         raise SystemExit("Usage: deploy.py --check|--deploy reviewed_manifest_sha256")
     if Path(__file__).absolute().parent != STAGE or Path(__file__).resolve().parent != STAGE:
         raise RuntimeError("Unexpected release directory or alias")
+    stage_info = STAGE.lstat()
+    if (not stat.S_ISDIR(stage_info.st_mode) or stage_info.st_uid != 0
+            or stat.S_IMODE(stage_info.st_mode) & 0o077):
+        raise RuntimeError("Release snapshot must be private and root-owned")
     check_only = sys.argv[1] == "--check"
     if not check_only:
         if os.geteuid() != 0 or os.environ.get("PROVISION_STAGE_FREQUENCY_GATE") != str(os.getppid()):
