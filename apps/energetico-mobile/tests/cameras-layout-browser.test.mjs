@@ -8,15 +8,15 @@ import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { createServer } from 'vite';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
-test('lista e oito vídeos cabem no telefone e no desktop', { timeout: 120000 }, async t => {
+test('lista e visualizador cabem na orientação natural do telefone e do desktop', { timeout: 120000 }, async t => {
   const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(path => path && existsSync(path));
   if (!browser) return t.skip('Chrome unavailable');
   const cacheDir = await mkdtemp(join(tmpdir(), 'cameras-layout-'));
   const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)), cacheDir, logLevel: 'silent', server: { host:'127.0.0.1',port:0 } });
   await server.listen(); t.after(async () => { await server.close(); await rm(cacheDir, { recursive:true,force:true }); });
-  for (const width of [320, 390, 1365]) for (const mode of ['list', 'player', 'single']) {
-    const height = width > 700 ? 768 : 844;
-    const { stdout, screenshot } = await runBrowserLayout(browser, { width,height,mobile:width < 700,
+  const viewports = [{width:320,height:844},{width:390,height:844},{width:844,height:320},{width:844,height:390},{width:1365,height:768}];
+  for (const {width,height} of viewports) for (const mode of ['list', 'player', 'pair', 'single']) {
+    const { stdout, screenshot } = await runBrowserLayout(browser, { width,height,mobile:width < 700 || height < 500,
       captureScreenshot: width === 390 && mode === 'single' && Boolean(process.env.CAMERA_CONTROLS_SCREENSHOT),
       url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/cameras-layout.html?${mode}` });
     if (screenshot) writeFileSync(process.env.CAMERA_CONTROLS_SCREENSHOT, screenshot);
@@ -26,11 +26,30 @@ test('lista e oito vídeos cabem no telefone e no desktop', { timeout: 120000 },
       assert.ok(layout.cards.every(card => card.left >= 0 && card.right <= width));
     } else {
       assert.equal(layout.portrait,String(height > width));
-      assert.equal(layout.tiles.length,mode === 'single' ? 1 : 8);
+      if (height < width) assert.equal(layout.liveStateColor, 'rgb(242, 244, 246)');
+      const expectedTiles = mode === 'single' ? 1 : mode === 'pair' ? 2 : 8;
+      assert.equal(layout.tiles.length,expectedTiles);
       assert.ok(layout.player.width <= width + 1 && layout.player.height <= height + 1);
-      assert.ok(layout.tiles.every(tile => tile.width > 100 && tile.height > 100
+      const minimumTileHeight = height < 400 ? 40 : 100;
+      assert.ok(layout.tiles.every(tile => tile.width > 100 && tile.height > minimumTileHeight
         && tile.left >= 0 && tile.right <= width && tile.top >= 0 && tile.bottom <= height));
-      if (mode === 'single') assert.ok(layout.controls.width > 40 && layout.controls.height > 40);
+      if (mode === 'pair') {
+        const [first, second] = layout.tiles;
+        if (height > width) {
+          assert.ok(Math.abs(first.left - second.left) < 2 && second.top > first.top);
+        } else {
+          assert.ok(second.left > first.left && Math.abs(first.top - second.top) < 2);
+        }
+      }
+      if (mode === 'single') {
+        assert.ok(layout.controls.width > 40 && layout.controls.height > 40);
+        assert.ok(layout.drawer.width > 40 && layout.drawer.height > 25);
+        assert.ok(layout.drawer.left >= 0 && layout.drawer.right <= width + 1);
+        assert.ok(layout.recording.width > 0 && layout.recordingTime.width > 0);
+        assert.ok(layout.recordingTime.top >= layout.drawer.top - 1
+          && layout.recordingTime.bottom <= layout.drawer.bottom + 1,
+        `Recording time is outside the drawer at ${width}x${height}: ${JSON.stringify(layout)}`);
+      }
     }
   }
 });

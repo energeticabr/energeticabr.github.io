@@ -45,6 +45,82 @@ function simulateFrame(document, video, image) {
   document.defaultView.HTMLCanvasElement.prototype.toDataURL = () => image;
 }
 
+test('abre o vídeo automaticamente em orientação natural e retorna à lista', async t => {
+  const { document, starts } = setup(t); await flush();
+  document.querySelector('[data-camera-open="site-2"]').click(); await flush();
+  const video = document.querySelector('.cameras-player__stage video');
+  const plays = [];
+  video.play = () => { plays.push(video); return Promise.resolve(); };
+  assert.equal(starts[0].id, 'site-2');
+  assert.equal(video.autoplay, true);
+  assert.equal(video.muted, true);
+  assert.equal(video.playsInline, true);
+  assert.equal(video.controls, false);
+  assert.equal(document.querySelector('.cameras-player__tile-live').hidden, true);
+  assert.equal(document.querySelector('.cameras-player__live-state').dataset.connected, 'false');
+  assert.equal(document.querySelector('.cameras-list').inert, true);
+  assert.equal(document.activeElement, document.querySelector('[data-camera-player-back]'));
+  assert.equal(plays.length, 0);
+  video.dispatchEvent(new document.defaultView.Event('canplay'));
+  await flush();
+  assert.deepEqual(plays, [video]);
+  assert.equal(document.querySelector('.cameras-player__live-state').dataset.connected, 'false');
+  video.dispatchEvent(new document.defaultView.Event('playing'));
+  assert.equal(document.querySelector('.cameras-player__tile-live').hidden, false);
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
+  simulateFrame(document, video, 'data:image/jpeg;base64,AAAA');
+  video.dispatchEvent(new document.defaultView.Event('playing'));
+  document.querySelector('[data-camera-player-back]').click();
+  assert.equal(starts[0].signal.aborted, true);
+  assert.equal(document.querySelector('.cameras-list').inert, false);
+  assert.equal(document.activeElement, document.querySelector('[data-camera-open="site-2"]'));
+  assert.equal(document.querySelector('[data-camera-open="site-2"] img').src, 'data:image/jpeg;base64,AAAA');
+});
+
+test('oferece nova tentativa quando o navegador bloqueia a reprodução automática', async t => {
+  const { document } = setup(t); await flush();
+  document.querySelector('[data-camera-open]').click(); await flush();
+  const video = document.querySelector('.cameras-player__stage video');
+  let attempts = 0;
+  video.play = () => {
+    attempts++;
+    if (attempts === 1) {
+      const error = new Error('blocked'); error.name = 'NotAllowedError';
+      return Promise.reject(error);
+    }
+    return Promise.resolve();
+  };
+  video.dispatchEvent(new document.defaultView.Event('canplay'));
+  await flush();
+  assert.equal(attempts, 1);
+  assert.match(document.querySelector('.cameras-player__status').textContent, /reprodução automática/i);
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Autoplay bloqueado');
+  assert.equal(document.querySelector('.cameras-player__live-state').dataset.state, 'error');
+  document.querySelector('[data-camera-play-retry]').click();
+  await flush();
+  assert.equal(attempts, 2);
+  assert.equal(document.querySelector('.cameras-player__live-state').dataset.state, 'connecting');
+  video.dispatchEvent(new document.defaultView.Event('playing'));
+  assert.equal(document.querySelector('.cameras-player__status').textContent, '');
+  assert.equal(document.querySelector('[data-camera-play-retry]').hidden, true);
+});
+
+test('preserva o erro terminal e atualiza o cabeçalho durante reconexão', async t => {
+  const { document } = setup(t); await flush();
+  document.querySelector('[data-camera-open]').click(); await flush();
+  const video = document.querySelector('.cameras-player__stage video');
+  const Event = document.defaultView.Event;
+  video.dispatchEvent(new Event('playing'));
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
+  video.dispatchEvent(new Event('waiting'));
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Reconectando…');
+  video.dispatchEvent(new Event('error'));
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Transmissão interrompida');
+  video.dispatchEvent(new Event('waiting'));
+  video.dispatchEvent(new Event('playing'));
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Transmissão interrompida');
+});
+
 test('pede HEVC apenas quando o aparelho suporta e retorna a H.264 se a mídia falhar', async t => {
   const { document, starts } = setup(t, { supportsHevc: true });
   await flush();
@@ -132,7 +208,7 @@ test('lista dispositivos e abre uma câmera em paisagem, retornando à lista', a
   assert.equal(document.querySelectorAll('[data-camera-open]').length, 10);
   document.querySelectorAll('[data-camera-open]')[1].click(); await flush();
   assert.equal(starts[0].id, 'site-2');
-  const video = document.querySelector('.report-landscape-viewport video');
+  const video = document.querySelector('.cameras-player__stage video');
   assert.ok(video);
   simulateFrame(document, video, 'data:image/jpeg;base64,AAAA');
   video.dispatchEvent(new document.defaultView.Event('playing'));
@@ -197,6 +273,8 @@ test('movimenta a câmera ao vivo e abre gravação da data escolhida', async t 
   assert.deepEqual(searches, [{id:'site-1',day:'2026-11-23',hour:'10'}]);
   document.querySelector('[data-camera-recording]').click(); await flush();
   assert.equal(archives[0].record,'record-1');
+  assert.equal(document.querySelector('.cameras-player__drawer').dataset.open, 'false');
+  assert.equal(document.activeElement, document.querySelector('[data-camera-player-back]'));
   assert.equal(document.querySelector('[data-camera-move="up"]').disabled, true);
   simulateFrame(document, video, 'data:image/jpeg;base64,CCCC');
   video.dispatchEvent(new Event('playing'));
@@ -204,6 +282,8 @@ test('movimenta a câmera ao vivo e abre gravação da data escolhida', async t 
   assert.equal(localStorage.length, 1);
   assert.equal(localStorage.getItem(localStorage.key(0)), livePreview);
   document.querySelector('[data-camera-live]').click(); await flush();
+  video.dispatchEvent(new Event('canplay')); await flush();
+  video.dispatchEvent(new Event('playing'));
   assert.equal(document.querySelector('[data-camera-move="up"]').disabled, false);
 });
 test('grade seleciona até oito câmeras e abre todas simultaneamente', async t => {
@@ -218,9 +298,17 @@ test('grade seleciona até oito câmeras e abre todas simultaneamente', async t 
   const selected = Array.from({ length: 8 }, (_, index) => `site-${index + 1}`);
   assert.deepEqual(grids.map(grid => grid.ids), [selected]);
   assert.deepEqual(starts.map(item => item.id), selected);
-  const videos = [...document.querySelectorAll('.report-landscape-viewport video')];
+  const videos = [...document.querySelectorAll('.cameras-player__stage video')];
   assert.equal(videos.length, 8);
   assert.ok(videos.every(video => !video.controls && video.muted && video.playsInline));
+  const focusedVideo = videos[0];
+  const tap = () => focusedVideo.dispatchEvent(new document.defaultView.MouseEvent('click', { clientX: 12, clientY: 18 }));
+  tap(); tap();
+  assert.equal(document.querySelector('.cameras-player__stage').dataset.focused, 'true');
+  assert.equal(document.querySelectorAll('.cameras-player__tile:not([hidden])').length, 1);
+  tap(); tap();
+  assert.equal(document.querySelector('.cameras-player__stage').dataset.focused, 'false');
+  assert.equal(document.querySelectorAll('.cameras-player__tile:not([hidden])').length, 8);
   document.querySelector('[data-camera-player-back]').click();
   assert.ok(starts.every(item => item.signal.aborted));
   assert.equal(grids[0].signal.aborted, true);
