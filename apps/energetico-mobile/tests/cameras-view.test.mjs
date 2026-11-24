@@ -4,19 +4,23 @@ import { JSDOM } from 'jsdom';
 import { createCamerasView } from '../src/ui/cameras-view.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function setup(t, { useGrid = false, accountKey, storage } = {}) {
+function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, readinessError } = {}) {
   const dom = new JSDOM('<button>Menu</button>', { url: 'https://example.com' });
   t.after(() => dom.window.close());
   const { document, HTMLMediaElement, HTMLDialogElement } = dom.window;
   if (storage) Object.defineProperty(dom.window, 'localStorage', { value: storage });
   HTMLDialogElement.prototype.showModal ??= function () { this.open = true; };
-  HTMLMediaElement.prototype.canPlayType = () => 'maybe';
+  HTMLMediaElement.prototype.canPlayType = type => type.startsWith('video/mp4') && !supportsHevc ? '' : 'maybe';
   HTMLMediaElement.prototype.play = async () => {};
   HTMLMediaElement.prototype.pause = () => {};
   HTMLMediaElement.prototype.load = () => {};
   document.querySelector('button').focus();
   const starts = [], grids = [], moves = [], searches = [], archives = [];
-  const start = async (id, { signal }) => { starts.push({ id, signal }); return 'https://video.example/index.m3u8'; };
+  const start = async (id, { signal, codecs }) => {
+    starts.push({ id, signal, codecs });
+    if (id === 'site-1' && codecs.length && readinessError) throw readinessError;
+    return codecs.includes('hevc') ? 'https://video.example/hevc.m3u8' : 'https://video.example/index.m3u8';
+  };
   const view = createCamerasView(document);
   view.open({ accountKey, list: async () => Array.from({ length: 10 }, (_, index) => ({
     id: `site-${index + 1}`, label: `Obra ${index + 1}`,
@@ -31,7 +35,6 @@ function setup(t, { useGrid = false, accountKey, storage } = {}) {
     playRecording: async (id, record, {signal}) => { archives.push({id,record,signal}); return 'https://video.example/archive.m3u8'; } });
   return { document, starts, grids, moves, searches, archives, view };
 }
-
 function simulateFrame(document, video, image) {
   Object.defineProperties(video, {
     readyState: { value: 2, configurable: true },
@@ -41,6 +44,33 @@ function simulateFrame(document, video, image) {
   document.defaultView.HTMLCanvasElement.prototype.getContext = () => ({ drawImage() {} });
   document.defaultView.HTMLCanvasElement.prototype.toDataURL = () => image;
 }
+
+test('pede HEVC apenas quando o aparelho suporta e retorna a H.264 se a mídia falhar', async t => {
+  const { document, starts } = setup(t, { supportsHevc: true });
+  await flush();
+  document.querySelector('[data-camera-open]').click();
+  await flush();
+  const video = document.querySelector('video');
+  assert.equal(video.src, 'https://video.example/hevc.m3u8');
+  video.dispatchEvent(new document.defaultView.Event('error'));
+  await flush();
+  assert.equal(video.src, 'https://video.example/index.m3u8');
+  assert.deepEqual(starts.map(({ id, codecs }) => [id, codecs]), [['site-1', ['h264', 'hevc']], ['site-1', []]]);
+  assert.equal(starts[0].signal.aborted, true);
+});
+
+test('recupera somente a câmera que falhou antes de receber a playlist e mantém a fila da grade', async t => {
+  const { document, grids, starts } = setup(t, {
+    useGrid: true, readinessError: Object.assign(new Error('Sem segmentos'), { status: 503 }),
+  });
+  await flush();
+  document.querySelector('[data-camera-grid]').click();
+  for (let index = 0; index < 2; index++) document.querySelectorAll('[data-camera-select]')[index].click();
+  document.querySelector('[data-camera-open-grid]').click();
+  await flush();
+  assert.deepEqual(grids.map(grid => grid.ids), [['site-1', 'site-2'], ['site-1']]);
+  assert.deepEqual(starts.filter(item => item.id === 'site-1').map(item => item.codecs), [['h264'], []]);
+});
 
 test('lista dispositivos e abre uma câmera em paisagem, retornando à lista', async t => {
   const { document, starts } = setup(t); await flush();

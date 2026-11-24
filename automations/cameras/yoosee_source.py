@@ -149,7 +149,9 @@ class Hub:
                     logger = asyncio.create_task(self.report(process.stderr))
                     process.stdin.write(sdk_input(session, device))
                     await process.stdin.drain()
-                    initial = await asyncio.wait_for(process.stdout.readexactly(40_000), 50)
+                    initial = await asyncio.wait_for(process.stdout.read(16384), 50)
+                    if not initial:
+                        raise EOFError("SDK ended before sending video")
                     print(f"Yoosee {device % 10000:04d}: vídeo recebido em {time.monotonic() - started:.1f}s",
                           file=sys.stderr, flush=True)
                 self.publish(device, watchers, initial)
@@ -161,9 +163,7 @@ class Hub:
             except Exception as error:
                 print(f"Yoosee {device % 10000:04d}: {type(error).__name__}", file=sys.stderr, flush=True)
                 self.buffers[device].clear()
-                for writer in tuple(watchers):
-                    writer.close()
-                watchers.clear()
+                # Keep players subscribed while the SDK reconnects.
             finally:
                 if process is not None:
                     if logger is not None:

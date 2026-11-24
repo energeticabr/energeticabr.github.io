@@ -2,6 +2,8 @@ import { bindReportLandscape } from "./report-landscape.js";
 
 const GRID_LIMIT = 8;
 const THUMBNAIL_PREFIX = 'energetico:camera-preview:v1:';
+const HLS_MIME = 'application/vnd.apple.mpegurl';
+const HEVC_MIME = 'video/mp4; codecs="hvc1.1.6.L120.B0"';
 
 function thumbnailStoragePrefix(accountKey) {
   return accountKey ? `${THUMBNAIL_PREFIX}${encodeURIComponent(accountKey)}:` : '';
@@ -10,6 +12,13 @@ function thumbnailStoragePrefix(accountKey) {
 function isThumbnail(value) {
   return typeof value === 'string' && value.length <= 128_000
     && /^data:image\/jpeg;base64,[a-z0-9+/]+=*$/i.test(value);
+}
+
+function canPlayHevc(video) {
+  if (video.canPlayType(HLS_MIME)) return Boolean(video.canPlayType(HEVC_MIME));
+  const window = video.ownerDocument.defaultView;
+  const mediaSource = window?.ManagedMediaSource ?? window?.MediaSource ?? window?.WebKitMediaSource;
+  return mediaSource?.isTypeSupported(HEVC_MIME) === true;
 }
 
 export function createCamerasView(documentRef) {
@@ -176,6 +185,7 @@ export function createCamerasView(documentRef) {
     async function connect(item, channel, recordingId = null, startPlayback = start) {
       saveThumbnail(item);
       item.controller.abort();
+      item.onPlaybackError = null;
       item.hls?.destroy(); item.hls = null;
       item.video.pause(); item.video.removeAttribute('src'); item.video.load();
       item.controller = new AbortController();
@@ -184,10 +194,28 @@ export function createCamerasView(documentRef) {
       item.connected = false; item.updateControls?.();
       const { signal } = item.controller;
       item.status.textContent = recordingId ? 'Abrindo gravação…' : 'Conectando…';
+      const retryCompatible = () => {
+        item.codecs = [];
+        const startCompatible = item.preview && prepareGrid
+          ? (id, options) => prepareGrid([id], options)(id, options)
+          : start;
+        void connect(item, channel, null, startCompatible);
+      };
       try {
-        const url = recordingId ? await playRecording(channel.id, recordingId, { signal }) : await startPlayback(channel.id, { signal });
+        const url = recordingId ? await playRecording(channel.id, recordingId, { signal })
+          : await startPlayback(channel.id, { signal, codecs: item.codecs });
         if (signal.aborted) return;
-        if (item.video.canPlayType('application/vnd.apple.mpegurl')) item.video.src = url;
+        const failed = () => {
+          if (signal.aborted) return;
+          if (!recordingId && item.codecs.length && /\/(?:h264|hevc)\.m3u8$/.test(new URL(url).pathname)) {
+            retryCompatible();
+            return;
+          }
+          item.connected = false; item.updateControls?.();
+          item.status.textContent = 'Transmissão interrompida. Volte e tente novamente.';
+        };
+        item.onPlaybackError = failed;
+        if (item.video.canPlayType(HLS_MIME)) item.video.src = url;
         else {
           const { default: Hls } = await import('hls.js');
           if (signal.aborted) return;
@@ -196,15 +224,23 @@ export function createCamerasView(documentRef) {
             ? { maxBufferLength: 6, maxMaxBufferLength: 8, backBufferLength: 4 }
             : { maxBufferLength: 8 });
           item.hls.on(Hls.Events.ERROR, (_event, details) => {
-            if (details.fatal && !signal.aborted) item.status.textContent = 'Transmissão interrompida. Volte e tente novamente.';
+            if (details.fatal) failed();
           });
           item.hls.loadSource(url); item.hls.attachMedia(item.video);
         }
         item.status.textContent = '';
         item.connected = true; item.updateControls?.();
-        void item.video.play().catch(() => { item.status.textContent = 'Toque no vídeo para reproduzir.'; });
+        void item.video.play().catch(error => {
+          if (!signal.aborted && error.name === 'NotAllowedError') item.status.textContent = 'Toque no vídeo para reproduzir.';
+        });
       } catch (error) {
-        if (!signal.aborted) { item.status.textContent = error.message || 'Não foi possível abrir esta câmera.'; item.updateControls?.(); }
+        if (signal.aborted) return;
+        if (!recordingId && item.codecs.length && (error.status === 404 || error.status === 503)) {
+          retryCompatible();
+          return;
+        }
+        item.status.textContent = error.message || 'Não foi possível abrir esta câmera.';
+        item.updateControls?.();
       }
     }
     function openPlayer(chosen) {
@@ -228,9 +264,10 @@ export function createCamerasView(documentRef) {
         video.crossOrigin = 'anonymous'; video.setAttribute('aria-label', channel.label);
         const label = make('span', 'cameras-player__label', channel.label);
         const notice = make('span', 'cameras-player__status'); notice.setAttribute('role', 'status');
-        video.addEventListener('error', () => { if (!item.controller.signal.aborted) notice.textContent = 'Transmissão interrompida. Volte e tente novamente.'; });
         const item = { controller: new AbortController(), video, channelId: channel.id, status: notice,
-          hls: null, mode: 'live', connected: false, preview, thumbnailTime: null };
+          hls: null, mode: 'live', connected: false, preview, thumbnailTime: null,
+          codecs: canPlayHevc(video) ? ['h264', 'hevc'] : ['h264'] };
+        video.addEventListener('error', () => item.onPlaybackError?.());
         if (preview) {
           const resume = () => {
             if (item.connected && video.paused) void video.play().then(() => { notice.textContent = ''; }).catch(() => {});
@@ -317,7 +354,9 @@ export function createCamerasView(documentRef) {
       let startPlayback = start;
       if (preview && prepareGrid) {
         gridRequest = new AbortController();
-        startPlayback = prepareGrid(chosen.map(channel => channel.id), { signal: gridRequest.signal });
+        startPlayback = prepareGrid(chosen.map(channel => channel.id), {
+          signal: gridRequest.signal, codecs: playback[0].codecs,
+        });
       }
       chosen.forEach((channel, index) => { void connect(playback[index], channel, null, startPlayback); });
     }

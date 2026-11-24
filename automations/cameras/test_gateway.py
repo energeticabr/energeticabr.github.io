@@ -3,10 +3,11 @@ import json
 import secrets
 import threading
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 from http.server import ThreadingHTTPServer
 
-from gateway import CATALOG, MEDIA, Gateway, handler_for
+from gateway import CATALOG, MEDIA, Gateway, Stream, handler_for
 
 
 class CameraGatewayTest(unittest.TestCase):
@@ -55,6 +56,55 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(self.request("GET", MEDIA + "/" + "a" * 43 + "/../gateway.py")[0], 404)
         self.assertEqual(self.request("OPTIONS", CATALOG, origin="https://example.com")[0], 403)
 
+    def test_live_stream_copies_the_source_codec_when_the_client_can_play_it(self):
+        entry = self.gateway.entries["ch-1"]
+        cases = [
+            ("h264", True, "live", "copy", "h264.m3u8"),
+            ("hevc", True, "live", "copy", "hevc.m3u8"),
+            ("hevc", False, "live", "libx264", "index.m3u8"),
+            ("h264", False, "playback", "libx264", "index.m3u8"),
+        ]
+        for codec, direct, operation, encoder, playlist in cases:
+            with self.subTest(codec=codec, direct=direct, operation=operation):
+                with patch("gateway.subprocess.Popen") as spawn:
+                    stream = Stream({**entry, "format": codec, "input": {"operation": operation}},
+                                    "/unused", "owner", preview=True, direct=direct)
+                    self.addCleanup(stream.close)
+                    stream.launch()
+                    command = spawn.call_args.args[0]
+                    self.assertEqual(command[command.index("-c:v") + 1], encoder)
+                    self.assertEqual(command[-1], playlist)
+                    self.assertEqual("-vf" in command, encoder != "copy")
+                    if playlist == "hevc.m3u8":
+                        self.assertIn("hvc1", command)
+                        (Path(stream.directory.name) / playlist).write_bytes(b"#EXTINF:2")
+                        self.assertTrue(stream.ready())
+
+    def test_fragmented_mp4_media_uses_scoped_paths_and_correct_mime(self):
+        capability = secrets.token_urlsafe(32)
+        stream = MagicMock(capability=capability, playlist="hevc.m3u8")
+        stream.read.return_value = b"fixture"
+        self.gateway.streams[("owner", "ch-1", True)] = stream
+        stream.last_request = stream.expires = float("inf")
+        base = f"{MEDIA}/{capability}/"
+        for filename in ("init.mp4", "segment-00000001.m4s"):
+            status, headers, body = self.request("GET", base + filename)
+            self.assertEqual((status, body), (200, b"fixture"))
+            self.assertIn(("Content-Type", "video/mp4"), headers)
+        self.assertEqual(self.request("GET", base + "hevc.m3u8?ready=1")[0], 204)
+        self.assertEqual(self.request("GET", base + "index.m3u8?ready=1")[0], 404)
+        self.assertEqual(self.request("GET", base + "../another.mp4")[0], 404)
+
+    def test_compatible_preview_does_not_displace_direct_playback_for_the_same_viewer(self):
+        channel = "ch-1"
+        _, _, direct = self.request("POST", CATALOG, "owner",
+                                    {"action": "play-grid", "channelIds": [channel], "codecs": ["hevc"]})
+        _, _, compatible = self.request("POST", CATALOG, "owner",
+                                        {"action": "play-grid", "channelIds": [channel]})
+        self.assertEqual(len(self.gateway.streams), 2)
+        self.assertTrue(json.loads(direct)["paths"][channel].endswith("/hevc.m3u8"))
+        self.assertTrue(json.loads(compatible)["paths"][channel].endswith("/index.m3u8"))
+
     def test_grid_authorizes_once_and_checks_each_preview_without_authenticating_again(self):
         import gateway
         from time import monotonic
@@ -65,12 +115,15 @@ class CameraGatewayTest(unittest.TestCase):
         channels = list(self.gateway.entries)
         authorize = self.gateway.identity
         with patch.object(self.gateway, "identity", wraps=authorize) as identity, patch.object(gateway, "Stream") as source:
-            def preview(entry, _ffmpeg, viewer, *, preview):
+            def preview(entry, _ffmpeg, viewer, *, preview, direct):
                 stream = MagicMock()
                 stream.mode = "live"
                 stream.channel, stream.viewer = entry["id"], viewer
                 stream.preview = preview
                 stream.capability = secrets.token_urlsafe(32)
+                stream.direct = direct
+                stream.playlist = "index.m3u8"
+                stream.path = f"{MEDIA}/{stream.capability}/{stream.playlist}"
                 stream.last_request = monotonic()
                 stream.startup_deadline = None if preview else stream.last_request + 40
                 def launch():
@@ -92,9 +145,9 @@ class CameraGatewayTest(unittest.TestCase):
             self.assertEqual(self.request("GET", paths[channels[0]] + "?ready=1")[0], 202)
             self.assertEqual(self.request("GET", paths[channels[1]] + "?ready=1")[0], 202)
             self.assertEqual(self.request("GET", paths[channels[2]] + "?ready=1")[0], 202)
-            third = self.gateway.streams[("owner", channels[2])]
+            third = self.gateway.streams[("owner", channels[2], False)]
             third.launch.assert_not_called()
-            stream = self.gateway.streams[("owner", channels[0])]
+            stream = self.gateway.streams[("owner", channels[0], False)]
             stream.ready.return_value = True
             stream.read.return_value = b"#EXTM3U\n#EXTINF:2"
             self.assertEqual(self.request("GET", paths[channels[0]] + "?ready=1")[0], 204)
@@ -106,7 +159,7 @@ class CameraGatewayTest(unittest.TestCase):
             stream.last_request -= 13
             self.assertEqual(self.request("GET", paths[channels[0]])[0], 200)
             for channel in channels[1:]:
-                self.gateway.streams.pop(("owner", channel))
+                self.gateway.streams.pop(("owner", channel, False))
             another_grid = self.gateway.start_grid(channels, "another")
             self.assertEqual(len(another_grid["paths"]), 7)
             self.assertEqual(another_grid["busy"], channels[-1:])
@@ -123,11 +176,14 @@ class CameraGatewayTest(unittest.TestCase):
             for name in names
         ]}
         class FakeStream:
-            def __init__(self, entry, ffmpeg, viewer, *, preview=False):
+            def __init__(self, entry, ffmpeg, viewer, *, preview=False, direct=False):
                 self.channel, self.viewer = entry["id"], viewer
                 self.mode = entry.get("input", {}).get("operation", "live")
                 self.preview = preview
                 self.capability = self.channel
+                self.direct = direct
+                self.path = f"{MEDIA}/{self.capability}/index.m3u8"
+                self.startup_deadline = 1
                 self.last_request, self.expires = gateway.time.monotonic(), gateway.time.monotonic() + 60
                 self.closed = False
             def alive(self): return not self.closed
@@ -143,7 +199,7 @@ class CameraGatewayTest(unittest.TestCase):
             with self.assertRaises(gateway.PlaybackError) as error:
                 server.start(names[8], "owner")
             self.assertEqual(error.exception.status, 429)
-            server.streams[("owner", names[0])].last_request -= 13
+            server.streams[("owner", names[0], False)].last_request -= 13
             server.start(names[8], "owner")
             with self.assertRaises(gateway.PlaybackError) as expired:
                 server.get(names[0], "segment-1.ts")
@@ -163,7 +219,7 @@ class CameraGatewayTest(unittest.TestCase):
         instance = Gateway(config)
         instance.expire = lambda: None
         stream = FakeStream()
-        instance.streams[("owner", "ch-1")] = stream
+        instance.streams[("owner", "ch-1", False)] = stream
         instance.move("ch-1", "owner", "left")
         self.assertEqual(stream.moves, ["left"])
         for viewer, direction in [("other", "left"), ("owner", "reboot")]:

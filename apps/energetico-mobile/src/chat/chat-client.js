@@ -921,7 +921,8 @@ export function createChatClient({
       if (response.status === 429) throw Object.assign(new Error(payload.action === "move"
         ? "Aguarde um instante antes de mover novamente."
         : "O serviço de câmeras está ocupado. Tente novamente em instantes."), { status: 429 });
-      if (!response.ok) throw new Error("O serviço de câmeras está indisponível. Tente novamente em instantes.");
+      if (!response.ok) throw Object.assign(new Error("O serviço de câmeras está indisponível. Tente novamente em instantes."),
+        { status: response.status });
       return readJson(response);
     }, payload.action !== "move");
   }
@@ -934,20 +935,20 @@ export function createChatClient({
   }
 
   function cameraPlaylistUrl(path) {
-    return typeof path === "string" && /^\/api\/portal-camera-media\/[A-Za-z0-9_-]{43}\/index\.m3u8$/.test(path)
+    return typeof path === "string" && /^\/api\/portal-camera-media\/[A-Za-z0-9_-]{43}\/(?:index|h264|hevc)\.m3u8$/.test(path)
       ? new URL(path, baseUrl).href : null;
   }
 
-  async function startCameraPlayback(channelId, { signal } = {}) {
+  async function startCameraPlayback(channelId, { signal, codecs } = {}) {
     if (!/^[a-z0-9-]{1,48}$/.test(channelId ?? "")) throw new Error("Selecione uma câmera.");
-    const result = await cameraRequest({ action: "play", channelId }, signal);
+    const result = await cameraRequest({ action: "play", channelId, codecs }, signal);
     const url = cameraPlaylistUrl(result?.path);
     if (!url) throw new Error("Não foi possível abrir a transmissão.");
     return url;
   }
 
-  function prepareCameraGrid(channelIds, { signal } = {}) {
-    const payload = { action: "play-grid", channelIds };
+  function prepareCameraGrid(channelIds, { signal, codecs } = {}) {
+    const payload = { action: "play-grid", channelIds, codecs };
     const open = () => cameraRequest(payload, signal);
     let retried;
     const retry = () => {
@@ -971,7 +972,7 @@ export function createChatClient({
         }, response => {
           if (response.status === 204) return true;
           if (response.status === 202) return false;
-          throw new Error("Não foi possível abrir esta câmera.");
+          throw Object.assign(new Error("Não foi possível abrir esta câmera."), { status: response.status });
         }, true);
         if (ready) return url;
         await retryDelay(2000);
