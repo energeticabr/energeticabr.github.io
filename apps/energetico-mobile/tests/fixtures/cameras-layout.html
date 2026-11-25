@@ -2,6 +2,7 @@
 <body><script type="module">
 import { createCamerasView } from '/src/ui/cameras-view.js';
 const accountKey = 'layout-check';
+localStorage.setItem('energetico:camera-preview:v1:' + accountKey + ':camera-1', 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8Af//Z');
 localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify([{
   name: 'Portão e pátio', cameraIds: ['camera-1', 'camera-2'],
 }]));
@@ -58,6 +59,12 @@ document.documentElement.dataset.layout=JSON.stringify({viewport:rect(dialog),
   },
   visualCards:[...document.querySelectorAll('.camera-visual-card')].map(rect),
   player:player && rect(player), portrait:String(window.matchMedia('(orientation: portrait)').matches), tiles:[...document.querySelectorAll('.cameras-player__tile')].map(rect),
+  savedFrames:[...document.querySelectorAll('.cameras-player__saved-frame:not([hidden])')].map(frame => ({
+    label:rect(frame.querySelector('.cameras-player__saved-label')), tile:rect(frame.closest('.cameras-player__tile')),
+    focus:frame.closest('.cameras-player__tile').querySelector('.cameras-player__focus')
+      ? rect(frame.closest('.cameras-player__tile').querySelector('.cameras-player__focus')) : null,
+    imageLoaded:frame.querySelector('img').naturalWidth > 0,
+  })),
   controls:document.querySelector('.cameras-player__actions') && rect(document.querySelector('.cameras-player__actions')),
   drawer:document.querySelector('.cameras-player__drawer') && rect(document.querySelector('.cameras-player__drawer')),
   liveStateColor:player && getComputedStyle(player.querySelector('.cameras-player__live-state')).color,

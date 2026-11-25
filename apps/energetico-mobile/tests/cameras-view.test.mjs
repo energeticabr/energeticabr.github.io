@@ -295,10 +295,19 @@ test('restaura o último quadro ao vivo depois de reabrir o app, pela conta e c�
   assert.equal(reopened.document.querySelector('[data-camera-open="site-1"] img'), null);
   assert.equal(reopened.starts.length, 0);
 
+  reopened.document.querySelector('[data-camera-open="site-2"]').click();
+  const singleTile = reopened.document.querySelector('.cameras-player__tile');
+  assert.equal(singleTile.querySelector('.cameras-player__saved-frame').hidden, false);
+  assert.equal(singleTile.querySelector('.cameras-player__saved-frame img').src, latest);
+  assert.equal(singleTile.querySelector('.cameras-player__tile-live').hidden, true);
+  singleTile.querySelector('video').dispatchEvent(new reopened.document.defaultView.Event('playing'));
+  assert.equal(singleTile.querySelector('.cameras-player__saved-frame').hidden, true);
+
   const other = setup(t, { accountKey: 'camera-viewer-b', storage: localStorage }); await flush();
   assert.equal(other.document.querySelector('.camera-card__image'), null);
   other.document.querySelector('[data-camera-open="site-2"]').click(); await flush();
   const otherVideo = other.document.querySelector('video');
+  assert.equal(other.document.querySelector('.cameras-player__saved-frame').hidden, true);
   const otherImage = 'data:image/jpeg;base64,CCCC';
   simulateFrame(other.document, otherVideo, otherImage);
   otherVideo.dispatchEvent(new other.document.defaultView.Event('playing'));
@@ -328,6 +337,7 @@ test('movimenta a câmera ao vivo e abre gravação da data escolhida', async t 
   assert.deepEqual(searches, [{id:'site-1',day:'2026-11-23',hour:'10'}]);
   document.querySelector('[data-camera-recording]').click(); await flush();
   assert.equal(archives[0].record,'record-1');
+  assert.equal(document.querySelector('.cameras-player__saved-frame').hidden, true);
   assert.equal(document.querySelector('.cameras-player__drawer').dataset.open, 'false');
   assert.equal(document.activeElement, document.querySelector('[data-camera-player-back]'));
   assert.equal(document.querySelector('[data-camera-move="up"]').disabled, true);
@@ -342,14 +352,21 @@ test('movimenta a câmera ao vivo e abre gravação da data escolhida', async t 
   assert.equal(document.querySelector('[data-camera-move="up"]').disabled, false);
 });
 test('grade seleciona até oito câmeras e abre todas simultaneamente', async t => {
-  const { document, starts, grids } = setup(t, { useGrid: true }); await flush();
+  const lastImage = 'data:image/jpeg;base64,AAAA';
+  const storage = new Map([['energetico:camera-preview:v1:owner:site-2', lastImage]]);
+  const { document, starts, grids } = setup(t, {
+    useGrid: true, accountKey: 'owner', storage: { getItem: key => storage.get(key) },
+  }); await flush();
   document.querySelector('[data-camera-grid]').click();
   for (let i = 0; i < 8; i++) {
     document.querySelectorAll('[data-camera-select]')[i].click();
   }
   assert.equal(document.querySelectorAll('[data-camera-select]')[8].disabled, true);
   assert.equal(document.querySelector('[data-camera-count]').textContent, '8 de 8 selecionadas');
-  document.querySelector('[data-camera-open-grid]').click(); await flush();
+  document.querySelector('[data-camera-open-grid]').click();
+  const savedFrames = [...document.querySelectorAll('.cameras-player__saved-frame:not([hidden])')];
+  assert.deepEqual(savedFrames.map(frame => frame.querySelector('img').src), [lastImage]);
+  await flush();
   const selected = Array.from({ length: 8 }, (_, index) => `site-${index + 1}`);
   assert.deepEqual(grids.map(grid => grid.ids), [selected]);
   assert.deepEqual(starts.map(item => item.id), selected);
@@ -523,10 +540,13 @@ test('abre as câmeras de um visual pela grade na ordem salva', async t => {
   storage.setItem('energetico:camera-visual:v1:conta', JSON.stringify([{
     name: 'Fundos', cameraIds: ['site-4', 'site-2'],
   }]));
+  const image = 'data:image/jpeg;base64,AAAA';
+  storage.setItem('energetico:camera-preview:v1:conta:site-4', image);
   const { document, grids, starts } = setup(t, { accountKey: 'conta', storage, useGrid: true });
   await flush();
   document.querySelector('[data-camera-tab="visuals"]').click();
   document.querySelector('[data-camera-visual-open="0"]').click();
+  assert.equal(document.querySelector('.cameras-player__saved-frame:not([hidden]) img')?.src, image);
   await flush();
 
   assert.deepEqual(grids.map(grid => grid.ids), [['site-4', 'site-2']]);

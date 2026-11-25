@@ -144,6 +144,12 @@ export function createCamerasView(documentRef) {
       playback.forEach(saveThumbnail);
     }
 
+    function updateSavedFrame(item) {
+      const image = item.mode === 'live' ? thumbnails.get(item.channelId) : null;
+      item.savedFrame.hidden = !image;
+      if (image && item.savedFrameImage.getAttribute('src') !== image) item.savedFrameImage.src = image;
+    }
+
     dialog = documentRef.createElement("dialog");
     dialog.className = "cameras-view";
     dialog.setAttribute("aria-label", "Câmeras");
@@ -539,6 +545,7 @@ export function createCamerasView(documentRef) {
         item.status.textContent = 'Retomando transmissão…';
         item.updateControls?.(); item.updateHeader?.();
         detachVideo(item);
+        updateSavedFrame(item);
       }
     }
     function connectPlayer() {
@@ -593,6 +600,7 @@ export function createCamerasView(documentRef) {
       item.controller = new AbortController();
       item.recordingId = recordingId;
       item.mode = recordingId ? 'playback' : 'live';
+      updateSavedFrame(item);
       item.thumbnailTime = null;
       item.played = false;
       item.connected = false; item.connectionState = 'connecting'; item.failureLabel = '';
@@ -660,6 +668,7 @@ export function createCamerasView(documentRef) {
         item.connectionState = 'error'; item.failureLabel = 'Transmissão interrompida';
         item.onPlaybackError = null;
         detachVideo(item);
+        updateSavedFrame(item);
         item.liveBadge.hidden = true;
         item.status.dataset.loading = 'false'; item.retry.hidden = true;
         item.updateControls?.();
@@ -784,12 +793,18 @@ export function createCamerasView(documentRef) {
           video.tabIndex = 0;
         }
         const label = make('span', 'cameras-player__label', channel.label);
+        const savedFrame = make('div', 'cameras-player__saved-frame');
+        savedFrame.hidden = true;
+        const savedFrameImage = make('img', 'cameras-player__saved-image');
+        savedFrameImage.alt = '';
+        savedFrame.append(savedFrameImage, make('span', 'cameras-player__saved-label', 'Última imagem'));
         const liveBadge = make('span', 'cameras-player__tile-live', '● AO VIVO');
         liveBadge.hidden = true;
         const notice = make('span', 'cameras-player__status', 'Conectando…'); notice.setAttribute('role', 'status'); notice.dataset.loading = 'true';
         const retry = make('button', 'cameras-player__retry', 'Tentar reproduzir'); retry.type = 'button';
         retry.dataset.cameraPlayRetry = ''; retry.hidden = true;
-        const item = { controller: new AbortController(), video, status: notice, retry, liveBadge, hls: null,
+        const item = { controller: new AbortController(), video, status: notice, retry, liveBadge,
+          savedFrame, savedFrameImage, hls: null,
           mode: 'live', connected: false, connectionState: 'connecting', failureLabel: '', playAttempted: false,
           preview, channelId: channel.id, recordingId: null, searchButton: null, searchResults: null,
           thumbnailTime: null, played: false, retriedNetwork: false,
@@ -799,6 +814,7 @@ export function createCamerasView(documentRef) {
           clearWaiting(item);
           item.played = true; item.connected = true; item.connectionState = 'playing'; item.failureLabel = '';
           item.status.textContent = ''; item.status.dataset.loading = 'false'; item.retry.hidden = true;
+          item.savedFrame.hidden = true;
           item.liveBadge.hidden = item.mode !== 'live';
           if (item.thumbnailTime === null) saveThumbnail(item);
           item.updateControls?.(); item.updateHeader?.();
@@ -845,7 +861,7 @@ export function createCamerasView(documentRef) {
           });
         }
         playback.push(item); tileItems.push({ tile, video, item, channel });
-        tile.append(video, label, liveBadge, notice, retry);
+        tile.append(video, savedFrame, label, liveBadge, notice, retry);
         if (chosen.length > 1 && (move || listRecordings)) {
           const focus = make('button', 'cameras-player__focus', '1 tela');
           focus.type = 'button'; focus.setAttribute('aria-label', `Abrir ${channel.label} em tela individual`);

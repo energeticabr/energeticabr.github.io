@@ -41,6 +41,11 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
       if (height < width) assert.equal(layout.liveStateColor, 'rgb(242, 244, 246)');
       const expectedTiles = mode === 'single' ? 1 : mode === 'pair' ? 2 : 8;
       assert.equal(layout.tiles.length,expectedTiles);
+      assert.equal(layout.savedFrames.length, 1);
+      const [{ label, tile, focus, imageLoaded }] = layout.savedFrames;
+      assert.ok(imageLoaded);
+      assert.ok(label.left >= tile.left && label.right <= tile.right && label.bottom <= tile.bottom);
+      if (focus) assert.ok(label.right <= focus.left);
       assert.ok(layout.player.width <= width + 1 && layout.player.height <= height + 1);
       const minimumTileHeight = height < 400 ? 40 : 100;
       assert.ok(layout.tiles.every(tile => tile.width > 100 && tile.height > minimumTileHeight
