@@ -91,13 +91,17 @@ def launch(sdk_root, device_id):
 
 
 class Hub:
-    def __init__(self, root, devices):
+    def __init__(self, root, devices, *, assume_observer_confirmed=True):
         self.root = root
         self.clients = {device: set() for device in devices}
         self.buffers = {device: bytearray() for device in devices}
         self.started_at = time.monotonic()
         self.last_video_at = {device: None for device in devices}
         self.last_online_at = {device: None for device in devices}
+        # Direct Hub snapshots model an already-running observer; the service
+        # entry point opts out until its SDK reports STATE_PLAY or a video frame.
+        self.observer_confirmed = {device: assume_observer_confirmed for device in devices}
+        self.observer_usable = {device: assume_observer_confirmed for device in devices}
         self.workers = {}
         self.session = None
         self.session_at = 0.0
@@ -147,7 +151,11 @@ class Hub:
         result = {}
         for device in self.clients:
             last_video = self.last_video_at[device]
-            if last_video is None:
+            if not self.observer_confirmed[device] or not self.observer_usable[device]:
+                # Authentication, SDK startup, or the observation pipeline can
+                # fail without proving that the camera itself is offline.
+                status = "unknown"
+            elif last_video is None:
                 status = "unknown" if current - self.started_at < OFFLINE_AFTER_SECONDS else "offline"
             else:
                 status = "online" if current - last_video < OFFLINE_AFTER_SECONDS else "offline"
@@ -158,24 +166,30 @@ class Hub:
         while True:
             process = None
             logger = None
+            phase = "access"
+            if not self.observer_confirmed[device]:
+                self.observer_usable[device] = False
             try:
                 async with self.start_lock:
                     started = time.monotonic()
                     session = await self.access()
+                    phase = "launch"
                     print(f"Yoosee {device % 10000:04d}: abrindo vídeo", file=sys.stderr, flush=True)
                     process = await asyncio.create_subprocess_exec(
                         sys.executable, "-B", __file__, str(self.root), "worker", str(device),
                         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                     )
-                    logger = asyncio.create_task(self.report(process.stderr))
+                    logger = asyncio.create_task(self.report(process.stderr, device))
                     process.stdin.write(sdk_input(session, device))
                     await process.stdin.drain()
+                    phase = "initial-stream"
                     initial = await asyncio.wait_for(process.stdout.read(16384), 50)
                     if not initial:
                         raise EOFError("SDK ended before sending video")
                     print(f"Yoosee {device % 10000:04d}: vídeo recebido em {time.monotonic() - started:.1f}s",
                           file=sys.stderr, flush=True)
+                phase = "stream"
                 self.publish(device, watchers, initial)
                 while True:
                     packet = await asyncio.wait_for(process.stdout.read(16384), 65)
@@ -183,6 +197,11 @@ class Hub:
                         raise EOFError("SDK stream ended")
                     self.publish(device, watchers, packet)
             except Exception as error:
+                if phase in {"access", "launch"} or (phase == "initial-stream"
+                                                       and not isinstance(error, asyncio.TimeoutError)):
+                    self.observer_usable[device] = False
+                elif not self.observer_confirmed[device] or not isinstance(error, (asyncio.TimeoutError, EOFError)):
+                    self.observer_usable[device] = False
                 print(f"Yoosee {device % 10000:04d}: {type(error).__name__}", file=sys.stderr, flush=True)
                 self.buffers[device].clear()
                 # Keep players subscribed while the SDK reconnects.
@@ -201,17 +220,43 @@ class Hub:
                         await process.communicate()
             await asyncio.sleep(5)
 
-    @staticmethod
-    async def report(stream):
+    async def report(self, stream, device):
         while True:
             line = await stream.readline()
             if not line:
+                if not self.observer_confirmed[device]:
+                    self.observer_usable[device] = False
                 return
+            if line.startswith(b"Yoosee source failed: "):
+                self.observer_usable[device] = False
+                continue
             if re.fullmatch(rb"YOOSEE device [0-9]{1,4} (?:(?:state|playback error) -?[0-9]+|codec [0-9]+ resolution [0-9]+x[0-9]+)\r?\n", line):
+                status_match = re.fullmatch(rb"YOOSEE device [0-9]{1,4} (state|playback error) (-?[0-9]+)\r?\n", line)
+                if status_match:
+                    code = int(status_match.group(2))
+                    if status_match.group(1) == b"playback error" and code != 0:
+                        self.observer_usable[device] = False
+                    elif status_match.group(1) == b"state":
+                        # STATE_PLAY is 5; a newly spawned subprocess alone
+                        # is not evidence that the SDK can observe the camera.
+                        self.observer_usable[device] = code == 5
+                        if code == 5:
+                            self.observer_confirmed[device] = True
+                codec_match = re.fullmatch(rb"YOOSEE device [0-9]{1,4} codec ([0-9]+) resolution [0-9]+x[0-9]+\r?\n", line)
+                if codec_match and int(codec_match.group(1)) != 5:
+                    # The decoder cannot inspect a format other than the
+                    # configured HEVC stream, so this is a pipeline failure.
+                    self.observer_usable[device] = False
                 sys.stderr.buffer.write(line)
                 sys.stderr.buffer.flush()
+            else:
+                # Unexpected SDK/runtime output means the observer cannot
+                # safely distinguish camera inactivity from its own failure.
+                self.observer_usable[device] = False
 
     def publish(self, device, watchers, packet):
+        self.observer_confirmed[device] = True
+        self.observer_usable[device] = True
         self.last_video_at[device] = time.monotonic()
         self.last_online_at[device] = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
         remember_video(self.buffers[device], packet)
@@ -225,7 +270,7 @@ class Hub:
 
 async def serve(root, devices, socket_path):
     sys.path.insert(0, str(root))
-    hub = Hub(root, devices)
+    hub = Hub(root, devices, assume_observer_confirmed=False)
     Path(socket_path).unlink(missing_ok=True)
     async with await asyncio.start_unix_server(hub.connect, path=socket_path, limit=4096) as server:
         os.chmod(socket_path, 0o600)

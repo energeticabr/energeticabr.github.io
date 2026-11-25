@@ -53,6 +53,33 @@ export function createBrowserPorts({
     return true;
   }
 
+  async function requestCameraStatusNotificationPermission() {
+    try {
+      if (typeof notificationApi !== "function") return false;
+      if (notificationApi.permission === "granted") return true;
+      if (notificationApi.permission === "denied" || typeof notificationApi.requestPermission !== "function") return false;
+      return await notificationApi.requestPermission() === "granted";
+    } catch { return false; }
+  }
+
+  async function notifyCameraStatus(event, { signal, isCurrent } = {}) {
+    if (signal?.aborted || (typeof isCurrent === "function" && !isCurrent())
+      || !event || (event.status !== "offline" && event.status !== "online")
+      || typeof notificationApi !== "function" || notificationApi.permission !== "granted") return false;
+    const label = String(event.label || "Câmera").trim().slice(0, 120) || "Câmera";
+    const changedAt = new Date(event.changedAt);
+    if (!Number.isFinite(changedAt.getTime())) return false;
+    const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(changedAt);
+    const offline = event.status === "offline";
+    const title = offline ? "Câmera off-line" : "Câmera on-line";
+    const body = offline ? `${label} ficou off-line às ${time}.` : `${label} voltou a ficar on-line às ${time}.`;
+    try {
+      if (signal?.aborted || (typeof isCurrent === "function" && !isCurrent())) return false;
+      new notificationApi(title, { body, tag: `energetico-camera-status-${event.id}` });
+      return true;
+    } catch { return false; }
+  }
+
   async function scheduleAttachmentReminder({
     title = "Energético",
     body = "Anexo recebido há 5 minutos sem postagem",
@@ -165,5 +192,7 @@ export function createBrowserPorts({
     exportMedia,
     scheduleAttachmentReminder,
     cancelAttachmentReminder,
+    requestCameraStatusNotificationPermission,
+    notifyCameraStatus,
   });
 }

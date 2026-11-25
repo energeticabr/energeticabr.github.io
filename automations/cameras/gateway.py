@@ -2,6 +2,7 @@
 
 import contextlib
 from datetime import date
+import hashlib
 import json
 import math
 import os
@@ -12,10 +13,11 @@ import tempfile
 import threading
 import time
 import urllib.request
+from urllib.error import HTTPError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from camera_status import CameraStatusMonitor, CameraStatusStore, utc_text
+from camera_status import CameraStatusMonitor, CameraStatusStore, is_icsee_entry, utc_text
 
 
 CATALOG = "/api/portal-cameras"
@@ -37,6 +39,8 @@ PREVIEW_REPLACEMENT_GRACE_SECONDS = 5
 IDLE_SECONDS = 12
 SINGLE_REOPEN_SECONDS = 45
 PREVIEW_IDLE_SECONDS = 24
+STATUS_CHANNEL_PROBE_TIMEOUT_SECONDS = 45
+STATUS_PROBE_VIEWER = "__camera-status-probe__"
 
 
 class PlaybackError(Exception):
@@ -235,8 +239,13 @@ class Gateway:
             raise PlaybackError(429)
         try:
             identity = self.identity(token)
+        except HTTPError as error:
+            status = error.code if error.code in {401, 403} else 503
+            raise PlaybackError(status) from None
         except (OSError, ValueError):
-            raise PlaybackError(401) from None
+            # Microsoft Graph/network outages are transient service errors,
+            # not evidence that the user's session or access was revoked.
+            raise PlaybackError(503) from None
         finally:
             self.graph_slots.release()
         viewer = str(identity.get("id", "")).casefold()
@@ -252,6 +261,20 @@ class Gateway:
                              "status": status["status"], "lastOnlineAt": status["lastOnlineAt"]})
         self._add_camera_group_metadata(channels)
         return channels
+
+    def camera_status_events(self, after=None):
+        if after is None:
+            return self.status_store.event_baseline()
+        result = self.status_store.events_after(after, limit=100)
+        labels = {channel_id: entry.get("label") or "Câmera"
+                  for channel_id, entry in self.entries.items()}
+        events = []
+        for event in result["events"]:
+            label = labels.get(event["channelId"])
+            if not label:
+                continue
+            events.append({**event, "label": label})
+        return {"events": events, "cursor": result["cursor"], "generation": result["generation"]}
 
     def _add_camera_group_metadata(self, channels):
         by_device = {}
@@ -278,8 +301,80 @@ class Gateway:
 
     def start_status_monitor(self):
         if self.status_monitor is None:
-            self.status_monitor = CameraStatusMonitor(self.entries, self.status_store)
+            self.status_monitor = CameraStatusMonitor(
+                self.entries, self.status_store, icsee_channel_query=self.probe_icsee_channel,
+                icsee_live_query=self.icsee_live_channel_status,
+            )
         return self.status_monitor.start()
+
+    def _mark_live_channel_online(self, channel):
+        self.status_store.update(channel, "online", checked_at=utc_text())
+        entry = self.entries.get(channel)
+        if isinstance(entry, dict) and is_icsee_entry(entry):
+            channel_key = "icsee-channel:" + hashlib.sha256(channel.encode("utf-8")).hexdigest()
+            self.status_store.reset_source_misses(channel_key)
+
+    def _icsee_live_channel_status_locked(self, channel):
+        existing = [stream for stream in self.streams.values()
+                    if stream.channel == channel and stream.mode == "live"]
+        if not existing:
+            return None
+        return "online" if any(stream.ready_to_play() for stream in existing) else "unknown"
+
+    def icsee_live_channel_status(self, entry):
+        channel = entry.get("id") if isinstance(entry, dict) else None
+        if not isinstance(channel, str) or channel not in self.entries or self.entries[channel] is not entry:
+            return "unknown"
+        with self.lock:
+            self.expire()
+            return self._icsee_live_channel_status_locked(channel)
+
+    def probe_icsee_channel(self, entry):
+        channel = entry.get("id") if isinstance(entry, dict) else None
+        if not isinstance(channel, str) or channel not in self.entries or self.entries[channel] is not entry:
+            return "unknown"
+        probe_key = (STATUS_PROBE_VIEWER, channel, False)
+        with self.lock:
+            self.expire()
+            live_state = self._icsee_live_channel_status_locked(channel)
+            if live_state is not None:
+                return live_state
+            if self.query_active or len(self.streams) >= MAX_STREAMS - 1:
+                return "unknown"
+            stream = Stream(entry, self.ffmpeg, STATUS_PROBE_VIEWER, preview=True)
+            try:
+                # launch() sets startup_deadline before both subprocess handles
+                # exist. Keep expire()/reap() out until launch has completed.
+                stream.launch()
+            except (OSError, ValueError, subprocess.SubprocessError):
+                stream.close()
+                return "unknown"
+            self.streams[probe_key] = stream
+
+        try:
+            deadline = time.monotonic() + STATUS_CHANNEL_PROBE_TIMEOUT_SECONDS
+            while True:
+                with self.lock:
+                    if self.streams.get(probe_key) is not stream:
+                        return "unknown"
+                    now = time.monotonic()
+                    stream.last_request = now
+                    if not stream.alive():
+                        return "unknown"
+                    if stream.ready_to_play():
+                        return "online"
+                    if now >= deadline:
+                        # A single stalled relay/startup is inconclusive. The
+                        # monitor requires another independent two-hour check.
+                        return "no_video"
+                time.sleep(0.5)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return "unknown"
+        finally:
+            with self.lock:
+                if self.streams.get(probe_key) is stream:
+                    del self.streams[probe_key]
+            stream.close()
 
     def recordings(self, channel, viewer, day, hour=None):
         if not isinstance(channel, str) or channel not in self.entries:
@@ -480,7 +575,8 @@ class Gateway:
                     raise PlaybackError(503)
                 stream.last_request = time.monotonic()
                 if stream.ready_to_play():
-                    self.status_store.update(channel, "online", checked_at=utc_text())
+                    if stream.mode == "live":
+                        self._mark_live_channel_online(channel)
                     return stream.path
             time.sleep(0.25)
         with self.lock:
@@ -523,7 +619,7 @@ class Gateway:
             now = time.monotonic()
             stream.last_request = now
             if ready and stream.mode == "live":
-                self.status_store.update(stream.channel, "online", checked_at=utc_text())
+                self._mark_live_channel_online(stream.channel)
             return ready
 
     def get(self, capability, filename):
@@ -613,6 +709,11 @@ def handler_for(gateway):
                                if isinstance(offered, list) and codec in offered)
                 if data.get("action") == "list":
                     result = {"channels": gateway.catalog()}
+                elif data.get("action") == "status-events":
+                    after = data.get("after")
+                    if after is not None and (type(after) is not int or after < 0 or after > 9_007_199_254_740_991):
+                        raise ValueError("invalid status cursor")
+                    result = gateway.camera_status_events(after)
                 elif data.get("action") == "play":
                     result = {"path": gateway.start(data.get("channelId"), viewer, codecs=codecs)}
                 elif data.get("action") == "play-grid":

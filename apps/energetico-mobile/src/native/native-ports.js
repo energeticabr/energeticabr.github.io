@@ -5,7 +5,7 @@ import { App } from "@capacitor/app";
 import { LocalNotifications } from "@capacitor/local-notifications";
 
 import { validateAttachment } from "../chat/file-policy.js";
-import { DocumentPicker, DocumentScanner, ShareInbox } from "./plugins.js";
+import { Capacitor, DocumentPicker, DocumentScanner, ShareInbox } from "./plugins.js";
 import { editDocumentScan } from '../ui/document-scanner.js';
 import { jpegOrientation } from './jpeg-orientation.js';
 
@@ -89,6 +89,8 @@ export function createNativePorts({
   share = Share,
   app = App,
   localNotifications = LocalNotifications,
+  capacitor = Capacitor,
+  notificationApi = globalThis.Notification,
   navigatorRef = globalThis.navigator,
   fetchImpl = globalThis.fetch,
   FileCtor = globalThis.File,
@@ -498,6 +500,56 @@ export function createNativePorts({
     }
   }
 
+  async function requestCameraStatusNotificationPermission() {
+    try {
+      if (capacitor?.isNativePlatform?.()) {
+        if (typeof localNotifications?.checkPermissions !== "function"
+          || typeof localNotifications?.requestPermissions !== "function") return false;
+        const checked = await localNotifications.checkPermissions();
+        if (checked?.display === "granted") return true;
+        if (checked?.display === "denied") return false;
+        const requested = await localNotifications.requestPermissions();
+        return requested?.display === "granted";
+      }
+      if (typeof notificationApi !== "function") return false;
+      if (notificationApi.permission === "granted") return true;
+      if (notificationApi.permission === "denied" || typeof notificationApi.requestPermission !== "function") return false;
+      return await notificationApi.requestPermission() === "granted";
+    } catch { return false; }
+  }
+
+  async function notifyCameraStatus(event, { signal, isCurrent } = {}) {
+    if (signal?.aborted || (typeof isCurrent === "function" && !isCurrent())
+      || !event || (event.status !== "offline" && event.status !== "online")) return false;
+    const label = String(event.label || "Câmera").trim().slice(0, 120) || "Câmera";
+    const changedAt = new Date(event.changedAt);
+    if (!Number.isFinite(changedAt.getTime())) return false;
+    const time = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(changedAt);
+    const offline = event.status === "offline";
+    const title = offline ? "Câmera off-line" : "Câmera on-line";
+    const body = offline ? `${label} ficou off-line às ${time}.` : `${label} voltou a ficar on-line às ${time}.`;
+    try {
+      if (capacitor?.isNativePlatform?.()) {
+        if (typeof localNotifications?.schedule !== "function") return false;
+        const permissions = await localNotifications.checkPermissions?.();
+        if (permissions?.display && permissions.display !== "granted") return false;
+        if (signal?.aborted || (typeof isCurrent === "function" && !isCurrent())) return false;
+        const id = 2_000_000_000 + (Number(event.id) % 147_483_647);
+        await localNotifications.schedule({ notifications: [{
+          id,
+          title,
+          body,
+          extra: { kind: "camera-status", eventId: Number(event.id), channelId: event.channelId },
+        }] });
+        return true;
+      }
+      if (typeof notificationApi !== "function" || notificationApi.permission !== "granted") return false;
+      if (signal?.aborted || (typeof isCurrent === "function" && !isCurrent())) return false;
+      new notificationApi(title, { body, tag: `energetico-camera-status-${event.id}` });
+      return true;
+    } catch { return false; }
+  }
+
   return Object.freeze({
     async onResume(handler, onBackground) {
       const listener = await app.addListener("appStateChange", event => {
@@ -527,5 +579,7 @@ export function createNativePorts({
     cancelProvisionReminder,
     scheduleAttachmentReminder,
     cancelAttachmentReminder,
+    requestCameraStatusNotificationPermission,
+    notifyCameraStatus,
   });
 }

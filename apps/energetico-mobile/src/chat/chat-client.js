@@ -910,14 +910,16 @@ export function createChatClient({
   }
 
   async function cameraRequest(payload, signal) {
-    if (apiPrefix !== "/api") return { channels: [] };
+    if (apiPrefix !== "/api") return payload.action === "status-events"
+      ? { events: [], cursor: 0, generation: "00000000000000000000000000000000" }
+      : { channels: [] };
     const token = await cancellableToken(tokenProvider, signal);
     return request(new URL("/api/portal-cameras", baseUrl).href, {
       method: "POST",
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload), credentials: "omit", cache: "no-store", redirect: "error", signal,
     }, async response => {
-      if (response.status === 403) throw new Error("Sua conta não tem acesso às câmeras.");
+      if (response.status === 403) throw Object.assign(new Error("Sua conta não tem acesso às câmeras."), { status: 403 });
       if (response.status === 429) throw Object.assign(new Error(payload.action === "move"
         ? "Aguarde um instante antes de mover novamente."
         : "O serviço de câmeras está ocupado. Tente novamente em instantes."), { status: 429 });
@@ -942,6 +944,28 @@ export function createChatClient({
         lastOnlineAt,
       };
     });
+  }
+
+  async function listCameraStatusEvents({ after, signal } = {}) {
+    const result = await cameraRequest({ action: "status-events", ...(after !== undefined ? { after } : {}) }, signal);
+    if (!Array.isArray(result?.events) || !Number.isSafeInteger(result?.cursor) || result.cursor < 0
+      || !/^[a-f0-9]{32}$/.test(result?.generation || "")
+      || result.events.length > 100) throw new Error("Não foi possível consultar as mudanças de status das câmeras.");
+    const events = result.events.filter(event => Number.isSafeInteger(event?.id) && event.id > 0
+      && /^[a-z0-9-]{1,48}$/.test(event?.channelId || "")
+      && (event?.status === "online" || event?.status === "offline")
+      && typeof event?.label === "string" && event.label.length > 0 && event.label.length <= 120
+      && typeof event?.changedAt === "string"
+      && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(event.changedAt)
+      && Number.isFinite(Date.parse(event.changedAt))).map(event => ({
+        id: event.id,
+        channelId: event.channelId,
+        status: event.status,
+        label: event.label,
+        changedAt: event.changedAt,
+      }));
+    if (events.length !== result.events.length) throw new Error("O serviço retornou uma mudança de câmera inválida.");
+    return { events, cursor: result.cursor, generation: result.generation };
   }
 
   function cameraPlaylistUrl(path) {
@@ -1056,5 +1080,5 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ listCameraChannels, startCameraPlayback, prepareCameraGrid, moveCamera, listCameraRecordings, playCameraRecording, swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({ listCameraChannels, listCameraStatusEvents, startCameraPlayback, prepareCameraGrid, moveCamera, listCameraRecordings, playCameraRecording, swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
 }
