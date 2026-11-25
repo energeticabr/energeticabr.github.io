@@ -617,7 +617,7 @@ class Service:
 
     def signal_gallery_refresh(self):
         try:
-            self.database.with_name(f'{self.database.stem}-gallery-request').touch(mode=0o600)
+            self.database.with_name(f'{self.database.stem}-gallery-request').write_bytes(b'\n')
         except OSError:
             logging.warning('A atualização imediata da Galeria Swile ficou na fila.')
 
