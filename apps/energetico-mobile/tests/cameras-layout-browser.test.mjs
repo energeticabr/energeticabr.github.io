@@ -62,9 +62,19 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
       if (width < 700) assert.ok(second.top >= first.bottom);
       else assert.ok(second.left >= first.right && second.top === first.top);
     } else if (mode === 'visuals') {
-      assert.equal(layout.visualCards.length,1);
+      assert.equal(layout.visualCards.length, 2);
       assert.ok(layout.tabs.left >= 0 && layout.tabs.right <= width);
-      assert.ok(layout.visualCards.every(card => card.left >= 0 && card.right <= width));
+      for (const { bounds, title, pencil, open } of layout.visualCards) {
+        assert.ok(bounds.left >= 0 && bounds.right <= width);
+        assert.ok(pencil.left - title.right >= 0 && pencil.left - title.right <= 12,
+          `Pencil must sit directly after the visual name at ${width}x${height}`);
+        assert.equal(pencil.width, 44);
+        assert.equal(pencil.height, 44);
+        assert.ok(pencil.right < open.left && open.right < bounds.right);
+      }
+      const { bounds, inputFocused } = layout.visualEditor;
+      assert.ok(bounds.left >= 0 && bounds.right <= width && bounds.top >= 0 && bounds.bottom <= height);
+      assert.ok(inputFocused);
     } else {
       assert.equal(layout.portrait,String(height > width));
       if (height < width) assert.equal(layout.liveStateColor, 'rgb(242, 244, 246)');

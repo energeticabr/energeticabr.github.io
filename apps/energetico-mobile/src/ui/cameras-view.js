@@ -4,6 +4,7 @@ const GRID_LIMIT = 8;
 const THUMBNAIL_PREFIX = 'energetico:camera-preview:v1:';
 const CAMERA_NAME_PREFIX = 'energetico:camera-name:v1:';
 const CAMERA_VISUAL_PREFIX = 'energetico:camera-visual:v1:';
+const PENCIL_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 16.5V20h3.5L18.7 8.8l-3.5-3.5L4 16.5Zm17-10.1a1 1 0 0 0 0-1.4l-2-2a1 1 0 0 0-1.4 0l-1.7 1.7 3.5 3.5L21 6.4Z"/></svg>';
 const HLS_MIME = 'application/vnd.apple.mpegurl';
 const HEVC_MIME = 'video/mp4; codecs="hvc1.1.6.L120.B0"';
 const GRID_RECONNECT_DELAY_MS = 30_000;
@@ -104,10 +105,9 @@ export function createCamerasView(documentRef) {
       } catch { return source; /* Camera names remain usable when storage is unavailable. */ }
     }
 
-    function loadVisuals() {
-      if (!visualStorageKey) return [];
+    function parseVisuals(value) {
       try {
-        const saved = JSON.parse(windowRef?.localStorage?.getItem(visualStorageKey) ?? '[]');
+        const saved = JSON.parse(value ?? '[]');
         if (!Array.isArray(saved)) return [];
         const valid = [];
         for (const item of saved) {
@@ -125,6 +125,13 @@ export function createCamerasView(documentRef) {
           if (cameraIds.length) valid.push({ name, cameraIds });
         }
         return valid;
+      } catch { return []; }
+    }
+
+    function loadVisuals() {
+      if (!visualStorageKey) return [];
+      try {
+        return parseVisuals(windowRef?.localStorage?.getItem(visualStorageKey));
       } catch { return []; }
     }
 
@@ -288,30 +295,37 @@ export function createCamerasView(documentRef) {
       visualNameEditor = null;
       if (editor.open && typeof editor.close === 'function') editor.close();
       editor.remove();
-      if (restoreFocus) visualNameEditorReturnFocus?.focus?.({ preventScroll: true });
+      if (restoreFocus) {
+        const trigger = visualNameEditorReturnFocus;
+        const target = trigger?.isConnected ? trigger
+          : dialog.querySelector(`[data-camera-visual-rename="${trigger?.dataset.cameraVisualRename}"]`);
+        target?.focus({ preventScroll: true });
+      }
       visualNameEditorReturnFocus = null;
     }
 
-    function requestVisualName(cameraIds, trigger) {
-      if (visualNameEditor || !cameraIds.length) return;
+    function openVisualNameEditor(trigger, { cameraIds, visualIndex }) {
+      const original = visuals[visualIndex];
+      if (visualNameEditor || (!original && !cameraIds?.length)) return;
       const editor = documentRef.createElement('dialog');
       editor.className = 'camera-visual-editor';
       editor.dataset.cameraVisualEditor = '';
       editor.setAttribute('aria-labelledby', 'camera-visual-editor-title');
       editor.innerHTML = `
         <form class="camera-name-editor__form" data-camera-visual-form>
-          <h2 id="camera-visual-editor-title">Nomeie seu visual</h2>
+          <h2 id="camera-visual-editor-title">${original ? 'Editar nome do visual' : 'Nomeie seu visual'}</h2>
           <label for="camera-visual-editor-input">Nome do visual</label>
           <input id="camera-visual-editor-input" data-camera-visual-name type="text" maxlength="120" autocomplete="off">
           <p class="camera-name-editor__error" role="alert" aria-live="polite"></p>
           <div class="camera-name-editor__actions">
             <button type="button" data-camera-visual-cancel>Cancelar</button>
-            <button type="submit">Salvar visual</button>
+            <button type="submit">${original ? 'Salvar' : 'Salvar visual'}</button>
           </div>
         </form>`;
       const form = editor.querySelector('[data-camera-visual-form]');
       const input = editor.querySelector('[data-camera-visual-name]');
       const error = editor.querySelector('[role="alert"]');
+      if (original) input.value = original.name;
       visualNameEditor = editor;
       visualNameEditorReturnFocus = trigger;
       editor.addEventListener('cancel', event => {
@@ -329,29 +343,42 @@ export function createCamerasView(documentRef) {
           input.focus();
           return;
         }
-        const next = [...visuals, { name, cameraIds }];
         try {
           const storage = windowRef?.localStorage;
           if (!visualStorageKey || !storage) throw new Error('Visual storage is unavailable.');
+          const next = parseVisuals(storage.getItem(visualStorageKey));
+          if (original) {
+            const current = next[visualIndex];
+            if (current?.cameraIds.length !== original.cameraIds.length
+                || original.cameraIds.some((id, index) => id !== current.cameraIds[index])) {
+              throw new Error('Visual is no longer available.');
+            }
+            next[visualIndex] = { ...current, name };
+          } else {
+            next.push({ name, cameraIds });
+          }
           storage.setItem(visualStorageKey, JSON.stringify(next));
+          visuals = next;
         } catch {
           error.textContent = 'Não foi possível salvar este visual neste dispositivo.';
           input.focus();
           return;
         }
-        visuals = next;
         closeVisualNameEditor({ restoreFocus: false });
         creatingVisual = false;
         choosing = false;
         activeTab = 'visuals';
         selected.clear();
-        status.textContent = 'Visual salvo.';
+        status.textContent = original ? 'Nome do visual atualizado.' : 'Visual salvo.';
         render();
-        dialog.querySelector(`[data-camera-visual-open="${visuals.length - 1}"]`)?.focus?.({ preventScroll: true });
+        const focusSelector = original ? `[data-camera-visual-rename="${visualIndex}"]`
+          : `[data-camera-visual-open="${visuals.length - 1}"]`;
+        dialog.querySelector(focusSelector)?.focus({ preventScroll: true });
       });
       documentRef.body.append(editor);
       editor.showModal();
       input.focus({ preventScroll: true });
+      if (original) input.select();
     }
 
     function openVisual(visual, trigger) {
@@ -394,7 +421,16 @@ export function createCamerasView(documentRef) {
           const card = make('article', 'camera-visual-card');
           card.dataset.cameraVisualCard = String(index);
           const details = make('div', 'camera-visual-card__details');
-          details.append(make('strong', 'camera-visual-card__name', visual.name));
+          const heading = make('div', 'camera-visual-card__heading');
+          const rename = make('button', 'camera-visual-card__rename');
+          rename.type = 'button';
+          rename.dataset.cameraVisualRename = String(index);
+          rename.setAttribute('aria-label', `Editar nome do visual ${visual.name}`);
+          rename.title = 'Editar nome do visual';
+          rename.innerHTML = PENCIL_ICON;
+          rename.addEventListener('click', () => openVisualNameEditor(rename, { visualIndex: index }));
+          heading.append(make('strong', 'camera-visual-card__name', visual.name), rename);
+          details.append(heading);
           details.append(make('span', 'camera-visual-card__count', `${visual.cameraIds.length} ${visual.cameraIds.length === 1 ? 'câmera' : 'câmeras'}`));
           const openButton = make('button', 'camera-visual-card__open', 'Abrir visual');
           openButton.type = 'button'; openButton.dataset.cameraVisualOpen = String(index);
@@ -435,7 +471,7 @@ export function createCamerasView(documentRef) {
       rename.type = 'button'; rename.dataset.cameraRename = channel.id;
       rename.setAttribute('aria-label', `Editar nome da câmera ${channel.label}`);
       rename.title = 'Editar nome da câmera';
-      rename.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 16.5V20h3.5L18.7 8.8l-3.5-3.5L4 16.5Zm17-10.1a1 1 0 0 0 0-1.4l-2-2a1 1 0 0 0-1.4 0l-1.7 1.7 3.5 3.5L21 6.4Z"/></svg>';
+      rename.innerHTML = PENCIL_ICON;
       rename.addEventListener('click', () => editCameraName(channel, rename));
       heading.append(symbol, title, rename);
       if (choosing) {
@@ -512,6 +548,10 @@ export function createCamerasView(documentRef) {
           channels = flatNextChannels;
           for (const id of selected) if (!channels.some(channel => channel.id === id)) selected.delete(id);
           loadThumbnails();
+          if (!initial && activeTab === 'visuals' && !creatingVisual) {
+            createVisualButton.disabled = channels.length === 0;
+            return;
+          }
           status.textContent = creatingVisual ? 'Selecione até 8 câmeras para este visual.'
             : activeTab === 'visuals' ? visuals.length ? '' : 'Nenhum visual salvo.'
               : channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.';
@@ -1237,7 +1277,7 @@ export function createCamerasView(documentRef) {
     gridButton.addEventListener('click', () => { choosing = !choosing; selected.clear(); render(); });
     gridOpen.addEventListener('click', () => {
       const chosen = channels.filter(channel => selected.has(channel.id));
-      if (creatingVisual) requestVisualName(chosen.map(channel => String(channel.id)), gridOpen);
+      if (creatingVisual) openVisualNameEditor(gridOpen, { cameraIds: chosen.map(channel => String(channel.id)) });
       else openPlayer(chosen, gridOpen);
     });
     documentRef.body.append(dialog); dialog.showModal();

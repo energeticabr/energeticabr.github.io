@@ -9,7 +9,7 @@ localStorage.setItem('energetico:camera-preview:v1:' + accountKey + ':camera-1',
 localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify([{
   name: wallMode ? 'Visual 1' : 'Portão e pátio',
   cameraIds: wallMode ? Array.from({ length: liveGridMode ? 5 : 8 }, (_, index) => 'camera-' + (index + 1)) : ['camera-1', 'camera-2'],
-}]));
+}, { name: 'NomeLongoSemEspaços'.repeat(5), cameraIds: ['camera-3'] }]));
 createCamerasView(document).open({
   accountKey,
   list: async () => Array.from({ length: 9 }, (_, index) => ({
@@ -75,6 +75,19 @@ if (listHeadings.length) {
   selectionHeadings = cardHeadings();
   document.querySelector('[data-camera-grid]').click();
 }
+const visualCards = [...document.querySelectorAll('.camera-visual-card')].map(card => ({
+  bounds: rect(card),
+  title: rect(card.querySelector('.camera-visual-card__name')),
+  pencil: rect(card.querySelector('[data-camera-visual-rename]')),
+  open: rect(card.querySelector('[data-camera-visual-open]')),
+}));
+let visualEditor = null;
+if (location.search === '?visuals') {
+  document.querySelector('[data-camera-visual-rename]').click();
+  const editor = document.querySelector('[data-camera-visual-editor]');
+  visualEditor = { bounds: rect(editor), inputFocused: document.activeElement === editor.querySelector('input') };
+  editor.querySelector('[data-camera-visual-cancel]').click();
+}
 const layout = {viewport:rect(dialog),
   tabs:document.querySelector('.cameras-header__tabs') && rect(document.querySelector('.cameras-header__tabs')),
   listHeadings, selectionHeadings,
@@ -84,7 +97,7 @@ const layout = {viewport:rect(dialog),
     lastOnline:rect(document.querySelector('.camera-card__last-online')),
     preview:rect(document.querySelector('.camera-card__preview')),
   },
-  visualCards:[...document.querySelectorAll('.camera-visual-card')].map(rect),
+  visualCards, visualEditor,
   groups:[...document.querySelectorAll('.camera-group')].map(group => ({
     bounds:rect(group), children:[...group.querySelectorAll('.camera-card')].map(rect),
   })),
