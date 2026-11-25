@@ -1,4 +1,7 @@
+import { APP_CONFIG } from "../config.js";
+
 const PRIVATE_HOSTS = new Set([
+  new URL(APP_CONFIG.apiBaseUrl).hostname,
   "163-176-171-217.sslip.io",
   "login.microsoftonline.com",
   "graph.microsoft.com",

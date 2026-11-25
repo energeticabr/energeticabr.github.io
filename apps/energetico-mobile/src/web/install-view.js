@@ -1,8 +1,9 @@
 import { loadingIndicatorMarkup } from "../ui/loading-indicator.js";
 import { escapeHtml } from "../ui/escape-html.js";
 import { beginLoadingTask } from "../ui/loading-task.js";
+import { APP_CONFIG } from "../config.js";
 
-const PREPARED_SHORTCUT_URL = "https://163-176-171-217.sslip.io/api/install-shortcut?v=4663F165";
+const PREPARED_SHORTCUT_URL = `${APP_CONFIG.apiBaseUrl}/api/install-shortcut?v=687ED8D8`;
 
 export function isStandaloneDisplay({
   matchMedia = globalThis.matchMedia?.bind(globalThis),

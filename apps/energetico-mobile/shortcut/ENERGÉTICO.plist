@@ -16,7 +16,7 @@
 					<key>CustomOutputName</key>
 					<string>token</string>
 					<key>UUID</key>
-					<string>66c13498-6ef0-433f-9e2c-45f6ea2bb91c</string>
+					<string>006adc6b-d46b-4939-a70c-dbd9870d7128</string>
 					<key>WFTextActionText</key>
 					<string/>
 				</dict>
@@ -27,7 +27,7 @@
 				<key>WFWorkflowActionParameters</key>
 				<dict>
 					<key>GroupingIdentifier</key>
-					<string>4a988aba-5f24-47dd-92ac-ddeb7ddcf716</string>
+					<string>20f6c61e-a8d0-44de-bb58-36f539750d56</string>
 					<key>WFCondition</key>
 					<integer>100</integer>
 					<key>WFControlFlowMode</key>
@@ -57,7 +57,7 @@
 				<key>WFWorkflowActionParameters</key>
 				<dict>
 					<key>GroupingIdentifier</key>
-					<string>97a3b59d-eab0-409b-9b8b-f7bfc894034c</string>
+					<string>6600602e-78fe-432c-975c-a4d42ebc4f9f</string>
 					<key>WFControlFlowMode</key>
 					<integer>0</integer>
 					<key>WFInput</key>
@@ -105,7 +105,7 @@
 					<key>CustomOutputName</key>
 					<string>fileName</string>
 					<key>UUID</key>
-					<string>7cf55a3e-bae2-4237-ba29-519f564b8626</string>
+					<string>babb3305-2f52-4e02-8f8e-a6e90dfae358</string>
 					<key>WFInput</key>
 					<dict>
 						<key>Value</key>
@@ -128,7 +128,7 @@
 					<key>CustomOutputName</key>
 					<string>encodedName</string>
 					<key>UUID</key>
-					<string>3b167d3c-e243-4771-96a7-7d36fec181bf</string>
+					<string>106effeb-6d12-477e-b9f2-ebc349dd329b</string>
 					<key>WFEncodeMode</key>
 					<string>Encode</string>
 					<key>WFInput</key>
@@ -142,7 +142,7 @@
 									<key>OutputName</key>
 									<string>fileName</string>
 									<key>OutputUUID</key>
-									<string>7cf55a3e-bae2-4237-ba29-519f564b8626</string>
+									<string>babb3305-2f52-4e02-8f8e-a6e90dfae358</string>
 									<key>Type</key>
 									<string>ActionOutput</string>
 								</dict>
@@ -168,40 +168,6 @@
 						<dict>
 							<key>WFDictionaryFieldValueItems</key>
 							<array>
-								<dict>
-									<key>WFKey</key>
-									<dict>
-										<key>Value</key>
-										<dict>
-											<key>string</key>
-											<string>Authorization</string>
-										</dict>
-										<key>WFSerializationType</key>
-										<string>WFTextTokenString</string>
-									</dict>
-									<key>WFValue</key>
-									<dict>
-										<key>Value</key>
-										<dict>
-											<key>attachmentsByRange</key>
-											<dict>
-												<key>{7, 1}</key>
-												<dict>
-													<key>OutputName</key>
-													<string>token</string>
-													<key>OutputUUID</key>
-													<string>66c13498-6ef0-433f-9e2c-45f6ea2bb91c</string>
-													<key>Type</key>
-													<string>ActionOutput</string>
-												</dict>
-											</dict>
-											<key>string</key>
-											<string>Bearer ￼</string>
-										</dict>
-										<key>WFSerializationType</key>
-										<string>WFTextTokenString</string>
-									</dict>
-								</dict>
 								<dict>
 									<key>WFKey</key>
 									<dict>
@@ -242,12 +208,46 @@
 											<key>OutputName</key>
 											<string>encodedName</string>
 											<key>OutputUUID</key>
-											<string>3b167d3c-e243-4771-96a7-7d36fec181bf</string>
+											<string>106effeb-6d12-477e-b9f2-ebc349dd329b</string>
 											<key>Type</key>
 											<string>ActionOutput</string>
 										</dict>
 										<key>WFSerializationType</key>
 										<string>WFTextTokenAttachment</string>
+									</dict>
+								</dict>
+								<dict>
+									<key>WFKey</key>
+									<dict>
+										<key>Value</key>
+										<dict>
+											<key>string</key>
+											<string>Authorization</string>
+										</dict>
+										<key>WFSerializationType</key>
+										<string>WFTextTokenString</string>
+									</dict>
+									<key>WFValue</key>
+									<dict>
+										<key>Value</key>
+										<dict>
+											<key>attachmentsByRange</key>
+											<dict>
+												<key>{7, 1}</key>
+												<dict>
+													<key>OutputName</key>
+													<string>token</string>
+													<key>OutputUUID</key>
+													<string>006adc6b-d46b-4939-a70c-dbd9870d7128</string>
+													<key>Type</key>
+													<string>ActionOutput</string>
+												</dict>
+											</dict>
+											<key>string</key>
+											<string>Bearer ￼</string>
+										</dict>
+										<key>WFSerializationType</key>
+										<string>WFTextTokenString</string>
 									</dict>
 								</dict>
 							</array>
@@ -270,7 +270,7 @@
 						<string>WFTextTokenAttachment</string>
 					</dict>
 					<key>WFURL</key>
-					<string>https://163-176-171-217.sslip.io/api/shortcut-upload</string>
+					<string>https://vps74777.publiccloud.com.br/api/shortcut-upload</string>
 				</dict>
 			</dict>
 			<dict>
@@ -283,9 +283,9 @@
 				<key>WFWorkflowActionParameters</key>
 				<dict>
 					<key>GroupingIdentifier</key>
-					<string>97a3b59d-eab0-409b-9b8b-f7bfc894034c</string>
+					<string>6600602e-78fe-432c-975c-a4d42ebc4f9f</string>
 					<key>UUID</key>
-					<string>284faa14-2771-4257-af1e-801ce36b29ee</string>
+					<string>ca03a43e-2d96-43c5-a164-7945d0d2ca50</string>
 					<key>WFControlFlowMode</key>
 					<integer>2</integer>
 				</dict>
@@ -300,9 +300,9 @@
 				<key>WFWorkflowActionParameters</key>
 				<dict>
 					<key>GroupingIdentifier</key>
-					<string>4a988aba-5f24-47dd-92ac-ddeb7ddcf716</string>
+					<string>20f6c61e-a8d0-44de-bb58-36f539750d56</string>
 					<key>UUID</key>
-					<string>c01dafb7-e593-47c3-a0f7-ea3da2d23205</string>
+					<string>0e568eb2-6957-4027-8f2f-8db34cacebb4</string>
 					<key>WFControlFlowMode</key>
 					<integer>2</integer>
 				</dict>
