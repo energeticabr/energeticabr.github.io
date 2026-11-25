@@ -13,6 +13,7 @@ createCamerasView(document).open({
     id: 'camera-' + (index + 1),
     label: index === 0 ? 'Entrada' : listMode && index === 8
       ? 'Pátio ' + 'NomeLongoSemEspaços'.repeat(5) : 'Obra Xavante • canal ' + (index + 1),
+    ...([0, 2, 6].includes(index) ? { cameraGroup: 'camera-1', cameraLabel: 'Obra Xavante' } : {}),
   })),
   start: async () => new Promise(() => {}),
   move: async () => {},
@@ -71,6 +72,9 @@ if (listHeadings.length) {
 document.documentElement.dataset.layout=JSON.stringify({viewport:rect(dialog), tabs:document.querySelector('.cameras-header__tabs') && rect(document.querySelector('.cameras-header__tabs')),
   listHeadings, selectionHeadings,
   cards:[...document.querySelectorAll('.camera-card')].map(rect), visualCards:[...document.querySelectorAll('.camera-visual-card')].map(rect),
+  groups:[...document.querySelectorAll('.camera-group')].map(group => ({
+    bounds:rect(group), children:[...group.querySelectorAll('.camera-card')].map(rect),
+  })),
   player:player && rect(player), portrait:String(window.matchMedia('(orientation: portrait)').matches), tiles:[...document.querySelectorAll('.cameras-player__tile')].map(rect),
   savedFrames:[...document.querySelectorAll('.cameras-player__saved-frame:not([hidden])')].map(frame => ({
     label:rect(frame.querySelector('.cameras-player__saved-label')), tile:rect(frame.closest('.cameras-player__tile')),

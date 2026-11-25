@@ -77,12 +77,28 @@
 }
 .cameras-list > p { max-width: 1120px; margin: 8px auto 14px; color: #686e74; }
 .cameras-list > p:empty { display: none; }
-.cameras-list [data-camera-cards] {
+.cameras-list [data-camera-cards], .camera-group__cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 265px), 1fr));
   gap: 14px;
+}
+.cameras-list [data-camera-cards] {
   max-width: 1120px;
   margin: auto;
+}
+.camera-group {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: clamp(8px, 2vw, 14px);
+  border: 1px solid #d5e1f1;
+  border-radius: 16px;
+  background: #eaf1fa;
+}
+.camera-group__title {
+  margin: 0 0 10px;
+  color: #243b56;
+  font-size: 16px;
+  overflow-wrap: anywhere;
 }
 .camera-visuals__create {
   display: block;
