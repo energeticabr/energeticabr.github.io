@@ -346,6 +346,42 @@ test('recupera somente a câmera que falhou antes de receber a playlist e manté
   assert.deepEqual(starts.filter(item => item.id === 'site-1').map(item => item.codecs), [['h264'], []]);
 });
 
+test('reabre um canal da grade que perde a playlist antes do primeiro quadro', async t => {
+  const { document, grids, starts } = setup(t, { useGrid: true });
+  await flush();
+  document.querySelector('[data-camera-grid]').click();
+  for (let index = 0; index < 8; index++) document.querySelectorAll('[data-camera-select]')[index].click();
+  document.querySelector('[data-camera-open-grid]').click();
+  await flush();
+  const [interrupted, ...otherVideos] = document.querySelectorAll('video');
+  const { Event } = document.defaultView;
+  for (const video of otherVideos) video.dispatchEvent(new Event('playing'));
+  Object.defineProperty(interrupted, 'error', { value: { code: 2 } });
+  interrupted.dispatchEvent(new Event('error'));
+  await flush();
+
+  assert.deepEqual(grids.map(grid => grid.ids.length), [8, 1]);
+  assert.equal(starts.at(-1).id, 'site-1');
+  assert.equal(starts.filter(start => start.id !== 'site-1' && start.signal.aborted).length, 0);
+  interrupted.dispatchEvent(new Event('playing'));
+  assert.equal(document.querySelectorAll('.cameras-player__tile-live:not([hidden])').length, 8);
+});
+
+test('recupera a grade de um erro 502 na abertura sem repetir canais saudáveis', async t => {
+  const { document, grids, starts } = setup(t, { useGrid: true,
+    startError: ({ id, attempt }) => id === 'site-1' && attempt === 1
+      ? Object.assign(new Error('Gateway indisponível'), { status: 502 }) : null,
+  });
+  await flush();
+  document.querySelector('[data-camera-grid]').click();
+  for (let index = 0; index < 2; index++) document.querySelectorAll('[data-camera-select]')[index].click();
+  document.querySelector('[data-camera-open-grid]').click();
+  await flush();
+
+  assert.deepEqual(grids.map(grid => grid.ids), [['site-1', 'site-2'], ['site-1']]);
+  assert.deepEqual(starts.map(item => item.id), ['site-1', 'site-2', 'site-1']);
+});
+
 test('a grade reconecta uma transmissão interrompida sem reabrir os demais canais', async t => {
   const { document, grids, starts } = setup(t, { useGrid: true, supportsHevc: true });
   await flush();
@@ -394,11 +430,17 @@ test('a grade reconecta uma transmissão interrompida sem reabrir os demais cana
   elapse();
   await flush();
   assert.equal(grids.length, 3);
-  assert.match(notice.textContent, /Toque no vídeo para tentar novamente/);
-  video.click();
+  assert.equal(notice.textContent, 'Reconectando…');
+  const delay = elapse();
+  assert.ok(delay >= 30000 && delay < 35000);
   await flush();
   assert.equal(grids.length, 4);
   assert.equal(starts.filter(item => item.id === 'site-2').length, 1);
+  Object.defineProperty(video, 'error', { value: { code: 2 } });
+  video.dispatchEvent(new Event('error'));
+  assert.equal(timers.size, 1);
+  document.querySelector('[data-camera-player-back]').click();
+  assert.equal(timers.size, 0);
 });
 
 test('a troca de codec envia a playlist antiga somente para a câmera afetada', async t => {

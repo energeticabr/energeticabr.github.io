@@ -57,6 +57,24 @@ test('a grade abre as prévias com uma única autenticação e aguarda cada víd
   assert.deepEqual(waits, [...Array(8).fill(500), 2000]);
 });
 
+test('a grade repete em lote um erro do proxy durante a abertura', async () => {
+  const channelIds = ['a', 'b'];
+  const paths = Object.fromEntries(channelIds.map(id => [
+    id, `/api/portal-camera-media/${id.repeat(43)}/index.m3u8`,
+  ]));
+  const waits = [];
+  let opens = 0;
+  const client = clientWith(async (_url, options) => {
+    if (options.method === 'GET') return new Response(null, { status: 204 });
+    assert.deepEqual(JSON.parse(options.body).channelIds, channelIds);
+    return ++opens === 1 ? new Response(null, { status: 502 }) : jsonResponse({ paths });
+  }, { retryDelay: async ms => { waits.push(ms); } });
+  const start = client.prepareCameraGrid(channelIds);
+  assert.deepEqual(await Promise.all(channelIds.map(id => start(id))), Object.values(paths).map(path => API_BASE + path));
+  assert.equal(opens, 2);
+  assert.deepEqual(waits, [2000]);
+});
+
 test('a grade repete a abertura uma vez para câmeras que aguardavam vagas', async () => {
   const paths = Object.fromEntries(['a', 'b', 'c'].map(id => [
     id, `/api/portal-camera-media/${id.repeat(43)}/index.m3u8`,
