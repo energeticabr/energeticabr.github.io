@@ -996,13 +996,18 @@ export function createChatClient({
       return retried;
     };
     const opened = open().catch(error => {
-      if (error.status !== 429) throw error;
-      return retry();
+      if (error.status === 429) return retry();
+      if ([502, 503, 504].includes(error.status) || error.code === "NETWORK_UNAVAILABLE") {
+        return retryDelay(2000).then(open);
+      }
+      throw error;
     });
     return async (channelId, { signal } = {}) => {
       let result = await opened;
       if (result?.busy?.includes(channelId)) result = await retry(result.retryAfterMs);
-      if (result?.busy?.includes(channelId)) throw new Error("O serviço de câmeras está ocupado. Tente novamente em instantes.");
+      if (result?.busy?.includes(channelId)) {
+        throw Object.assign(new Error("O serviço de câmeras está ocupado. Tente novamente em instantes."), { status: 429 });
+      }
       const url = cameraPlaylistUrl(result?.paths?.[channelId]);
       if (!url) throw new Error("Não foi possível abrir esta câmera.");
       for (let waited = 0; waited < 320_000;) {
@@ -1019,7 +1024,7 @@ export function createChatClient({
         await retryDelay(delay);
         waited += delay;
       }
-      throw new Error("A câmera demorou para responder. Tente novamente.");
+      throw Object.assign(new Error("A câmera demorou para responder. Tente novamente."), { status: 504 });
     };
   }
 

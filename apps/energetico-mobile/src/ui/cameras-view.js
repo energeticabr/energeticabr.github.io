@@ -6,7 +6,8 @@ const CAMERA_NAME_PREFIX = 'energetico:camera-name:v1:';
 const CAMERA_VISUAL_PREFIX = 'energetico:camera-visual:v1:';
 const HLS_MIME = 'application/vnd.apple.mpegurl';
 const HEVC_MIME = 'video/mp4; codecs="hvc1.1.6.L120.B0"';
-const GRID_RECONNECT_DELAY_MS = 12000;
+const GRID_RECONNECT_DELAY_MS = 30_000;
+const GRID_RECONNECT_JITTER_MS = 5_000;
 const CAMERA_STATUS_REFRESH_MS = 60_000;
 const LIVE_WAIT_NOTICE_MS = 2_000;
 const LIVE_STALL_MS = 20_000;
@@ -591,15 +592,24 @@ export function createCamerasView(documentRef) {
       }
     }
     function connectPlayer() {
-      let startPlayback = start;
+      const starters = new Map();
       if (playerChannels.length > 1 && prepareGrid) {
         gridRequest = new AbortController();
-        startPlayback = prepareGrid(playerChannels.map(channel => channel.id), {
-          signal: gridRequest.signal, codecs: playback[0]?.codecs ?? [],
-        });
+        const batches = new Map();
+        for (const item of playback) {
+          const profile = item.codecs.join(',');
+          if (!batches.has(profile)) batches.set(profile, []);
+          batches.get(profile).push(item);
+        }
+        for (const items of batches.values()) {
+          const startBatch = prepareGrid(items.map(item => item.channelId), {
+            signal: gridRequest.signal, codecs: items[0].codecs,
+          });
+          for (const item of items) starters.set(item.channelId, startBatch);
+        }
       }
       playerChannels.forEach((channel, index) => {
-        void connect(playback[index], channel, playback[index].recordingId ?? null, startPlayback,
+        void connect(playback[index], channel, playback[index].recordingId ?? null, starters.get(channel.id) ?? start,
           { preserveViewState: true });
       });
     }
@@ -711,7 +721,7 @@ export function createCamerasView(documentRef) {
       item.status.textContent = recordingId ? 'Abrindo gravação…'
         : reconnecting ? 'Reconectando…' : 'Conectando…';
       function tryAutoplay() {
-        if (signal.aborted || item.playAttempted || item.connectionState === 'error') return;
+        if (signal.aborted || item.cancelRecovery || item.playAttempted || item.connectionState === 'error') return;
         item.playAttempted = true;
         item.connectionState = reconnecting ? 'waiting' : 'connecting'; item.failureLabel = '';
         item.retry.hidden = true;
@@ -723,7 +733,7 @@ export function createCamerasView(documentRef) {
         Promise.resolve(attempt).catch(playbackRejected);
       }
       function playbackRejected(error) {
-        if (signal.aborted) return;
+        if (signal.aborted || item.cancelRecovery) return;
         item.connected = false; item.connectionState = 'error';
         item.failureLabel = error?.name === 'NotAllowedError' ? 'Autoplay bloqueado' : 'Falha na reprodução';
         item.liveBadge.hidden = true;
@@ -758,8 +768,8 @@ export function createCamerasView(documentRef) {
           item.networkRetries = 0;
         }
         if (!resumeOfflineAttempt) {
-          if (item.networkRetries >= LIVE_NETWORK_RETRIES) return false;
-          item.networkRetries += 1;
+          if (!item.preview && item.networkRetries >= LIVE_NETWORK_RETRIES) return false;
+          item.networkRetries = Math.min(item.networkRetries + 1, LIVE_NETWORK_RETRIES + 1);
         }
         item.playingSince = null;
         showWaiting(item, true);
@@ -776,8 +786,12 @@ export function createCamerasView(documentRef) {
           }
           reopenLive();
         }
-        if (item.networkRetries > 1 && windowRef.navigator.onLine !== false) {
-          const timer = windowRef.setTimeout(recoverWhenOnline, LIVE_RETRY_DELAY_MS);
+        // Keep trying a failed tile without restarting the grid or sending bursts during an outage.
+        const retryDelay = item.networkRetries > LIVE_NETWORK_RETRIES
+          ? GRID_RECONNECT_DELAY_MS + Math.floor(windowRef.Math.random() * GRID_RECONNECT_JITTER_MS)
+          : item.networkRetries > 1 ? LIVE_RETRY_DELAY_MS : 0;
+        if (retryDelay && windowRef.navigator.onLine !== false) {
+          const timer = windowRef.setTimeout(recoverWhenOnline, retryDelay);
           item.cancelRecovery = () => {
             windowRef.clearTimeout(timer);
             item.cancelRecovery = null;
@@ -819,9 +833,9 @@ export function createCamerasView(documentRef) {
         ]);
         if (signal.aborted) return;
         const failed = (network = false) => {
-          if (signal.aborted) return;
+          if (signal.aborted || item.cancelRecovery) return;
           clearWaiting(item);
-          if (!recordingId && network && (item.played || item.networkRetries) && retryNetwork()) return;
+          if (!recordingId && network && (item.preview || item.played || item.networkRetries) && retryNetwork()) return;
           if (!recordingId && !network && item.codecs.length && /\/(?:h264|hevc)\.m3u8$/.test(new URL(url).pathname)) {
             retryCompatible(url);
             return;
@@ -847,15 +861,10 @@ export function createCamerasView(documentRef) {
         }
       } catch (error) {
         if (signal.aborted) return;
-        const directUnavailable = error?.status === 404 || error?.status === 503;
         const networkUnavailable = error?.code === 'NETWORK_UNAVAILABLE' || error instanceof TypeError;
-        const recoverable = directUnavailable || error?.status === 429 || networkUnavailable;
+        const recoverable = networkUnavailable || [404, 408, 429, 500, 502, 503, 504].includes(error?.status);
         const offline = networkUnavailable && windowRef.navigator.onLine === false;
-        if (!recordingId && item.networkRetries && recoverable && retryNetwork(offline)) return;
-        if (!recordingId && item.codecs.length && directUnavailable) {
-          retryCompatible();
-          return;
-        }
+        if (!recordingId && recoverable && retryNetwork(offline && item.networkRetries > 0)) return;
         item.connected = false; item.connectionState = 'error'; item.failureLabel = 'Falha ao conectar';
         item.liveBadge.hidden = true; item.status.dataset.loading = 'false';
         item.retry.hidden = true; item.updateControls?.(); item.updateHeader?.();

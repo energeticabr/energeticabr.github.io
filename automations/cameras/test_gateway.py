@@ -609,6 +609,22 @@ class CameraGatewayTest(unittest.TestCase):
         with self.assertRaises(gateway.PlaybackError):
             instance.recordings("ch-1", "owner", "2026-11-23", "24")
 
+    def test_camera_status_probe_copies_video_without_transcoding(self):
+        import gateway
+        config = {"origins": [], "viewers": ["owner"], "ffmpeg": "/unused", "channels": [
+            {"id": "ch-1", "label": "Camera", "format": "hevc", "command": ["/unused"]}]}
+        instance = Gateway(config)
+        entry = instance.entries["ch-1"]
+        with patch.object(gateway, "Stream") as stream_type:
+            stream = stream_type.return_value
+            stream.alive.return_value = True
+            stream.ready_to_play.return_value = True
+            self.assertEqual(instance.probe_icsee_channel(entry), "online")
+            stream_type.assert_called_once_with(entry, "/unused", gateway.STATUS_PROBE_VIEWER,
+                                                preview=True, direct=True)
+            stream.close.assert_called_once_with()
+        self.assertEqual(instance.streams, {})
+
     def test_recording_query_does_not_overload_several_live_streams(self):
         import gateway
         config = {"origins": [], "viewers": ["owner"], "ffmpeg": "/unused", "channels": [
