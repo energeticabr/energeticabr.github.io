@@ -10247,8 +10247,8 @@ test("assinatura capturada não aparece como anexo separado na bandeja", async (
 test("primeira assinatura desenhada abre o posicionamento sem exigir um segundo envio", async () => {
   const h = makeHarness();
   const fetched = [];
-  h.client.fetchMedia = async item => {
-    fetched.push(item.id);
+  h.client.fetchMedia = async (item, options) => {
+    fetched.push({ id: item.id, maxBytes: options?.maxBytes });
     return new Blob([item.id], {
       type: item.mimeType || (item.fileName.endsWith(".pdf") ? "application/pdf" : "image/png"),
     });
@@ -10289,7 +10289,9 @@ test("primeira assinatura desenhada abre o posicionamento sem exigir um segundo 
       mediaUrl: "/assinatura",
     },
   });
-  assert.deepEqual(fetched.sort(), ["assinatura", "documento"]);
+  // A bounded thumbnail may also fetch the document while placement loads it.
+  const fullSourceFetches = fetched.filter(item => item.maxBytes === undefined).map(item => item.id).sort();
+  assert.deepEqual(fullSourceFetches, ["assinatura", "documento"]);
   assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
   assert.deepEqual(h.store.getState().attachments.map(item => item.fileName), ["contrato.pdf"]);
   h.controller.stop();
@@ -11051,8 +11053,8 @@ test("voltar e ajustar assinatura do comprovante abre as fontes enviadas na list
   } });
   const fetched = [];
   const replyIds = [];
-  h.client.fetchMedia = async item => {
-    fetched.push(item.id);
+  h.client.fetchMedia = async (item, options) => {
+    fetched.push({ id: item.id, maxBytes: options?.maxBytes });
     return new Blob([String(item.id)], {
       type: String(item.fileName || "").endsWith(".pdf") ? "application/pdf" : "image/png",
     });
@@ -11132,7 +11134,9 @@ test("voltar e ajustar assinatura do comprovante abre as fontes enviadas na list
 
   assert.equal(h.view.renders.at(-1).signaturePlacement.status, "ready");
   assert.equal(h.store.getState().activeFlow.documentSigningPlacement.preserveSource, true);
-  assert.deepEqual(fetched.sort(), ["payment-signature", "payment-source"]);
+  // Ignore the tray's optional thumbnail request; verify both full source loads.
+  const fullSourceFetches = fetched.filter(item => item.maxBytes === undefined).map(item => item.id).sort();
+  assert.deepEqual(fullSourceFetches, ["payment-signature", "payment-source"]);
   assert.deepEqual(h.store.getState().attachments.map(item => item.id), ["payment-source"]);
   assert.equal(h.view.renders.at(-1).error, null);
 
