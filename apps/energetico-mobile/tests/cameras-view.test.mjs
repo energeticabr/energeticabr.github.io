@@ -368,3 +368,100 @@ test('grade seleciona até oito câmeras e abre todas simultaneamente', async t 
   assert.ok(starts.every(item => item.signal.aborted));
   assert.equal(grids[0].signal.aborted, true);
 });
+
+test('edita o nome pelo lápis, persiste por câmera e isola a conta', async t => {
+  const storageWindow = new JSDOM('', { url: 'https://storage.example.com' });
+  t.after(() => storageWindow.window.close());
+  const accountKey = 'bernardo@example.com';
+  const storage = storageWindow.window.localStorage;
+  const first = setup(t, { accountKey, storage, useGrid: true });
+  await flush();
+  first.document.querySelector('[data-camera-grid]').click();
+
+  const pencil = first.document.querySelector('[data-camera-rename="site-2"]');
+  assert.ok(pencil, 'cada cartão deve ter um lápis para editar o nome');
+  const heading = pencil.closest('.camera-card__heading');
+  const title = heading.querySelector('strong');
+  assert.equal(title.nextElementSibling, pencil, 'o lápis deve ficar à direita do nome');
+  assert.equal(pencil.getAttribute('aria-label'), 'Editar nome da câmera Obra 2');
+  pencil.click();
+  const editor = first.document.querySelector('[data-camera-name-editor]');
+  const input = editor?.querySelector('[data-camera-name-input]');
+  assert.ok(editor?.open);
+  assert.equal(input.value, 'Obra 2');
+  assert.equal(input.maxLength, 120);
+  assert.equal(first.document.querySelector('.cameras-player'), null, 'editar não deve abrir o vídeo');
+
+  input.value = 'Portão principal';
+  editor.querySelector('[data-camera-name-form]').dispatchEvent(new first.document.defaultView.Event('submit', {
+    bubbles: true, cancelable: true,
+  }));
+  await flush();
+
+  assert.equal(first.document.querySelector('[data-camera-open="site-2"]')?.getAttribute('aria-label'), 'Abrir Portão principal');
+  assert.equal(storage.getItem('energetico:camera-name:v1:bernardo%40example.com:site-2'), 'Portão principal');
+  assert.equal(first.document.activeElement, first.document.querySelector('[data-camera-rename="site-2"]'));
+  assert.equal(first.document.querySelector('[data-camera-count]').textContent, '0 de 8 selecionadas');
+  first.document.querySelector('[data-camera-grid]').click();
+  first.document.querySelector('[data-camera-open="site-2"]').click(); await flush();
+  assert.equal(first.document.querySelector('.cameras-player__title').textContent, 'Portão principal');
+  first.view.close();
+
+  const reopened = setup(t, { accountKey, storage });
+  await flush();
+  assert.equal(reopened.document.querySelector('[data-camera-rename="site-2"]')?.previousElementSibling?.textContent, 'Portão principal');
+  reopened.view.close();
+
+  const otherAccount = setup(t, { accountKey: 'outra-conta@example.com', storage });
+  await flush();
+  assert.equal(otherAccount.document.querySelector('[data-camera-rename="site-2"]')?.previousElementSibling?.textContent, 'Obra 2');
+  otherAccount.view.close();
+});
+
+test('recusa nome vazio, cancela e informa erro quando o armazenamento falha', async t => {
+  const key = 'energetico:camera-name:v1:conta:site-1';
+  const values = new Map();
+  const storage = {
+    getItem: name => values.get(name) ?? null,
+    setItem(name, value) { throw new Error('storage denied'); },
+    get length() { return values.size; },
+    key(index) { return [...values.keys()][index] ?? null; },
+    removeItem(name) { values.delete(name); },
+  };
+  const { document } = setup(t, { accountKey: 'conta', storage });
+  await flush();
+
+  const pencil = document.querySelector('[data-camera-rename="site-1"]');
+  pencil.click();
+  let editor = document.querySelector('[data-camera-name-editor]');
+  let input = editor.querySelector('[data-camera-name-input]');
+  input.value = '   ';
+  editor.querySelector('[data-camera-name-form]').dispatchEvent(new document.defaultView.Event('submit', {
+    bubbles: true, cancelable: true,
+  }));
+  assert.equal(editor.open, true);
+  assert.match(editor.querySelector('[role="alert"]').textContent, /digite um nome/i);
+  assert.equal(document.querySelector('.camera-card__heading strong').textContent, 'Obra 1');
+  assert.equal(storage.getItem(key), null);
+
+  editor.querySelector('[data-camera-name-cancel]').click();
+  assert.equal(document.querySelector('[data-camera-name-editor]'), null);
+  assert.equal(document.activeElement, pencil);
+
+  pencil.click();
+  editor = document.querySelector('[data-camera-name-editor]');
+  input = editor.querySelector('[data-camera-name-input]');
+
+  input.value = 'Portão';
+  editor.querySelector('[data-camera-name-form]').dispatchEvent(new document.defaultView.Event('submit', {
+    bubbles: true, cancelable: true,
+  }));
+  assert.equal(editor.open, true);
+  assert.match(editor.querySelector('[role="alert"]').textContent, /não foi possível salvar/i);
+  assert.equal(document.querySelector('.camera-card__heading strong').textContent, 'Obra 1');
+  assert.equal(storage.getItem(key), null);
+
+  editor.dispatchEvent(new document.defaultView.Event('cancel', { cancelable: true }));
+  assert.equal(document.querySelector('[data-camera-name-editor]'), null);
+  assert.equal(document.activeElement, pencil);
+});
