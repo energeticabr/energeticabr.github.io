@@ -137,7 +137,7 @@ jobs:
             --dump-header "$headers" \
             --write-out '%{http_code}' \
             --request OPTIONS \
-            'https://163-176-171-217.sslip.io/api/portal-chat' \
+            'https://vps74777.publiccloud.com.br/api/portal-chat' \
             --header 'Origin: https://localhost' \
             --header 'Access-Control-Request-Method: POST' \
             --header 'Access-Control-Request-Headers: Authorization, Content-Type')"

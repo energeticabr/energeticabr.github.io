@@ -321,7 +321,7 @@ final class SharedInboxStore {
 
 enum SharedUploadRequest {
     static func make(item: SharedInboxMetadata, token: String) -> URLRequest {
-        var request = URLRequest(url: URL(string: "https://163-176-171-217.sslip.io/api/portal-upload")!)
+        var request = URLRequest(url: URL(string: "https://vps74777.publiccloud.com.br/api/portal-upload")!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("capacitor://localhost", forHTTPHeaderField: "Origin")

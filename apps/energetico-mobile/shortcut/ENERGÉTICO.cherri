@@ -18,7 +18,7 @@ if ShortcutInput {
         const encodedName = urlEncode(fileName)
 
         rawAction("is.workflow.actions.downloadurl", {
-            "WFURL": "https://163-176-171-217.sslip.io/api/shortcut-upload",
+            "WFURL": "https://vps74777.publiccloud.com.br/api/shortcut-upload",
             "WFHTTPMethod": "POST",
             "WFHTTPHeaders": {
                 "Authorization": "Bearer {token}",

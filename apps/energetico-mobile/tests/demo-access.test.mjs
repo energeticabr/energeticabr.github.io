@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { randomUUID } from 'node:crypto';
 import { createChatClient } from '../src/chat/chat-client.js';
 
-const origin = 'https://163-176-171-217.sslip.io';
+const origin = 'https://vps74777.publiccloud.com.br';
 const account = { homeAccountId: 'demo:review-session', username: 'revisao@demo.invalid', name: 'Revisão — Demonstração' };
 const testPassword = randomUUID();
 const sessionResponse = () => ({ accessToken: 'sandbox-token', account, expiresAt: new Date(Date.now() + 600_000).toISOString() });

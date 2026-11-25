@@ -1,6 +1,7 @@
 import { createRecoveryStorage } from "../web/recovery-storage.js";
+import { APP_CONFIG } from "../config.js";
 
-export const DEMO_API_ORIGIN = "https://163-176-171-217.sslip.io";
+export const DEMO_API_ORIGIN = APP_CONFIG.apiBaseUrl;
 const SESSION_URL = `${DEMO_API_ORIGIN}/api/demo/session`;
 
 // Deliberately independent of MSAL and persistent browser/native storage.

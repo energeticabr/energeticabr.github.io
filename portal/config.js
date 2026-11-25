@@ -39,7 +39,7 @@ export function resolveMicrosoftRedirectUri(locationLike = globalThis.window?.lo
 
 export const portalConfig = Object.freeze({
   assistant: Object.freeze({
-    endpoint: "https://163-176-171-217.sslip.io/api/portal-chat",
+    endpoint: "https://vps74777.publiccloud.com.br/api/portal-chat",
   }),
   microsoft: Object.freeze({
     tenantId: "0c10f511-7ede-4702-a2d9-bedb26937e0e",
