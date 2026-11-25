@@ -1,13 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 
 import { createChatClient } from "../src/chat/chat-client.js";
 
 const API_BASE = "https://163-176-171-217.sslip.io";
+const testCameraPassword = randomUUID();
 
 test('normaliza status e última conexão no catálogo de câmeras', async () => {
   const client = clientWith(async () => jsonResponse({ channels: [
-    { id: 'ch-1', label: 'Câmera', status: 'offline', lastOnlineAt: '2026-11-24T12:00:00Z', input: { password: 'secret' } },
+    { id: 'ch-1', label: 'Câmera', status: 'offline', lastOnlineAt: '2026-11-24T12:00:00Z', input: { password: testCameraPassword } },
     { id: 'ch-2', label: 'Sem histórico', status: 'offline', lastOnlineAt: 'inválido' },
     { id: 'ch-3', label: 'Status inesperado', status: 'sleeping', lastOnlineAt: null },
   ] }));
