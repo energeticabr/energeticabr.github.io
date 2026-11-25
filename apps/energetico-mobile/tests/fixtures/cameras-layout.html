@@ -1,7 +1,8 @@
-<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/ui/cameras-view.css"></head>
+<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/styles.css"></head>
 <body><script type="module">
 import { createCamerasView } from '/src/ui/cameras-view.js';
 const accountKey = 'layout-check';
+const listMode = location.search === '?list';
 localStorage.setItem('energetico:camera-preview:v1:' + accountKey + ':camera-1', 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8Af//Z');
 localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify([{
   name: 'Portão e pátio', cameraIds: ['camera-1', 'camera-2'],
@@ -9,7 +10,9 @@ localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify
 createCamerasView(document).open({
   accountKey,
   list: async () => Array.from({ length: 9 }, (_, index) => ({
-    id: 'camera-' + (index + 1), label: 'Obra Xavante • canal ' + (index + 1),
+    id: 'camera-' + (index + 1),
+    label: index === 0 ? 'Entrada' : listMode && index === 8
+      ? 'Pátio ' + 'NomeLongoSemEspaços'.repeat(5) : 'Obra Xavante • canal ' + (index + 1),
   })),
   start: async () => new Promise(() => {}),
   move: async () => {},
@@ -47,7 +50,26 @@ if (location.search.includes('single')) {
 }
 const dialog=document.querySelector('.cameras-view'), player=document.querySelector('.cameras-player');
 const rect=node=>{const r=node.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
+const cardHeadings = () => [...document.querySelectorAll('.camera-card__heading')].map(heading => {
+  const title = heading.querySelector('strong');
+  const text = document.createRange();
+  text.selectNodeContents(title);
+  const checkbox = heading.querySelector('[data-camera-select]');
+  return {
+    heading: rect(heading), title: rect(title), titleText: rect(text),
+    pencil: rect(heading.querySelector('[data-camera-rename]')),
+    checkbox: checkbox && rect(checkbox),
+  };
+});
+const listHeadings = listMode ? cardHeadings() : [];
+let selectionHeadings = [];
+if (listHeadings.length) {
+  document.querySelector('[data-camera-grid]').click();
+  selectionHeadings = cardHeadings();
+  document.querySelector('[data-camera-grid]').click();
+}
 document.documentElement.dataset.layout=JSON.stringify({viewport:rect(dialog), tabs:document.querySelector('.cameras-header__tabs') && rect(document.querySelector('.cameras-header__tabs')),
+  listHeadings, selectionHeadings,
   cards:[...document.querySelectorAll('.camera-card')].map(rect), visualCards:[...document.querySelectorAll('.camera-visual-card')].map(rect),
   player:player && rect(player), portrait:String(window.matchMedia('(orientation: portrait)').matches), tiles:[...document.querySelectorAll('.cameras-player__tile')].map(rect),
   savedFrames:[...document.querySelectorAll('.cameras-player__saved-frame:not([hidden])')].map(frame => ({
