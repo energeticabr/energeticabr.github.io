@@ -92,6 +92,27 @@ test('atualiza status a cada minuto enquanto a lista está aberta e cancela ao f
   assert.equal(reads, 2);
 });
 
+test('mantém o foco no lápis de um visual ao atualizar o status das câmeras', async t => {
+  const timerControl = { cleared: [] };
+  let reads = 0;
+  const { document } = setup(t, { accountKey: 'conta', timerControl, cameraList: async () => [
+    { id: 'cam-1', label: 'Obra', status: ++reads === 1 ? 'online' : 'offline' },
+  ] });
+  document.defaultView.localStorage.setItem('energetico:camera-visual:v1:conta', JSON.stringify([
+    { name: 'Obra', cameraIds: ['cam-1'] },
+  ]));
+  await flush();
+  Object.defineProperty(document, 'hidden', { value: false });
+  document.querySelector('[data-camera-tab="visuals"]').click();
+  document.querySelector('[data-camera-visual-rename]').focus();
+  await timerControl.callback();
+  await flush();
+  assert.equal(reads, 2);
+  assert.equal(document.activeElement, document.querySelector('[data-camera-visual-rename]'));
+  document.querySelector('[data-camera-tab="cameras"]').click();
+  assert.equal(document.querySelector('[data-camera-status]').textContent, 'OFF-LINE');
+});
+
 const mixedCatalog = [
   { id: 'patio-1', label: 'Pátio · canal 1', cameraGroup: 'patio-1', cameraLabel: 'Pátio' },
   { id: 'other', label: 'Pátio · canal 2' },
@@ -777,6 +798,78 @@ test('cria visual a partir das câmeras escolhidas, pede o nome e persiste por c
   otherAccount.document.querySelector('[data-camera-tab="visuals"]').click();
   assert.equal(otherAccount.document.querySelectorAll('[data-camera-visual-card]').length, 0);
   assert.match(otherAccount.document.querySelector('[role="status"]').textContent, /nenhum visual/i);
+});
+
+test('renomeia o visual escolhido pelo lápis e preserva as câmeras e os demais visuais', async t => {
+  const key = 'energetico:camera-visual:v1:conta';
+  const saved = [
+    { name: 'VISUAL 1', cameraIds: ['site-1'] },
+    { name: 'VISUAL 1', cameraIds: ['site-3', 'site-2'] },
+  ];
+  let serialized = JSON.stringify(saved);
+  let failWrite = false;
+  const storage = {
+    getItem: itemKey => itemKey === key ? serialized : null,
+    setItem: (itemKey, value) => {
+      if (itemKey !== key) return;
+      if (failWrite) throw new Error('storage full');
+      serialized = value;
+    },
+  };
+  const { document, grids, starts } = setup(t, { storage, accountKey: 'conta', useGrid: true });
+  await flush();
+  document.querySelector('[data-camera-tab="visuals"]').click();
+  const pencil = () => document.querySelector('[data-camera-visual-rename="1"]');
+  const title = () => document.querySelector('[data-camera-visual-card="1"] strong').textContent;
+  const editor = () => document.querySelector('[data-camera-visual-editor]');
+  const input = () => editor().querySelector('[data-camera-visual-name]');
+  const submit = () => editor().querySelector('[data-camera-visual-form]').dispatchEvent(
+    new document.defaultView.Event('submit', { bubbles: true, cancelable: true }),
+  );
+
+  assert.equal(pencil()?.getAttribute('aria-label'), 'Editar nome do visual VISUAL 1');
+  pencil().click();
+  assert.equal(editor().querySelector('h2').textContent, 'Editar nome do visual');
+  assert.equal(input().value, 'VISUAL 1');
+  input().value = 'Rascunho';
+  editor().querySelector('[data-camera-visual-cancel]').click();
+  assert.equal(editor(), null);
+  assert.equal(document.activeElement, pencil());
+  assert.deepEqual(JSON.parse(serialized), saved);
+
+  pencil().click();
+  input().value = '  ';
+  submit();
+  assert.match(editor().querySelector('[role="alert"]').textContent, /digite um nome para o visual/i);
+  assert.equal(title(), 'VISUAL 1');
+  input().value = '  Portão e pátio  ';
+  failWrite = true;
+  submit();
+  assert.match(editor().querySelector('[role="alert"]').textContent, /não foi possível salvar/i);
+  assert.equal(title(), 'VISUAL 1');
+  assert.deepEqual(JSON.parse(serialized), saved);
+
+  failWrite = false;
+  const addedElsewhere = { name: 'Entrada', cameraIds: ['site-4'] };
+  serialized = JSON.stringify([...saved, addedElsewhere]);
+  submit();
+  assert.equal(editor(), null);
+  assert.equal(document.activeElement, pencil());
+  assert.equal(title(), 'Portão e pátio');
+  assert.deepEqual(JSON.parse(serialized), [
+    saved[0], { name: 'Portão e pátio', cameraIds: saved[1].cameraIds }, addedElsewhere,
+  ]);
+  assert.equal(starts.length, 0);
+
+  const reopened = setup(t, { storage, accountKey: 'conta', useGrid: true });
+  await flush();
+  reopened.document.querySelector('[data-camera-tab="visuals"]').click();
+  const open = reopened.document.querySelector('[data-camera-visual-open="1"]');
+  assert.equal(open.getAttribute('aria-label'), 'Abrir visual Portão e pátio');
+  open.click();
+  assert.equal(reopened.document.querySelector('.cameras-player__title').textContent, 'Portão e pátio');
+  assert.deepEqual(reopened.grids[0].ids, ['site-3', 'site-2']);
+  assert.equal(grids.length, 0);
 });
 
 test('abre as câmeras de um visual pela grade na ordem salva', async t => {
