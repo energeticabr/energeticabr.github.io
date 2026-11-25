@@ -757,7 +757,9 @@ export function createCamerasView(documentRef) {
         savedFrame.hidden = true;
         const savedFrameImage = make('img', 'cameras-player__saved-image');
         savedFrameImage.alt = '';
-        savedFrame.append(savedFrameImage, make('span', 'cameras-player__saved-label', 'Última imagem'));
+        savedFrame.append(savedFrameImage);
+        const footer = make('div', 'cameras-player__tile-footer');
+        footer.append(make('span', 'cameras-player__saved-label', 'Última imagem'));
         const liveBadge = make('span', 'cameras-player__tile-live', '● AO VIVO');
         liveBadge.hidden = true;
         const notice = make('span', 'cameras-player__status', 'Conectando…'); notice.setAttribute('role', 'status'); notice.dataset.loading = 'true';
@@ -821,12 +823,12 @@ export function createCamerasView(documentRef) {
           });
         }
         playback.push(item); tileItems.push({ tile, video, item, channel });
-        tile.append(video, savedFrame, label, liveBadge, notice, retry);
+        tile.append(video, savedFrame, label, liveBadge, notice, retry, footer);
         if (chosen.length > 1 && (move || listRecordings)) {
           const focus = make('button', 'cameras-player__focus', '1 tela');
           focus.type = 'button'; focus.setAttribute('aria-label', `Abrir ${channel.label} em tela individual`);
           focus.addEventListener('click', () => openPlayer([channel], focus));
-          tile.append(focus);
+          footer.append(focus);
         }
         stage.append(tile);
       }
