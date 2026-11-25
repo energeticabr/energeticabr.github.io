@@ -19,7 +19,7 @@ test('a grade abre as prévias com uma única autenticação e aguarda cada víd
   const waits = [];
   const path1 = `/api/portal-camera-media/${'a'.repeat(43)}/index.m3u8`;
   const path2 = `/api/portal-camera-media/${'b'.repeat(43)}/index.m3u8`;
-  let secondPending = true;
+  let secondChecks = 0;
   const client = clientWith(async (url, options) => {
     calls.push({ url, options });
     if (options.method === 'POST') {
@@ -30,8 +30,7 @@ test('a grade abre as prévias com uma única autenticação e aguarda cada víd
     assert.equal(options.credentials, 'omit');
     assert.equal(options.headers?.Authorization, undefined);
     assert.match(url, /index\.m3u8\?ready=1$/);
-    if (url.includes(path2) && secondPending) {
-      secondPending = false;
+    if (url.includes(path2) && secondChecks++ < 9) {
       return new Response(null, { status: 202 });
     }
     return new Response(null, { status: 204 });
@@ -39,8 +38,8 @@ test('a grade abre as prévias com uma única autenticação e aguarda cada víd
   const start = client.prepareCameraGrid(['ch-1', 'ch-2']);
   assert.deepEqual(await Promise.all([start('ch-1'), start('ch-2')]), [API_BASE+path1, API_BASE+path2]);
   assert.equal(calls.filter(call => call.options.method === 'POST').length, 1);
-  assert.equal(calls.length, 4);
-  assert.deepEqual(waits, [500]);
+  assert.equal(calls.length, 12);
+  assert.deepEqual(waits, [...Array(8).fill(500), 2000]);
 });
 
 test('a grade repete a abertura uma vez para câmeras que aguardavam vagas', async () => {

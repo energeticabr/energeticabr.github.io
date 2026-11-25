@@ -86,15 +86,12 @@ class Stream:
         self.startup_deadline = now + START_TIMEOUT_SECONDS
         self.expires = now + 20 * 60
         width, fps = (384, 6) if preview else (640, 10)
-        segment_seconds = 1 if self.mode == "live" and not preview and not self.direct else 2
-        fast_preview = preview and self.mode == "live" and not self.direct
-        keyframe_seconds = 1 if fast_preview else segment_seconds
-        initial_segment = ["-hls_init_time", "1"] if fast_preview else []
+        segment_seconds = 1 if self.mode == "live" and not self.direct else 2
         probe_duration = ("500000" if self.mode == "live" and entry["format"] in {"h264", "hevc"}
                           else "1500000")
         bitrate = ["-crf", "28", "-maxrate", "320k", "-bufsize", "320k"] if preview else []
-        playlist_size = "12" if preview else str(8 // segment_seconds)
-        retained_segments = "16" if preview else str(2 // segment_seconds)
+        playlist_size = str((24 if preview else 8) // segment_seconds)
+        retained_segments = str((32 if preview else 2) // segment_seconds)
         if self.direct:
             # Preserve timing the demuxer knows and fill missing Annex B timestamps.
             video = ["-map", "0:v:0", "-c:v", "copy", "-bsf:v",
@@ -102,7 +99,7 @@ class Stream:
         else:
             video = ["-vf", f"scale={width}:-2,fps={fps}", "-c:v", "libx264",
                      "-preset", "ultrafast", "-threads", "1", "-pix_fmt", "yuv420p",
-                     *bitrate, "-g", str(fps * keyframe_seconds), "-sc_threshold", "0"]
+                     *bitrate, "-g", str(fps * segment_seconds), "-sc_threshold", "0"]
         fmp4 = self.direct and entry["format"] == "hevc"
         container = ["-tag:v", "hvc1", "-hls_segment_type", "fmp4",
                      "-hls_fmp4_init_filename", "init.mp4"] if fmp4 else []
@@ -123,7 +120,7 @@ class Stream:
                  "-fflags", "+genpts", "-analyzeduration", probe_duration, "-probesize", "65536",
                  "-f", entry["format"], "-i", "pipe:0",
                  "-an", *video, "-f", "hls", *container,
-                 "-hls_time", str(segment_seconds), *initial_segment, "-hls_list_size", playlist_size,
+                 "-hls_time", str(segment_seconds), "-hls_list_size", playlist_size,
                  "-hls_delete_threshold", retained_segments,
                  "-hls_flags", "delete_segments+temp_file+independent_segments",
                  "-hls_segment_filename", segment, self.playlist],

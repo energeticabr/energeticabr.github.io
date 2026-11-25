@@ -96,12 +96,12 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(self.request("GET", base + "index.m3u8?ready=1")[0], 404)
         self.assertEqual(self.request("GET", base + "../another.mp4")[0], 404)
 
-    def test_live_compatibility_uses_one_second_segments_at_startup(self):
+    def test_live_compatibility_uses_one_second_segments_with_the_same_retention_window(self):
         entry = self.gateway.entries["ch-1"]
         for preview, direct, operation, duration, keyframe_interval in (
             (False, False, "live", "1", "10"),
             (False, True, "live", "2", None),
-            (True, False, "live", "2", "6"),
+            (True, False, "live", "1", "6"),
             (False, False, "playback", "2", "20"),
         ):
             with self.subTest(preview=preview, direct=direct, operation=operation):
@@ -113,8 +113,10 @@ class CameraGatewayTest(unittest.TestCase):
                         stream.launch()
                     command = spawn.call_args.args[0]
                     self.assertEqual(command[command.index("-hls_time") + 1], duration)
-                    initial_time = command[command.index("-hls_init_time") + 1] if "-hls_init_time" in command else None
-                    self.assertEqual(initial_time, "1" if preview and not direct and operation == "live" else None)
+                    self.assertNotIn("-hls_init_time", command)
+                    if preview:
+                        self.assertEqual(command[command.index("-hls_list_size") + 1], "24")
+                        self.assertEqual(command[command.index("-hls_delete_threshold") + 1], "32")
                     interval = command[command.index("-g") + 1] if "-g" in command else None
                     self.assertEqual(interval, keyframe_interval)
 
