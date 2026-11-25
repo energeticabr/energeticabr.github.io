@@ -32,6 +32,16 @@ function canPlayHevc(video) {
   return mediaSource?.isTypeSupported(HEVC_MIME) === true;
 }
 
+function groupCameraChannels(channels) {
+  const groups = new Map();
+  for (const channel of channels) {
+    const key = typeof channel.cameraGroup === 'string' && channel.cameraGroup ? channel.cameraGroup : channel;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(channel);
+  }
+  return [...groups.values()];
+}
+
 export function createCamerasView(documentRef) {
   let dialog, closeCurrent, suspendCurrent, resumeCurrent;
 
@@ -52,6 +62,7 @@ export function createCamerasView(documentRef) {
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
     let player, gridRequest, playback = [], playerChannels = [], channels = [], choosing = false;
+    let cameraGroups = [];
     let activeTab = 'cameras', creatingVisual = false, camerasLoaded = false, visuals = [];
     let cameraOrientationBinding = null;
     let nameEditor = null, nameEditorReturnFocus = null, nameEditorChannelId = null;
@@ -342,7 +353,7 @@ export function createCamerasView(documentRef) {
         notice = `${missing} ${noun} deste visual ${verb} disponível${missing === 1 ? '' : 'is'} agora.`;
         status.textContent = notice;
       } else status.textContent = '';
-      openPlayer(chosen, trigger, { visualName: visual.name, notice });
+      openPlayer(groupCameraChannels(chosen).flat(), trigger, { visualName: visual.name, notice });
     }
 
     function render() {
@@ -380,51 +391,66 @@ export function createCamerasView(documentRef) {
         return;
       }
 
-      for (const channel of channels) {
-        const card = make('article', 'camera-card');
-        const heading = make('div', 'camera-card__heading');
-        const symbol = make('span', 'camera-card__wifi', '◉'); symbol.setAttribute('aria-hidden', 'true');
-        const title = make('strong', '', channel.label);
-        const rename = make('button', 'camera-card__rename');
-        rename.type = 'button'; rename.dataset.cameraRename = channel.id;
-        rename.setAttribute('aria-label', `Editar nome da câmera ${channel.label}`);
-        rename.title = 'Editar nome da câmera';
-        rename.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 16.5V20h3.5L18.7 8.8l-3.5-3.5L4 16.5Zm17-10.1a1 1 0 0 0 0-1.4l-2-2a1 1 0 0 0-1.4 0l-1.7 1.7 3.5 3.5L21 6.4Z"/></svg>';
-        rename.addEventListener('click', () => editCameraName(channel, rename));
-        heading.append(symbol, title, rename);
-        if (choosing) {
-          const checkbox = documentRef.createElement('input');
-          checkbox.type = 'checkbox'; checkbox.dataset.cameraSelect = channel.id;
-          checkbox.setAttribute('aria-label', `Selecionar ${channel.label}`);
-          checkbox.checked = selected.has(channel.id);
-          checkbox.disabled = !checkbox.checked && selected.size >= GRID_LIMIT;
-          checkbox.addEventListener('change', () => {
-            if (checkbox.checked) selected.add(channel.id); else selected.delete(channel.id);
-            render();
-          });
-          heading.append(checkbox);
+      for (const group of cameraGroups) {
+        if (group.length === 1) {
+          cards.append(createCameraCard(group[0]));
+          continue;
         }
-        const openButton = make('button', 'camera-card__preview');
-        openButton.type = 'button'; openButton.dataset.cameraOpen = channel.id;
-        openButton.setAttribute('aria-label', `Abrir ${channel.label}`);
-        if (thumbnails.has(channel.id)) {
-          const image = documentRef.createElement('img');
-          image.className = 'camera-card__image'; image.src = thumbnails.get(channel.id); image.alt = '';
-          openButton.append(image);
-        }
-        const play = make('span', 'camera-card__play', '▶'); play.setAttribute('aria-hidden', 'true');
-        const caption = make('span', 'camera-card__caption', 'Toque para ver ao vivo');
-        openButton.append(play, caption);
-        openButton.addEventListener('click', () => {
-          if (choosing) {
-            if (selected.has(channel.id)) selected.delete(channel.id);
-            else if (selected.size < GRID_LIMIT) selected.add(channel.id);
-            render();
-          } else openPlayer([channel], openButton);
-        });
-        card.append(heading, openButton);
-        cards.append(card);
+        const cluster = make('section', 'camera-group');
+        const title = make('h2', 'camera-group__title', group[0].cameraLabel || 'Câmera');
+        title.id = `camera-group-${group[0].id}`;
+        cluster.setAttribute('aria-labelledby', title.id);
+        const groupCards = make('div', 'camera-group__cards');
+        groupCards.append(...group.map(createCameraCard));
+        cluster.append(title, groupCards);
+        cards.append(cluster);
       }
+    }
+
+    function createCameraCard(channel) {
+      const card = make('article', 'camera-card');
+      const heading = make('div', 'camera-card__heading');
+      const symbol = make('span', 'camera-card__wifi', '◉'); symbol.setAttribute('aria-hidden', 'true');
+      const title = make('strong', '', channel.label);
+      const rename = make('button', 'camera-card__rename');
+      rename.type = 'button'; rename.dataset.cameraRename = channel.id;
+      rename.setAttribute('aria-label', `Editar nome da câmera ${channel.label}`);
+      rename.title = 'Editar nome da câmera';
+      rename.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 16.5V20h3.5L18.7 8.8l-3.5-3.5L4 16.5Zm17-10.1a1 1 0 0 0 0-1.4l-2-2a1 1 0 0 0-1.4 0l-1.7 1.7 3.5 3.5L21 6.4Z"/></svg>';
+      rename.addEventListener('click', () => editCameraName(channel, rename));
+      heading.append(symbol, title, rename);
+      if (choosing) {
+        const checkbox = documentRef.createElement('input');
+        checkbox.type = 'checkbox'; checkbox.dataset.cameraSelect = channel.id;
+        checkbox.setAttribute('aria-label', `Selecionar ${channel.label}`);
+        checkbox.checked = selected.has(channel.id);
+        checkbox.disabled = !checkbox.checked && selected.size >= GRID_LIMIT;
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) selected.add(channel.id); else selected.delete(channel.id);
+          render();
+        });
+        heading.append(checkbox);
+      }
+      const openButton = make('button', 'camera-card__preview');
+      openButton.type = 'button'; openButton.dataset.cameraOpen = channel.id;
+      openButton.setAttribute('aria-label', `Abrir ${channel.label}`);
+      if (thumbnails.has(channel.id)) {
+        const image = documentRef.createElement('img');
+        image.className = 'camera-card__image'; image.src = thumbnails.get(channel.id); image.alt = '';
+        openButton.append(image);
+      }
+      const play = make('span', 'camera-card__play', '▶'); play.setAttribute('aria-hidden', 'true');
+      const caption = make('span', 'camera-card__caption', 'Toque para ver ao vivo');
+      openButton.append(play, caption);
+      openButton.addEventListener('click', () => {
+        if (choosing) {
+          if (selected.has(channel.id)) selected.delete(channel.id);
+          else if (selected.size < GRID_LIMIT) selected.add(channel.id);
+          render();
+        } else openPlayer([channel], openButton);
+      });
+      card.append(heading, openButton);
+      return card;
     }
 
     function detachVideo(item) {
@@ -1022,7 +1048,8 @@ export function createCamerasView(documentRef) {
     status.textContent = 'Carregando câmeras…';
     Promise.resolve().then(() => list({ signal: page.signal })).then(result => {
       if (page.signal.aborted) return;
-      channels = result.map(channel => ({ ...channel }));
+      cameraGroups = groupCameraChannels(result.map(channel => ({ ...channel })));
+      channels = cameraGroups.flat();
       loadCameraNames();
       loadThumbnails();
       visuals = loadVisuals();

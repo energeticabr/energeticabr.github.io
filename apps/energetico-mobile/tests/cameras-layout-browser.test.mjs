@@ -40,6 +40,14 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
           `Pencil must be fully visible with a 44px circular touch target at ${context}`);
         if (checkbox) assert.ok(checkbox.left > pencil.right && checkbox.right <= heading.right);
       }
+      assert.equal(layout.groups.length, 1);
+      const [{ bounds, children }] = layout.groups;
+      assert.equal(children.length, 3);
+      assert.ok(children.every(card => card.left > bounds.left && card.right < bounds.right
+        && card.top > bounds.top && card.bottom < bounds.bottom));
+      const [first, second] = children;
+      if (width < 700) assert.ok(second.top >= first.bottom);
+      else assert.ok(second.left >= first.right && second.top === first.top);
     } else if (mode === 'visuals') {
       assert.equal(layout.visualCards.length,1);
       assert.ok(layout.tabs.left >= 0 && layout.tabs.right <= width);
