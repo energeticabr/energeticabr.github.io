@@ -1,4 +1,5 @@
 import json
+import secrets
 import subprocess
 import tempfile
 import unittest
@@ -45,9 +46,10 @@ class CameraStatusStoreTest(unittest.TestCase):
 
 class IcseeStatusQueryTest(unittest.TestCase):
     def test_status_query_sends_only_cloud_id_and_tls_pins_without_opening_video(self):
+        test_password = secrets.token_urlsafe(16)
         entry = {
             "id": "icsee-1", "command": ["python", "icsee_source.py"],
-            "input": {"cloudId": "AB12345678", "username": "admin", "password": "secret",
+            "input": {"cloudId": "AB12345678", "username": "admin", "password": test_password,
                       "tlsPins": {"status": "a" * 64, "relay": "b" * 64}},
         }
         completed = subprocess.CompletedProcess(entry["command"], 0, b'{"status":"Online"}', b"")
