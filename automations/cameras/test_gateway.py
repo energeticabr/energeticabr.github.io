@@ -75,8 +75,9 @@ class CameraGatewayTest(unittest.TestCase):
             ("no-label", None, {"cloudId": "private-icsee-19", "channel": 0}),
             ("garden", "Jardim · canal 2", {"cloudId": "private-icsee-19", "channel": 1}),
         ]
+        sample_password = secrets.token_urlsafe(16)
         self.gateway.entries = {
-            channel: {"id": channel, "label": label, "input": {"password": "private-password", **settings}}
+            channel: {"id": channel, "label": label, "input": {"password": sample_password, **settings}}
             for channel, label, settings in sources
         }
         status, _, response = self.request("POST", CATALOG, "owner", {"action": "list"})
