@@ -6002,7 +6002,17 @@ export function createAppController({
     }
   }
 
-  async function continueConversation({ dismissUnavailableAttachments = false } = {}) {
+  function startupNeedsDiaryEvidenceCheck() {
+    const state = store.getState();
+    const savedRecoveryStates = [recoveryPreview, recoveryReference, ...olderReferences];
+    return Boolean(state.activeFlow?.id === 'construction_diary_fill'
+      || state.pendingFiles.length
+      || recoveryUncertain
+      || savedRecoveryStates.some(saved => saved?.activeFlow?.id === 'construction_diary_fill'
+        || saved?.uncertain === true || saved?.pendingNames?.length));
+  }
+
+  async function continueConversation({ dismissUnavailableAttachments = false, checkDiaryEvidence = true } = {}) {
     if (!account || stopped || flowBusy({ allowUncertainRecovery: true })) return false;
     disposeGeneralSummaryReport();
     cancelResponseTransition();
@@ -6012,14 +6022,7 @@ export function createAppController({
     const conversationRevision = sessionRevision;
     const currentConversation = () => account === conversationAccount && sessionRevision === conversationRevision && !stopped
       && conversationResumeRecord === genericProgress && !genericProgress.abort.signal.aborted;
-    const previousState = store.getState();
-    const previousFlow = previousState.activeFlow;
-    const savedRecoveryStates = [recoveryPreview, recoveryReference, ...olderReferences];
-    const checkDiaryEvidence = Boolean(previousFlow?.id === 'construction_diary_fill'
-      || previousState.pendingFiles.length
-      || recoveryUncertain
-      || savedRecoveryStates.some(saved => saved?.activeFlow?.id === 'construction_diary_fill'
-        || saved?.uncertain === true || saved?.pendingNames?.length));
+    const previousFlow = store.getState().activeFlow;
     const resumeDraftRevision = draftEditRevision;
     const genericProgress = beginOperationProgress('Restabelecendo conexão com a VM…');
     conversationResumeRecord = genericProgress;
@@ -13282,7 +13285,7 @@ export function createAppController({
     render();
     const sharedFileIdsPromise = importSharedFiles();
     if (account) {
-      await continueConversation();
+      await continueConversation({ checkDiaryEvidence: startupNeedsDiaryEvidenceCheck() });
       await refreshPendingProvisionSnapshot();
       await refreshPendingConstructionDiaries();
       await refreshPendingNotesSnapshot();
