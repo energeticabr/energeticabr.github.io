@@ -98,6 +98,7 @@ class Hub:
         self.started_at = time.monotonic()
         self.last_video_at = {device: None for device in devices}
         self.last_online_at = {device: None for device in devices}
+        self.observer_usable = {device: True for device in devices}
         self.workers = {}
         self.session = None
         self.session_at = 0.0
@@ -147,7 +148,11 @@ class Hub:
         result = {}
         for device in self.clients:
             last_video = self.last_video_at[device]
-            if last_video is None:
+            if not self.observer_usable[device]:
+                # Authentication, SDK startup, or the observation pipeline can
+                # fail without proving that the camera itself is offline.
+                status = "unknown"
+            elif last_video is None:
                 status = "unknown" if current - self.started_at < OFFLINE_AFTER_SECONDS else "offline"
             else:
                 status = "online" if current - last_video < OFFLINE_AFTER_SECONDS else "offline"
@@ -158,6 +163,7 @@ class Hub:
         while True:
             process = None
             logger = None
+            self.observer_usable[device] = False
             try:
                 async with self.start_lock:
                     started = time.monotonic()
@@ -168,7 +174,8 @@ class Hub:
                         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                     )
-                    logger = asyncio.create_task(self.report(process.stderr))
+                    self.observer_usable[device] = True
+                    logger = asyncio.create_task(self.report(process.stderr, device))
                     process.stdin.write(sdk_input(session, device))
                     await process.stdin.drain()
                     initial = await asyncio.wait_for(process.stdout.read(16384), 50)
@@ -201,17 +208,33 @@ class Hub:
                         await process.communicate()
             await asyncio.sleep(5)
 
-    @staticmethod
-    async def report(stream):
+    async def report(self, stream, device):
         while True:
             line = await stream.readline()
             if not line:
                 return
+            if line.startswith(b"Yoosee source failed: "):
+                self.observer_usable[device] = False
+                continue
             if re.fullmatch(rb"YOOSEE device [0-9]{1,4} (?:(?:state|playback error) -?[0-9]+|codec [0-9]+ resolution [0-9]+x[0-9]+)\r?\n", line):
+                status_match = re.fullmatch(rb"YOOSEE device [0-9]{1,4} (state|playback error) (-?[0-9]+)\r?\n", line)
+                if status_match:
+                    code = int(status_match.group(2))
+                    if status_match.group(1) == b"playback error" and code != 0:
+                        self.observer_usable[device] = False
+                    elif status_match.group(1) == b"state" and code == 5:
+                        # IoTVideoPlayerCommon.h defines STATE_PLAY as 5.
+                        self.observer_usable[device] = True
+                codec_match = re.fullmatch(rb"YOOSEE device [0-9]{1,4} codec ([0-9]+) resolution [0-9]+x[0-9]+\r?\n", line)
+                if codec_match and int(codec_match.group(1)) != 5:
+                    # The decoder cannot inspect a format other than the
+                    # configured HEVC stream, so this is a pipeline failure.
+                    self.observer_usable[device] = False
                 sys.stderr.buffer.write(line)
                 sys.stderr.buffer.flush()
 
     def publish(self, device, watchers, packet):
+        self.observer_usable[device] = True
         self.last_video_at[device] = time.monotonic()
         self.last_online_at[device] = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
         remember_video(self.buffers[device], packet)

@@ -518,8 +518,9 @@ export function createNativePorts({
     } catch { return false; }
   }
 
-  async function notifyCameraStatus(event) {
-    if (!event || (event.status !== "offline" && event.status !== "online")) return false;
+  async function notifyCameraStatus(event, { signal, isCurrent } = {}) {
+    if (signal?.aborted || (typeof isCurrent === "function" && !isCurrent())
+      || !event || (event.status !== "offline" && event.status !== "online")) return false;
     const label = String(event.label || "Câmera").trim().slice(0, 120) || "Câmera";
     const changedAt = new Date(event.changedAt);
     if (!Number.isFinite(changedAt.getTime())) return false;
@@ -532,7 +533,8 @@ export function createNativePorts({
         if (typeof localNotifications?.schedule !== "function") return false;
         const permissions = await localNotifications.checkPermissions?.();
         if (permissions?.display && permissions.display !== "granted") return false;
-        const id = 1 + (Number(event.id) % 2_147_483_646);
+        if (signal?.aborted || (typeof isCurrent === "function" && !isCurrent())) return false;
+        const id = 2_000_000_000 + (Number(event.id) % 147_483_647);
         await localNotifications.schedule({ notifications: [{
           id,
           title,
@@ -542,6 +544,7 @@ export function createNativePorts({
         return true;
       }
       if (typeof notificationApi !== "function" || notificationApi.permission !== "granted") return false;
+      if (signal?.aborted || (typeof isCurrent === "function" && !isCurrent())) return false;
       new notificationApi(title, { body, tag: `energetico-camera-status-${event.id}` });
       return true;
     } catch { return false; }

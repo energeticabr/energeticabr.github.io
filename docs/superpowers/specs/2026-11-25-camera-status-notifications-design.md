@@ -10,6 +10,8 @@ Avisar o usuário quando uma câmera conhecida mudar de on-line para off-line ou
 - Servir uma fila autenticada de eventos por meio da API de câmeras existente. Um cursor por conta e aparelho evita duplicação e permite recuperar eventos depois que o app volta a funcionar.
 - Com o app ativo, consultar a fila a cada minuto e apresentar notificação local no Android/iOS e de navegador na web/Windows. Pedir permissão quando o usuário abrir Câmeras e consultar imediatamente ao voltar ao primeiro plano.
 - Acompanhar todas as câmeras no período em que o app estiver ativo, sem exigir que a tela de câmeras permaneça aberta.
+- iCSee: a cada duas horas, consultar uma vez por gravador o status CloudId; se o gravador estiver on-line, sondar os canais individualmente com uma prévia temporária de 384 px/6 fps, encerrada no primeiro segmento e limitada a 45 segundos por canal.
+- Yoosee: reutilizar o fluxo de vídeo ativo e seus pacotes recentes; não iniciar uma segunda transmissão só para medir status.
 - Não instalar FCM, APNs, servidor de Web Push ou outra dependência externa. Sem push remoto, eventos ocorridos enquanto o app estiver totalmente encerrado serão notificados na próxima abertura, não em tempo real.
 - A primeira habilitação estabelece o cursor atual e não transforma o estado já existente em uma notificação nova. Se o armazenamento do cursor for perdido, o próximo início estabelece uma nova linha de base. A tarja atual continua mostrando câmeras que já estejam off-line.
 
@@ -21,7 +23,7 @@ Avisar o usuário quando uma câmera conhecida mudar de on-line para off-line ou
 
 ## Arquitetura
 
-O `CameraStatusStore` gravará, na mesma atualização SQLite do estado, uma linha de evento quando o último estado confirmado e o novo estado forem opostos (`online`/`offline`). Uma sondagem `unknown` não apaga o último estado confirmado e não gera evento. Eventos são por canal para não declarar a câmera inteira indisponível quando outro canal dela ainda funciona. Uma nova ação da API, autorizada pelo mesmo bearer token e pela mesma lista de visualizadores, entregará até 100 eventos por consulta. Sem cursor, a resposta é uma linha de base vazia com o maior ID atual e a geração do banco. O cliente avança após cada tentativa de notificação; se a geração do banco mudar ou o maior ID ficar abaixo do cursor local, estabelece nova linha de base para não ficar preso a um cursor antigo.
+O `CameraStatusStore` gravará, na mesma atualização SQLite do estado, uma linha de evento quando o último estado confirmado e o novo estado forem opostos (`online`/`offline`). Uma sondagem `unknown` não apaga o último estado confirmado e não gera evento. Eventos são por canal para não declarar a câmera inteira indisponível quando outro canal dela ainda funciona. No iCSee, o status CloudId é consultado a cada duas horas por gravador; quando o gravador responde on-line, cada canal recebe sua própria verificação com um fluxo temporário em baixa resolução, sem ocupar uma vaga se a grade estiver cheia. O relógio da verificação é persistido separadamente dos pedidos normais de vídeo. No Yoosee, o serviço observa os pacotes do fluxo já usado para reprodução e não abre outra sessão. O gateway expõe uma nova ação da API, autorizada pelo mesmo bearer token e pela mesma lista de visualizadores, entregando até 100 eventos por consulta. Sem cursor, a resposta é uma linha de base vazia com o maior ID atual e a geração do banco. O cliente avança após cada notificação; se a geração do banco mudar ou o maior ID ficar abaixo do cursor local, estabelece nova linha de base para não ficar preso a um cursor antigo.
 
 O cliente normalizará o retorno e um observador ligado à sessão autenticada buscará eventos a cada 60 segundos enquanto o processo estiver ativo, com consulta imediata ao retomar. O primeiro retorno define o cursor-base; retornos seguintes enviam uma notificação por evento. O cursor e a geração são isolados por conta no armazenamento local. Se uma notificação falhar ou a permissão não estiver concedida, o cursor daquele evento fica pendente para nova tentativa. A permissão é solicitada a partir da abertura da tela Câmeras. O app interrompe a observação no logout e a retoma na sessão seguinte. Android/iOS podem suspender o processo em segundo plano; os eventos desse período, como os ocorridos enquanto o app está encerrado, são apresentados quando o app voltar ao primeiro plano.
 
@@ -35,8 +37,9 @@ O cliente normalizará o retorno e um observador ligado à sessão autenticada b
 
 ## Alterações previstas
 
-- `automations/cameras/camera_status.py`: tabela e leitura ordenada de transições persistentes por canal, com geração da fila.
-- `automations/cameras/gateway.py`: rota autenticada `status-events` e validação/normalização do cursor.
+- `automations/cameras/camera_status.py`: tabela e leitura ordenada de transições persistentes por canal, geração da fila, cadência por gravador/canal.
+- `automations/cameras/gateway.py`: rota autenticada `status-events`, validação do cursor e prévias temporárias iCSee para sondagem individual.
+- `automations/cameras/yoosee_source.py`: status a partir do fluxo ativo Yoosee, diferenciando observador indisponível de vídeo recente.
 - `automations/cameras/test_camera_status.py`, `test_gateway.py`: cobertura de transições, cursor e autorização no CI.
 - `apps/energetico-mobile/src/chat/chat-client.js`: contrato de listagem de eventos.
 - `apps/energetico-mobile/src/chat/camera-status-notifications.js`: observação periódica, persistência de cursor e deduplicação.

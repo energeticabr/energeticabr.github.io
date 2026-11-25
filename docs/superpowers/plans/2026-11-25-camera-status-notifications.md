@@ -16,6 +16,8 @@
 - Preservar o último estado confirmado através de leituras `unknown`; o próximo `online`/`offline` pode gerar a transição correta.
 - Produzir eventos por canal e incluir o rótulo do canal, sem agregar estados de uma câmera multi-canal.
 - Reutilizar SQLite, bearer token, validação de conta e plugin já instalado; não adicionar serviço ou tarifa.
+- Consultar o status iCSee a cada 2 horas por CloudId e, se o gravador estiver on-line, sondar cada canal com uma prévia sequencial de 384 px/6 fps, encerrada no primeiro segmento e limitada a 45 s.
+- No Yoosee, reutilizar o fluxo ativo; não criar uma segunda sessão de vídeo só para status.
 - Consultar eventos a cada 60 segundos durante a sessão ativa e recuperar os pendentes ao voltar ao app.
 - Sem push remoto configurado, o app pode ser suspenso em segundo plano; eventos chegam após retomar o primeiro plano ou abrir novamente.
 - Não expor credenciais nem alterar os blocos de gestos de assinatura.
@@ -44,10 +46,11 @@
 - `CameraStatusStore.events_after(cursor, limit=100)` devolve eventos ordenados, cursor final e geração da fila.
 - A ação autenticada `status-events` recebe `after` inteiro opcional e devolve `{events, cursor, generation}`; sem `after`, devolve fila vazia como linha de base.
 
-- [ ] Acrescentar tabela append-only de eventos, transação de estado e gravação de apenas `online`↔`offline`.
-- [ ] Preservar estado confirmado através de `unknown`; gravar eventos pelo ID público do próprio canal.
-- [ ] Validar cursor/lote e adicionar a ação HTTP sob `gateway.authorize`.
-- [ ] Atualizar README quanto à fila e ao limite sem push remoto.
+- [x] Acrescentar tabela append-only de eventos, transação de estado e gravação de apenas `online`↔`offline`.
+- [x] Preservar estado confirmado através de `unknown`; gravar eventos pelo ID público do próprio canal.
+- [x] Validar cursor/lote e adicionar a ação HTTP sob `gateway.authorize`.
+- [x] Consultar status CloudId por gravador a cada 2 horas e verificar canais individualmente com prévia limitada em tamanho, taxa e duração.
+- [x] Atualizar README quanto à fila, cadência, sondagem Yoosee e limite sem push remoto.
 - [ ] Validar sintaxe Python e execução/saúde do serviço no servidor após publicação.
 
 ### Task 2: Consumir e apresentar notificações multiplataforma
@@ -64,18 +67,18 @@
 - `createCameraStatusNotifications({listEvents, notify, storage, intervalMs})` oferece `start(accountKey)`, `poll()`, `stop()`.
 - Portas nativas oferecem `requestCameraStatusNotificationPermission()` e `notifyCameraStatus(event)`.
 
-- [ ] Normalizar evento, cursor e datas sem confiar em dados recebidos.
-- [ ] Implementar cursor/geração local por conta, linha de base inicial, consulta serial e avanço após cada notificação.
-- [ ] Implementar solicitação de permissão na ação de abrir Câmeras e notificações Android/iOS/web.
-- [ ] Iniciar no login apenas se já habilitado; ativar na primeira abertura de Câmeras; parar no logout/stop e consultar imediatamente ao voltar ao primeiro plano.
-- [ ] Validar trava dos gestos, suíte de CI e builds web, Android e iOS.
+- [x] Normalizar evento, cursor e datas sem confiar em dados recebidos.
+- [x] Implementar cursor/geração local por conta, linha de base inicial, consulta serial e avanço após cada notificação.
+- [x] Implementar solicitação de permissão na ação de abrir Câmeras e notificações Android/iOS/web.
+- [x] Iniciar no login apenas se já habilitado; ativar na primeira abertura de Câmeras; parar no logout/stop e consultar imediatamente ao voltar ao primeiro plano.
+- [x] Validar trava dos gestos e builds web, Android e PWA. A suíte de CI será verificada no PR.
 
 ### Task 3: Implantar e confirmar os destinos
 
 **Files:**
 - Publicar a revisão pelo GitHub e verificar os serviços instalados.
 
-- [ ] Manter intacta e fora do commit a alteração local preexistente em `automations/cameras/icsee_source.py`.
+- [x] Manter intacta e fora do commit a alteração local preexistente em `automations/cameras/icsee_source.py`.
 - [ ] Abrir/mesclar PR depois das verificações aprovadas pelo CI.
 - [ ] Verificar deploy Pages, Google Play internal e TestFlight da mesma revisão.
 - [ ] Atualizar o gateway no servidor com backup, reinício controlado e health dos serviços.

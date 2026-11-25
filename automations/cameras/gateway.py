@@ -12,6 +12,7 @@ import tempfile
 import threading
 import time
 import urllib.request
+from urllib.error import HTTPError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -37,6 +38,8 @@ PREVIEW_REPLACEMENT_GRACE_SECONDS = 5
 IDLE_SECONDS = 12
 SINGLE_REOPEN_SECONDS = 45
 PREVIEW_IDLE_SECONDS = 24
+STATUS_CHANNEL_PROBE_TIMEOUT_SECONDS = 45
+STATUS_PROBE_VIEWER = "__camera-status-probe__"
 
 
 class PlaybackError(Exception):
@@ -235,8 +238,13 @@ class Gateway:
             raise PlaybackError(429)
         try:
             identity = self.identity(token)
+        except HTTPError as error:
+            status = error.code if error.code in {401, 403} else 503
+            raise PlaybackError(status) from None
         except (OSError, ValueError):
-            raise PlaybackError(401) from None
+            # Microsoft Graph/network outages are transient service errors,
+            # not evidence that the user's session or access was revoked.
+            raise PlaybackError(503) from None
         finally:
             self.graph_slots.release()
         viewer = str(identity.get("id", "")).casefold()
@@ -255,8 +263,7 @@ class Gateway:
 
     def camera_status_events(self, after=None):
         if after is None:
-            return {"events": [], "cursor": self.status_store.event_cursor(),
-                    "generation": self.status_store.event_generation()}
+            return self.status_store.event_baseline()
         result = self.status_store.events_after(after, limit=100)
         labels = {channel_id: entry.get("label") or "Câmera"
                   for channel_id, entry in self.entries.items()}
@@ -293,8 +300,53 @@ class Gateway:
 
     def start_status_monitor(self):
         if self.status_monitor is None:
-            self.status_monitor = CameraStatusMonitor(self.entries, self.status_store)
+            self.status_monitor = CameraStatusMonitor(
+                self.entries, self.status_store, icsee_channel_query=self.probe_icsee_channel,
+            )
         return self.status_monitor.start()
+
+    def probe_icsee_channel(self, entry):
+        channel = entry.get("id") if isinstance(entry, dict) else None
+        if not isinstance(channel, str) or channel not in self.entries or self.entries[channel] is not entry:
+            return "unknown"
+        probe_key = (STATUS_PROBE_VIEWER, channel, False)
+        with self.lock:
+            self.expire()
+            existing = [stream for stream in self.streams.values()
+                        if stream.channel == channel and stream.mode == "live"]
+            if existing:
+                return "online" if any(stream.ready_to_play() for stream in existing) else "unknown"
+            if self.query_active or len(self.streams) >= MAX_STREAMS - 1:
+                return "unknown"
+            stream = Stream(entry, self.ffmpeg, STATUS_PROBE_VIEWER, preview=True)
+            self.streams[probe_key] = stream
+
+        try:
+            stream.launch()
+            deadline = time.monotonic() + STATUS_CHANNEL_PROBE_TIMEOUT_SECONDS
+            while True:
+                with self.lock:
+                    if self.streams.get(probe_key) is not stream:
+                        return "unknown"
+                    now = time.monotonic()
+                    stream.last_request = now
+                    if not stream.alive():
+                        return "unknown"
+                    if stream.ready_to_play():
+                        return "online"
+                    if now >= deadline:
+                        # The CloudId status query just confirmed that the
+                        # recorder is reachable; an alive source with no video
+                        # for this input is channel-specific offline evidence.
+                        return "offline"
+                time.sleep(0.5)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return "unknown"
+        finally:
+            with self.lock:
+                if self.streams.get(probe_key) is stream:
+                    del self.streams[probe_key]
+            stream.close()
 
     def recordings(self, channel, viewer, day, hour=None):
         if not isinstance(channel, str) or channel not in self.entries:
@@ -495,7 +547,8 @@ class Gateway:
                     raise PlaybackError(503)
                 stream.last_request = time.monotonic()
                 if stream.ready_to_play():
-                    self.status_store.update(channel, "online", checked_at=utc_text())
+                    if stream.mode == "live":
+                        self.status_store.update(channel, "online", checked_at=utc_text())
                     return stream.path
             time.sleep(0.25)
         with self.lock:

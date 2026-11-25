@@ -919,7 +919,7 @@ export function createChatClient({
       headers: { Accept: "application/json", Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload), credentials: "omit", cache: "no-store", redirect: "error", signal,
     }, async response => {
-      if (response.status === 403) throw new Error("Sua conta não tem acesso às câmeras.");
+      if (response.status === 403) throw Object.assign(new Error("Sua conta não tem acesso às câmeras."), { status: 403 });
       if (response.status === 429) throw Object.assign(new Error(payload.action === "move"
         ? "Aguarde um instante antes de mover novamente."
         : "O serviço de câmeras está ocupado. Tente novamente em instantes."), { status: 429 });
