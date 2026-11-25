@@ -439,6 +439,39 @@ test('Swile disables unavailable dates in the calendar before they can be select
   assert.equal(document.activeElement, credit);
 });
 
+test('Swile prepares a cancellation request for each eligible open order only', async t => {
+  const { window } = new JSDOM('<main id="app"></main>');
+  const { document } = window;
+  const order = { orderCode: 'G101', status: 'WAITING_PAYMENT', creditCents: 5500,
+    documents: [{ orderCode: 'G101', kind: 'boleto' }] };
+  const view = openSwileView({ document, gallery: true, request: async (_operation, body) =>
+    body.gallery === 'history' ? [order] : [
+      order,
+      { orderCode: 'G202', status: 'PAID', creditCents: 135000 },
+      { orderCode: 'G303', status: 'PROCESSING', creditCents: 5500 },
+    ],
+  });
+  t.after(() => { view.close(); window.close(); });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const links = () => [...document.querySelectorAll('a')].filter(link =>
+    link.textContent === 'Solicitar cancelamento');
+  await settle();
+  assert.equal(links().length, 2);
+  for (const [index, code] of ['G101', 'G202'].entries()) {
+    const link = links()[index];
+    const url = new URL(link.href);
+    assert.match(link.parentElement.textContent, new RegExp(code));
+    assert.equal(link.getAttribute('aria-label'), `Solicitar cancelamento do pedido ${code} na Swile`);
+    assert.equal(url.origin + url.pathname, 'https://ajuda.swile.com.br/hc/pt-br/requests/new');
+    assert.equal(url.searchParams.get('tf_subject'), `Cancelamento do pedido ${code}`);
+    assert.match(url.searchParams.get('tf_description'), new RegExp(code));
+    assert.equal(link.rel, 'noopener noreferrer');
+  }
+  [...document.querySelectorAll('button')].find(button => button.textContent === 'Histórico').click();
+  await settle();
+  assert.equal(links().length, 0);
+});
+
 test('Swile gallery opens the PDF for the exact order and shows documents as they arrive', async t => {
   const { window } = new JSDOM('<!doctype html><body></body>');
   const { document } = window;

@@ -181,6 +181,34 @@
   border-radius: 0 .6rem .6rem 0;
   padding-inline-start: .55rem;
 }
+.swile-gallery-order-row-cancellable {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.swile-gallery-page .swile-gallery-order-row-cancellable > .swile-gallery-pdf {
+  grid-row: span 2;
+  width: 2.75rem;
+}
+.swile-gallery-page .swile-gallery-order-row-cancellable > .swile-gallery-order {
+  grid-column: 2;
+  border-radius: 0 .6rem 0 0;
+}
+.swile-order-cancel {
+  grid-column: 2;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: .25rem .8rem;
+  border-radius: .45rem;
+  color: #972534;
+  font-size: .85rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: .16em;
+}
+.swile-order-cancel:hover { background: #fff1f2; }
+.swile-order-cancel:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
 .swile-credit-details { margin-top: .75rem; }
 .swile-documents { margin: .8rem 0; }
 .swile-documents h4 { margin: 0 0 .4rem; }
