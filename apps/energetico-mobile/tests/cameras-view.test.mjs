@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { createCamerasView } from '../src/ui/cameras-view.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, readinessError,
+function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false,
   cameraList, timerControl, catalog, startError } = {}) {
   const dom = new JSDOM('<button>Menu</button>', { url: 'https://example.com' });
   t.after(() => dom.window.close());
@@ -25,7 +25,6 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, 
     starts.push({ id, signal, codecs });
     const failure = startError?.({ id, attempt: starts.length, codecs, window: dom.window });
     if (failure) throw failure;
-    if (id === 'site-1' && codecs.length && readinessError) throw readinessError;
     return codecs.includes('hevc') ? 'https://video.example/hevc.m3u8' : 'https://video.example/index.m3u8';
   };
   const view = createCamerasView(document);
@@ -33,8 +32,8 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, 
     id: `site-${index + 1}`, label: `Obra ${index + 1}`,
   }))),
     start,
-    prepareGrid: useGrid ? (ids, { signal, previousUrl }) => {
-      grids.push({ ids, signal, previousUrl });
+    prepareGrid: useGrid ? (ids, { signal, previousUrl, codecs }) => {
+      grids.push({ ids, signal, previousUrl, codecs });
       return start;
     } : undefined,
     move: async (id, direction) => { moves.push({ id, direction }); },
@@ -297,9 +296,9 @@ test('aguarda a rede se a chamada de recuperação falhar enquanto o aparelho fi
   assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
 });
 
-test('usa o modo compatível se o formato direto deixar de abrir durante a recuperação', async t => {
+test('preserva o codec direto quando o serviço fica indisponível durante a recuperação', async t => {
   const { document, starts } = setup(t, { supportsHevc: true,
-    startError: ({ attempt, codecs }) => attempt > 1 && codecs.length
+    startError: ({ attempt }) => attempt === 2 || attempt === 3
       ? Object.assign(new Error('Fonte indisponível'), { status: 503 }) : null,
   });
   await flush();
@@ -315,8 +314,8 @@ test('usa o modo compatível se o formato direto deixar de abrir durante a recup
   await flush();
   retry();
   await flush();
-  assert.deepEqual(starts.map(item => item.codecs), [['h264', 'hevc'], ['h264', 'hevc'], ['h264', 'hevc'], []]);
-  assert.match(video.src, /index\.m3u8$/);
+  assert.deepEqual(starts.map(item => item.codecs), [['h264', 'hevc'], ['h264', 'hevc'], ['h264', 'hevc']]);
+  assert.match(document.querySelector('.cameras-player__status').textContent, /Fonte indisponível/);
 });
 
 test('pede HEVC apenas quando o aparelho suporta e retorna a H.264 se a mídia falhar', async t => {
@@ -335,7 +334,8 @@ test('pede HEVC apenas quando o aparelho suporta e retorna a H.264 se a mídia f
 
 test('recupera somente a câmera que falhou antes de receber a playlist e mantém a fila da grade', async t => {
   const { document, grids, starts } = setup(t, {
-    useGrid: true, readinessError: Object.assign(new Error('Sem segmentos'), { status: 503 }),
+    useGrid: true, startError: ({ id, attempt }) => id === 'site-1' && attempt === 1
+      ? Object.assign(new Error('Sem segmentos'), { status: 503 }) : null,
   });
   await flush();
   document.querySelector('[data-camera-grid]').click();
@@ -343,7 +343,7 @@ test('recupera somente a câmera que falhou antes de receber a playlist e manté
   document.querySelector('[data-camera-open-grid]').click();
   await flush();
   assert.deepEqual(grids.map(grid => grid.ids), [['site-1', 'site-2'], ['site-1']]);
-  assert.deepEqual(starts.filter(item => item.id === 'site-1').map(item => item.codecs), [['h264'], []]);
+  assert.deepEqual(starts.filter(item => item.id === 'site-1').map(item => item.codecs), [['h264'], ['h264']]);
 });
 
 test('reabre um canal da grade que perde a playlist antes do primeiro quadro', async t => {
@@ -457,6 +457,27 @@ test('a troca de codec envia a playlist antiga somente para a câmera afetada', 
   assert.deepEqual(grids.map(({ ids, previousUrl }) => [ids, previousUrl]),
     [[['site-1', 'site-2'], undefined], [['site-1'], oldUrl]]);
   assert.match(video.src, /index\.m3u8$/);
+});
+
+test('ao retomar a grade restringe a conversão à câmera que precisou de compatibilidade', async t => {
+  const { document, grids, view } = setup(t, { useGrid: true, supportsHevc: true });
+  await flush();
+  document.querySelector('[data-camera-grid]').click();
+  for (let index = 0; index < 2; index++) document.querySelectorAll('[data-camera-select]')[index].click();
+  document.querySelector('[data-camera-open-grid]').click();
+  await flush();
+  const [first] = document.querySelectorAll('video');
+  const { Event } = document.defaultView;
+  first.dispatchEvent(new Event('error'));
+  await flush();
+  Object.defineProperty(document, 'hidden', { value: false });
+  view.suspend();
+  view.resume();
+  await flush();
+
+  assert.deepEqual(grids.slice(2).map(({ ids, codecs }) => [ids, codecs]), [
+    [['site-1'], []], [['site-2'], ['h264', 'hevc']],
+  ]);
 });
 
 test('lista dispositivos e abre uma câmera em paisagem, retornando à lista', async t => {

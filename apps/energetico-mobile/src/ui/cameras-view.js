@@ -592,15 +592,24 @@ export function createCamerasView(documentRef) {
       }
     }
     function connectPlayer() {
-      let startPlayback = start;
+      const starters = new Map();
       if (playerChannels.length > 1 && prepareGrid) {
         gridRequest = new AbortController();
-        startPlayback = prepareGrid(playerChannels.map(channel => channel.id), {
-          signal: gridRequest.signal, codecs: playback[0]?.codecs ?? [],
-        });
+        const batches = new Map();
+        for (const item of playback) {
+          const profile = item.codecs.join(',');
+          if (!batches.has(profile)) batches.set(profile, []);
+          batches.get(profile).push(item);
+        }
+        for (const items of batches.values()) {
+          const startBatch = prepareGrid(items.map(item => item.channelId), {
+            signal: gridRequest.signal, codecs: items[0].codecs,
+          });
+          for (const item of items) starters.set(item.channelId, startBatch);
+        }
       }
       playerChannels.forEach((channel, index) => {
-        void connect(playback[index], channel, playback[index].recordingId ?? null, startPlayback,
+        void connect(playback[index], channel, playback[index].recordingId ?? null, starters.get(channel.id) ?? start,
           { preserveViewState: true });
       });
     }
@@ -852,16 +861,10 @@ export function createCamerasView(documentRef) {
         }
       } catch (error) {
         if (signal.aborted) return;
-        const directUnavailable = error?.status === 404 || error?.status === 503;
         const networkUnavailable = error?.code === 'NETWORK_UNAVAILABLE' || error instanceof TypeError;
-        const recoverable = directUnavailable || networkUnavailable || [408, 429, 500, 502, 504].includes(error?.status);
+        const recoverable = networkUnavailable || [404, 408, 429, 500, 502, 503, 504].includes(error?.status);
         const offline = networkUnavailable && windowRef.navigator.onLine === false;
-        if (!recordingId && item.networkRetries && recoverable && retryNetwork(offline)) return;
-        if (!recordingId && item.codecs.length && directUnavailable) {
-          retryCompatible();
-          return;
-        }
-        if (!recordingId && item.preview && recoverable && retryNetwork()) return;
+        if (!recordingId && recoverable && retryNetwork(offline && item.networkRetries > 0)) return;
         item.connected = false; item.connectionState = 'error'; item.failureLabel = 'Falha ao conectar';
         item.liveBadge.hidden = true; item.status.dataset.loading = 'false';
         item.retry.hidden = true; item.updateControls?.(); item.updateHeader?.();

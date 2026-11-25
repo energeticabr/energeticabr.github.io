@@ -333,7 +333,7 @@ class Gateway:
         channel = entry.get("id") if isinstance(entry, dict) else None
         if not isinstance(channel, str) or channel not in self.entries or self.entries[channel] is not entry:
             return "unknown"
-        probe_key = (STATUS_PROBE_VIEWER, channel, False)
+        probe_key = (STATUS_PROBE_VIEWER, channel, True)
         with self.lock:
             self.expire()
             live_state = self._icsee_live_channel_status_locked(channel)
@@ -341,7 +341,8 @@ class Gateway:
                 return live_state
             if self.query_active or len(self.streams) >= MAX_STREAMS - 1:
                 return "unknown"
-            stream = Stream(entry, self.ffmpeg, STATUS_PROBE_VIEWER, preview=True)
+            # A status check only needs evidence of video. Do not decode, scale or re-encode it.
+            stream = Stream(entry, self.ffmpeg, STATUS_PROBE_VIEWER, preview=True, direct=True)
             try:
                 # launch() sets startup_deadline before both subprocess handles
                 # exist. Keep expire()/reap() out until launch has completed.
