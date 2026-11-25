@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core';
 import { provisionDescriptionIcon } from './provision-description-card.js';
 import { parseBenefitAmount as parseSwileAmount } from './hr-benefit-amount.js';
 import { createHrBenefitGalleryHeader } from './hr-benefit-gallery-header.js';
@@ -65,6 +66,7 @@ const statuses = {
   CREATION_ERROR: 'Falha na criação',
   UNCONFIRMED: 'Envio sem confirmação',
 };
+const cancellableOrderStatuses = new Set(['WAITING_PAYMENT', 'PAID']);
 
 const employeeName = value => String(value || '').normalize('NFD').replace(/\p{M}/gu, '').trim().replace(/\s+/g, ' ').toUpperCase();
 
@@ -617,6 +619,20 @@ export function openSwileView({ document: doc, request, gallery = false, preview
     });
   }
 
+  function cancellationLink(order) {
+    const url = new URL('https://ajuda.swile.com.br/hc/pt-br/requests/new');
+    url.searchParams.set('tf_subject', `Cancelamento do pedido ${order.orderCode}`);
+    url.searchParams.set('tf_description',
+      `Olá, solicito o cancelamento do pedido de recarga ${order.orderCode} da minha empresa. Por favor, confirmem o cancelamento.`);
+    const link = make('a', 'Solicitar cancelamento', 'swile-order-cancel');
+    link.href = url.href;
+    link.target = Capacitor.isNativePlatform() ? '_self' : '_blank';
+    link.rel = 'noopener noreferrer';
+    link.title = 'Abre a Central de Ajuda da Swile para enviar a solicitação';
+    link.setAttribute('aria-label', `Solicitar cancelamento do pedido ${order.orderCode} na Swile`);
+    return link;
+  }
+
   function loadGallery(filter = galleryFilter, restoreFocus = false, refreshFromSwile = false) {
     return run(async () => {
       const previousList = filter === galleryFilter ? content.querySelector('.swile-order-list') : null;
@@ -651,18 +667,26 @@ export function openSwileView({ document: doc, request, gallery = false, preview
           if (filter === 'history' && order.requestDate) item.append(make('span', `Pedido em ${dateLabel(order.requestDate)}`));
           else if (order.creditDate) item.append(make('span', `Previsão ${dateLabel(order.creditDate)}`));
           const documents = availableDocuments(order);
-          if (!documents.length) {
+          const canRequestCancellation = filter === 'pending' && order.orderCode && cancellableOrderStatuses.has(order.status);
+          if (!documents.length && !canRequestCancellation) {
             list.append(item);
             continue;
           }
-          const attachments = button('', () => openGalleryDocuments(order.orderCode, documents, attachments));
-          attachments.className = 'swile-gallery-pdf';
-          attachments.title = `Abrir PDFs do pedido ${order.orderCode}`;
-          attachments.setAttribute('aria-label', attachments.title);
-          attachments.setAttribute('aria-haspopup', 'dialog');
-          attachments.append(provisionDescriptionIcon(doc, 'document'), make('span', 'PDF'));
           const row = make('article', '', 'swile-gallery-order-row');
-          row.append(attachments, item);
+          if (documents.length) {
+            const attachments = button('', () => openGalleryDocuments(order.orderCode, documents, attachments));
+            attachments.className = 'swile-gallery-pdf';
+            attachments.title = `Abrir PDFs do pedido ${order.orderCode}`;
+            attachments.setAttribute('aria-label', attachments.title);
+            attachments.setAttribute('aria-haspopup', 'dialog');
+            attachments.append(provisionDescriptionIcon(doc, 'document'), make('span', 'PDF'));
+            row.append(attachments);
+          }
+          row.append(item);
+          if (canRequestCancellation) {
+            row.classList.add('swile-gallery-order-row-cancellable');
+            row.append(cancellationLink(order));
+          }
           list.append(row);
         }
         if (!orders.length) list.append(make('p', filter === 'pending' ? 'Nenhum pedido em aberto.' : 'Nenhum pedido no histórico.'));
