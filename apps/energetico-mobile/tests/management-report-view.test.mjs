@@ -165,8 +165,8 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   const monthDetail=dashboard.querySelector('.gm-expense-dashboard-month-detail');
   assert.ok(monthDetail);
   const trend=dashboard.querySelector('.gm-expense-dashboard-trend');
-  trend.getBoundingClientRect=()=>({left:0,width:900});
-  trend.dispatchEvent(new dom.window.MouseEvent('pointermove',{bubbles:true,clientX:96+10*(750/11)}));
+  const september=trend.querySelector('.gm-expense-dashboard-series.is-total [data-month-index="10"]');
+  trend.dispatchEvent(new dom.window.MouseEvent('pointermove',{bubbles:true,clientX:Number(september.getAttribute('cx'))}));
   assert.equal(monthDetail.dataset.month,'2026-09');
   const octoberPaid=[...dashboard.querySelectorAll('.gm-expense-dashboard-series.is-paid circle')]
     .find(point=>point.getAttribute('aria-label').includes('out/26'));
