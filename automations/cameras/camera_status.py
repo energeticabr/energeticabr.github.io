@@ -11,6 +11,7 @@ import sqlite3
 import subprocess
 import threading
 import time
+import uuid
 
 
 ICSEE_STATUS_INTERVAL_SECONDS = 2 * 60 * 60
@@ -68,9 +69,39 @@ class CameraStatusStore:
                 channel_id TEXT PRIMARY KEY,
                 state TEXT NOT NULL CHECK (state IN ('online', 'offline', 'unknown')),
                 last_online_at TEXT,
-                checked_at TEXT NOT NULL
+                checked_at TEXT NOT NULL,
+                last_confirmed_state TEXT CHECK (last_confirmed_state IN ('online', 'offline') OR last_confirmed_state IS NULL)
             )
         """)
+        columns = {row[1] for row in self._connection.execute("PRAGMA table_info(camera_status)")}
+        if "last_confirmed_state" not in columns:
+            self._connection.execute("""
+                ALTER TABLE camera_status ADD COLUMN last_confirmed_state TEXT
+                CHECK (last_confirmed_state IN ('online', 'offline') OR last_confirmed_state IS NULL)
+            """)
+            self._connection.execute("""
+                UPDATE camera_status SET last_confirmed_state = state
+                WHERE state IN ('online', 'offline')
+            """)
+        self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS camera_status_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id TEXT NOT NULL,
+                state TEXT NOT NULL CHECK (state IN ('online', 'offline')),
+                changed_at TEXT NOT NULL,
+                UNIQUE (channel_id, state, changed_at)
+            )
+        """)
+        self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS camera_status_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        self._connection.execute(
+            "INSERT OR IGNORE INTO camera_status_meta(key, value) VALUES ('event_generation', ?)",
+            (uuid.uuid4().hex,),
+        )
         self._connection.commit()
 
     def get(self, channel_id):
@@ -89,8 +120,10 @@ class CameraStatusStore:
         checked = utc_text(_parse_time(checked_at))
         with self._lock:
             previous = self._connection.execute(
-                "SELECT last_online_at FROM camera_status WHERE channel_id = ?", (channel_id,),
+                "SELECT last_online_at, last_confirmed_state FROM camera_status WHERE channel_id = ?",
+                (channel_id,),
             ).fetchone()
+            previous_state = previous[1] if previous else None
             previous_online = previous[0] if previous else None
             if status == "online":
                 last_online_at = utc_text(_parse_time(last_online_at) or _parse_time(checked))
@@ -99,16 +132,54 @@ class CameraStatusStore:
                 last_online_at = utc_text(parsed_last_online) if parsed_last_online else previous_online
             else:
                 last_online_at = previous_online
+            last_confirmed_state = status if status in {"online", "offline"} else previous_state
             self._connection.execute("""
-                INSERT INTO camera_status(channel_id, state, last_online_at, checked_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO camera_status(channel_id, state, last_online_at, checked_at, last_confirmed_state)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(channel_id) DO UPDATE SET
                     state = excluded.state,
                     last_online_at = excluded.last_online_at,
-                    checked_at = excluded.checked_at
-            """, (channel_id, status, last_online_at, checked))
+                    checked_at = excluded.checked_at,
+                    last_confirmed_state = excluded.last_confirmed_state
+            """, (channel_id, status, last_online_at, checked, last_confirmed_state))
+            if previous_state in {"online", "offline"} and status in {"online", "offline"} \
+                    and status != previous_state:
+                self._connection.execute("""
+                    INSERT OR IGNORE INTO camera_status_events(channel_id, state, changed_at)
+                    VALUES (?, ?, ?)
+                """, (channel_id, status, checked))
             self._connection.commit()
         return self.get(channel_id)
+
+    def event_cursor(self):
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT COALESCE(MAX(id), 0) FROM camera_status_events"
+            ).fetchone()
+        return int(row[0])
+
+    def event_generation(self):
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT value FROM camera_status_meta WHERE key = 'event_generation'"
+            ).fetchone()
+        return row[0]
+
+    def events_after(self, cursor, *, limit=100):
+        cursor = max(0, int(cursor))
+        limit = max(1, min(100, int(limit)))
+        with self._lock:
+            rows = self._connection.execute("""
+                SELECT id, channel_id, state, changed_at
+                FROM camera_status_events WHERE id > ? ORDER BY id LIMIT ?
+            """, (cursor, limit)).fetchall()
+            latest = self._connection.execute(
+                "SELECT COALESCE(MAX(id), 0) FROM camera_status_events"
+            ).fetchone()[0]
+        events = [{"id": int(row[0]), "channelId": row[1], "status": row[2],
+                   "changedAt": row[3]} for row in rows]
+        next_cursor = events[-1]["id"] if events else int(latest)
+        return {"events": events, "cursor": next_cursor, "generation": self.event_generation()}
 
     def close(self):
         with self._lock:

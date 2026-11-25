@@ -1,0 +1,49 @@
+# Notificações de mudança de estado das câmeras
+
+## Intenção
+
+Avisar o usuário quando uma câmera conhecida mudar de on-line para off-line ou voltar de off-line para on-line, sem repetir avisos em cada sondagem e sem adicionar um serviço pago.
+
+## Objetivos e limites
+
+- Registrar transições confirmadas por canal junto do estado atual no SQLite do gateway. Ignorar `unknown`, a leitura inicial e atualizações repetidas do mesmo estado.
+- Servir uma fila autenticada de eventos por meio da API de câmeras existente. Um cursor por conta e aparelho evita duplicação e permite recuperar eventos depois que o app volta a funcionar.
+- Com o app ativo, consultar a fila a cada minuto e apresentar notificação local no Android/iOS e de navegador na web/Windows. Pedir permissão quando o usuário abrir Câmeras e consultar imediatamente ao voltar ao primeiro plano.
+- Acompanhar todas as câmeras no período em que o app estiver ativo, sem exigir que a tela de câmeras permaneça aberta.
+- Não instalar FCM, APNs, servidor de Web Push ou outra dependência externa. Sem push remoto, eventos ocorridos enquanto o app estiver totalmente encerrado serão notificados na próxima abertura, não em tempo real.
+- A primeira habilitação estabelece o cursor atual e não transforma o estado já existente em uma notificação nova. Se o armazenamento do cursor for perdido, o próximo início estabelece uma nova linha de base. A tarja atual continua mostrando câmeras que já estejam off-line.
+
+## Abordagens consideradas
+
+1. Comparar o catálogo apenas enquanto a tela de câmeras está aberta: simples, mas deixa de observar transições fora dessa tela e perde alterações intermediárias.
+2. **Fila durável no gateway e consulta pelo app ativo (escolhida):** registra todas as transições confirmadas, entrega avisos uma vez por cursor e custa apenas consultas leves à infraestrutura existente. Recupera eventos ao reabrir o app, mas não consegue despertar um app encerrado.
+3. Push remoto via FCM/APNs/Web Push: poderia alertar com o app encerrado, mas não há configuração nem credenciais de push no projeto. Exigiria configuração adicional externa; fica fora deste trabalho.
+
+## Arquitetura
+
+O `CameraStatusStore` gravará, na mesma atualização SQLite do estado, uma linha de evento quando o último estado confirmado e o novo estado forem opostos (`online`/`offline`). Uma sondagem `unknown` não apaga o último estado confirmado e não gera evento. Eventos são por canal para não declarar a câmera inteira indisponível quando outro canal dela ainda funciona. Uma nova ação da API, autorizada pelo mesmo bearer token e pela mesma lista de visualizadores, entregará até 100 eventos por consulta. Sem cursor, a resposta é uma linha de base vazia com o maior ID atual e a geração do banco. O cliente avança após cada tentativa de notificação; se a geração do banco mudar ou o maior ID ficar abaixo do cursor local, estabelece nova linha de base para não ficar preso a um cursor antigo.
+
+O cliente normalizará o retorno e um observador ligado à sessão autenticada buscará eventos a cada 60 segundos enquanto o processo estiver ativo, com consulta imediata ao retomar. O primeiro retorno define o cursor-base; retornos seguintes enviam uma notificação por evento. O cursor e a geração são isolados por conta no armazenamento local. Se uma notificação falhar ou a permissão não estiver concedida, o cursor daquele evento fica pendente para nova tentativa. A permissão é solicitada a partir da abertura da tela Câmeras. O app interrompe a observação no logout e a retoma na sessão seguinte. Android/iOS podem suspender o processo em segundo plano; os eventos desse período, como os ocorridos enquanto o app está encerrado, são apresentados quando o app voltar ao primeiro plano.
+
+## Compatibilidade e texto
+
+- Android/iOS Capacitor: `@capacitor/local-notifications`, entregue imediatamente com identificador derivado do evento.
+- Web/Windows PWA: API `Notification` em HTTPS, respeitando a permissão concedida.
+- Off-line: título “Câmera off-line” e nome/canal da câmera com horário da mudança.
+- Retorno: título “Câmera on-line” e nome/canal da câmera com horário da mudança.
+- Sem permissão ou enquanto o processo não está ativo, os eventos ficam sem aviso imediato; quando o app reabrir com permissão já concedida, a fila pendente será processada.
+
+## Alterações previstas
+
+- `automations/cameras/camera_status.py`: tabela e leitura ordenada de transições persistentes por canal, com geração da fila.
+- `automations/cameras/gateway.py`: rota autenticada `status-events` e validação/normalização do cursor.
+- `automations/cameras/test_camera_status.py`, `test_gateway.py`: cobertura de transições, cursor e autorização no CI.
+- `apps/energetico-mobile/src/chat/chat-client.js`: contrato de listagem de eventos.
+- `apps/energetico-mobile/src/chat/camera-status-notifications.js`: observação periódica, persistência de cursor e deduplicação.
+- `apps/energetico-mobile/src/native/native-ports.js`: solicitação de permissão e apresentação nativa/web.
+- `apps/energetico-mobile/src/app-controller.js`: ativação após login/abertura de Câmeras, ciclo de vida e limpeza no logout.
+- `automations/cameras/README.md`: funcionamento e limite de notificações sem push remoto.
+
+## Decisões restantes para implementação
+
+Usar lote pequeno e ordenado (até 100 eventos por consulta), linha de base explícita sem cursor, geração persistente para detectar recriação do banco, avançar apenas após cada tentativa de notificação e tolerar ausência de armazenamento ou de permissão sem interromper o app. Não armazenar tokens de push nem dados de credencial de câmeras.

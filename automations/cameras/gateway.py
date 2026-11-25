@@ -253,6 +253,21 @@ class Gateway:
         self._add_camera_group_metadata(channels)
         return channels
 
+    def camera_status_events(self, after=None):
+        if after is None:
+            return {"events": [], "cursor": self.status_store.event_cursor(),
+                    "generation": self.status_store.event_generation()}
+        result = self.status_store.events_after(after, limit=100)
+        labels = {channel_id: entry.get("label") or "Câmera"
+                  for channel_id, entry in self.entries.items()}
+        events = []
+        for event in result["events"]:
+            label = labels.get(event["channelId"])
+            if not label:
+                continue
+            events.append({**event, "label": label})
+        return {"events": events, "cursor": result["cursor"], "generation": result["generation"]}
+
     def _add_camera_group_metadata(self, channels):
         by_device = {}
         for channel in channels:
@@ -613,6 +628,11 @@ def handler_for(gateway):
                                if isinstance(offered, list) and codec in offered)
                 if data.get("action") == "list":
                     result = {"channels": gateway.catalog()}
+                elif data.get("action") == "status-events":
+                    after = data.get("after")
+                    if after is not None and (type(after) is not int or after < 0 or after > 9_007_199_254_740_991):
+                        raise ValueError("invalid status cursor")
+                    result = gateway.camera_status_events(after)
                 elif data.get("action") == "play":
                     result = {"path": gateway.start(data.get("channelId"), viewer, codecs=codecs)}
                 elif data.get("action") == "play-grid":

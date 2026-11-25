@@ -49,6 +49,7 @@ import { decorateReportPrint, openFilteredReportPdf, preserveReportPdfReturn } f
 import { beginLoadingTask } from "./ui/loading-task.js";
 import { createAcquisitionProgress } from "./chat/acquisition-progress.js";
 import { validateAttachment } from "./chat/file-policy.js";
+import { cameraStatusAlertsEnabled, createCameraStatusNotifications, setCameraStatusAlertsEnabled } from "./chat/camera-status-notifications.js";
 
 async function defaultSignPdfAttachment(input) {
   const module = await import("./web/pdf-signing.js");
@@ -1130,6 +1131,11 @@ export function createAppController({
   if (!store || !view || !client || !auth || !native) {
     throw new TypeError("O controlador requer todos os serviços do Energético.");
   }
+
+  const cameraStatusNotifications = createCameraStatusNotifications({
+    listEvents: client.listCameraStatusEvents,
+    notify: native.notifyCameraStatus,
+  });
 
   const initializeTimeoutMs = Number.isFinite(Number(authTimeoutMs))
     ? Number(authTimeoutMs)
@@ -2564,6 +2570,7 @@ export function createAppController({
 
   async function handleForeground() {
     view.resumeCameras?.();
+    void cameraStatusNotifications.poll({ force: true });
     void refreshSwileReminder();
     resumeDdaSync();
     resumeSefazSync();
@@ -11624,6 +11631,7 @@ export function createAppController({
   }
 
   async function signIn() {
+    cameraStatusNotifications.stop();
     disposeHrBenefitPanel();
     resetDdaMenuAlert();
     resetSicoobMenuAlert();
@@ -11678,6 +11686,7 @@ export function createAppController({
       lastPresenceValidationDate = "";
       legacyDocumentLineFinalizeOption = null;
       sessionStatus = "authenticated";
+      startCameraStatusNotificationsIfEnabled();
       refreshDdaMenuAlert();
       resumeDdaSync();
       resumeSefazSync();
@@ -11741,7 +11750,43 @@ export function createAppController({
     return account?.homeAccountId || account?.localAccountId || account?.idTokenClaims?.oid;
   }
 
+  function startCameraStatusNotificationsIfEnabled() {
+    const key = cameraPreviewAccountKey();
+    if (!account || stopped || !key || !cameraStatusAlertsEnabled(key)) return false;
+    return cameraStatusNotifications.start(key);
+  }
+
+  function openCameras() {
+    if (!account || stopped || !client.listCameraChannels) return false;
+    const owner = account;
+    const revision = sessionRevision;
+    const accountKey = cameraPreviewAccountKey();
+    let opened = false;
+    try {
+      opened = view.openCameras?.({
+        accountKey,
+        list: client.listCameraChannels,
+        start: client.startCameraPlayback,
+        prepareGrid: client.prepareCameraGrid,
+        move: client.moveCamera,
+        listRecordings: client.listCameraRecordings,
+        playRecording: client.playCameraRecording,
+      }) ?? false;
+    } catch { return false; }
+    if (!opened) return false;
+    try {
+      const request = native.requestCameraStatusNotificationPermission?.();
+      Promise.resolve(request).then(granted => {
+        if (!granted || stopped || account !== owner || sessionRevision !== revision || !accountKey) return;
+        setCameraStatusAlertsEnabled(accountKey, true);
+        cameraStatusNotifications.start(accountKey);
+      }).catch(() => {});
+    } catch { /* Opening cameras remains available when notifications are unsupported. */ }
+    return true;
+  }
+
   async function signOut() {
+    cameraStatusNotifications.stop();
     view.closeCameras?.();
     view.clearCameraPreviews?.(cameraPreviewAccountKey());
     cancelMascotOrientationTransition();
@@ -12713,16 +12758,7 @@ export function createAppController({
       }
       if (command.replyId === POWERBI_DASHBOARD_REPLY_ID) return openPowerBiDashboard();
       if (command.replyId === "action_cameras") {
-        if (!account || stopped || !client.listCameraChannels) return false;
-        return view.openCameras?.({
-          accountKey: cameraPreviewAccountKey(),
-          list: client.listCameraChannels,
-          start: client.startCameraPlayback,
-          prepareGrid: client.prepareCameraGrid,
-          move: client.moveCamera,
-          listRecordings: client.listCameraRecordings,
-          playRecording: client.playCameraRecording,
-        }) ?? false;
+        return openCameras();
       }
       if (REGISTRATION_GALLERY_KIND[command.replyId]) return openRegistrationGallery(REGISTRATION_GALLERY_KIND[command.replyId], command.replyId);
       if (command.replyId === LAUNCH_GALLERY_ID) return openLaunchGallery();
@@ -13268,6 +13304,7 @@ export function createAppController({
     }
 
     sessionStatus = account ? "authenticated" : "signed-out";
+    if (account) startCameraStatusNotificationsIfEnabled();
     refreshDdaMenuAlert();
     resumeDdaSync();
     resumeSefazSync();
@@ -13347,6 +13384,7 @@ export function createAppController({
   }
 
   function stop() {
+    cameraStatusNotifications.stop();
     view.closeCameras?.();
     cancelMascotOrientationTransition();
     disposePendingPayrollLinks();
