@@ -282,10 +282,11 @@ class ServiceTests(unittest.TestCase):
 
     def test_confirm_signals_gallery_after_saving_the_order(self):
         preview = self.service.preview('user-a', self.data)
-        self.assertFalse((self.database.parent / 'journal-gallery-request').exists())
+        marker = self.database.parent / 'journal-gallery-request'
+        marker.write_bytes(b'previous signal')
         receipt = self.service.confirm('user-a', preview['id'])
         self.assertEqual('SWO123', receipt['orderCode'])
-        self.assertTrue((self.database.parent / 'journal-gallery-request').is_file())
+        self.assertEqual(b'\n', marker.read_bytes())
 
     def test_app_order_refreshes_gallery_now_and_fetches_documents_after_one_hour(self):
         preview = self.service.preview('user-a', self.data)
