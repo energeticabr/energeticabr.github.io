@@ -374,6 +374,22 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   border-bottom: 1px solid #202327;
 }
 .cameras-player__tile video { display: block; width: 100%; height: 100%; object-fit: contain; background: #050607; }
+.cameras-player__saved-frame {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.cameras-player__saved-image { display: block; width: 100%; height: 100%; object-fit: contain; }
+.cameras-player__saved-label {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  background: #000c;
+  color: #fff;
+  font-size: 11px;
+}
 .cameras-player__stage[data-focused="true"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
 .cameras-player__tile[hidden] { display: none !important; }
 .cameras-player__video--focusable { touch-action: manipulation; cursor: zoom-in; }

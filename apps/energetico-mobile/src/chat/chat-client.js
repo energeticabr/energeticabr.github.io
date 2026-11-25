@@ -971,7 +971,7 @@ export function createChatClient({
       if (result?.busy?.includes(channelId)) throw new Error("O serviço de câmeras está ocupado. Tente novamente em instantes.");
       const url = cameraPlaylistUrl(result?.paths?.[channelId]);
       if (!url) throw new Error("Não foi possível abrir esta câmera.");
-      for (let poll = 0; poll < 160; poll++) {
+      for (let waited = 0; waited < 320_000;) {
         const ready = await request(url + "?ready=1", {
           method: "GET", cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal,
         }, response => {
@@ -980,7 +980,10 @@ export function createChatClient({
           throw Object.assign(new Error("Não foi possível abrir esta câmera."), { status: response.status });
         }, true);
         if (ready) return url;
-        await retryDelay(2000);
+        // Check promptly while a warm source or the first queued preview can become ready.
+        const delay = waited < 4_000 ? 500 : 2_000;
+        await retryDelay(delay);
+        waited += delay;
       }
       throw new Error("A câmera demorou para responder. Tente novamente.");
     };

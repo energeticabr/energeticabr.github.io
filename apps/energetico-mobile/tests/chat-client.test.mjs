@@ -16,6 +16,7 @@ test('live HEVC is opt-in and uses the same scoped media URL', async () => {
 
 test('a grade abre as prévias com uma única autenticação e aguarda cada vídeo', async () => {
   const calls = [];
+  const waits = [];
   const path1 = `/api/portal-camera-media/${'a'.repeat(43)}/index.m3u8`;
   const path2 = `/api/portal-camera-media/${'b'.repeat(43)}/index.m3u8`;
   let secondPending = true;
@@ -34,11 +35,12 @@ test('a grade abre as prévias com uma única autenticação e aguarda cada víd
       return new Response(null, { status: 202 });
     }
     return new Response(null, { status: 204 });
-  }, { retryDelay: async () => {} });
+  }, { retryDelay: async ms => { waits.push(ms); } });
   const start = client.prepareCameraGrid(['ch-1', 'ch-2']);
   assert.deepEqual(await Promise.all([start('ch-1'), start('ch-2')]), [API_BASE+path1, API_BASE+path2]);
   assert.equal(calls.filter(call => call.options.method === 'POST').length, 1);
   assert.equal(calls.length, 4);
+  assert.deepEqual(waits, [500]);
 });
 
 test('a grade repete a abertura uma vez para câmeras que aguardavam vagas', async () => {
