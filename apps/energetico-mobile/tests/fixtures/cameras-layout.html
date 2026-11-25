@@ -3,9 +3,11 @@
 import { createCamerasView } from '/src/ui/cameras-view.js';
 const accountKey = 'layout-check';
 const listMode = location.search === '?list';
+const wallMode = location.search === '?player';
 localStorage.setItem('energetico:camera-preview:v1:' + accountKey + ':camera-1', 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8Af//Z');
 localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify([{
-  name: 'Portão e pátio', cameraIds: ['camera-1', 'camera-2'],
+  name: wallMode ? 'Visual 1' : 'Portão e pátio',
+  cameraIds: wallMode ? Array.from({ length: 8 }, (_, index) => 'camera-' + (index + 1)) : ['camera-1', 'camera-2'],
 }]));
 createCamerasView(document).open({
   accountKey,
@@ -33,12 +35,9 @@ if (location.search.includes('single')) {
   document.querySelectorAll('[data-camera-select]')[0].click();
   document.querySelectorAll('[data-camera-select]')[1].click();
   document.querySelector('[data-camera-open-grid]').click();
-} else if (location.search.includes('player')) {
-  document.querySelector('[data-camera-grid]').click();
-  for (let i = 0; i < 8; i++) {
-    document.querySelectorAll('[data-camera-select]')[i].click();
-  }
-  document.querySelector('[data-camera-open-grid]').click();
+} else if (wallMode) {
+  document.querySelector('[data-camera-tab="visuals"]').click();
+  document.querySelector('[data-camera-visual-open]').click();
 }
 await new Promise(resolve => setTimeout(resolve, 100));
 if (location.search.includes('single')) {
@@ -75,7 +74,7 @@ if (listHeadings.length) {
   selectionHeadings = cardHeadings();
   document.querySelector('[data-camera-grid]').click();
 }
-document.documentElement.dataset.layout=JSON.stringify({viewport:rect(dialog),
+const layout = {viewport:rect(dialog),
   tabs:document.querySelector('.cameras-header__tabs') && rect(document.querySelector('.cameras-header__tabs')),
   listHeadings, selectionHeadings,
   cards:[...document.querySelectorAll('.camera-card')].map(rect),
@@ -99,5 +98,21 @@ document.documentElement.dataset.layout=JSON.stringify({viewport:rect(dialog),
   drawer:document.querySelector('.cameras-player__drawer') && rect(document.querySelector('.cameras-player__drawer')),
   liveStateColor:player && getComputedStyle(player.querySelector('.cameras-player__live-state')).color,
   recording:document.querySelector('.cameras-player__recording') && rect(document.querySelector('.cameras-player__recording')),
-  recordingTime:document.querySelector('.cameras-player__recording-times') && rect(document.querySelector('.cameras-player__recording-times'))});
+  recordingTime:document.querySelector('.cameras-player__recording-times') && rect(document.querySelector('.cameras-player__recording-times'))};
+if (wallMode) {
+  const measurePlayer = () => ({
+    stage: rect(dialog.querySelector('.cameras-player__stage')),
+    videos: [...dialog.querySelectorAll('.cameras-player__tile:not([hidden]) video')].map(rect),
+  });
+  const video = player.querySelector('[data-camera-video="camera-1"]');
+  video.click();
+  video.click();
+  layout.focused = measurePlayer();
+  video.click();
+  video.click();
+  layout.restored = measurePlayer();
+  video.closest('.cameras-player__tile').querySelector('.cameras-player__focus').click();
+  layout.individual = measurePlayer();
+}
+document.documentElement.dataset.layout = JSON.stringify(layout);
 </script></body></html>
