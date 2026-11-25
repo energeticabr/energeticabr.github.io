@@ -64,6 +64,40 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertNotIn("input", channel)
         self.assertNotIn("command", channel)
 
+    def test_catalog_identifies_channels_from_the_same_physical_camera(self):
+        sources = [
+            ("patio-1", "Pátio · canal 1", {"cloudId": "17", "channel": 0}),
+            ("other", "Pátio · canal 1", {"cloudId": "private-icsee-18", "channel": 0}),
+            ("patio-2", "Pátio - canal 2", {"cloudId": "17", "channel": 1}),
+            ("yoosee-1", "Entrada (Yoosee)", {"deviceId": 17}),
+            ("yoosee-2", "Entrada (Yoosee)", {"deviceId": "17"}),
+            ("unidentified", "Pátio · canal 3", {}),
+            ("no-label", None, {"cloudId": "private-icsee-19", "channel": 0}),
+            ("garden", "Jardim · canal 2", {"cloudId": "private-icsee-19", "channel": 1}),
+        ]
+        self.gateway.entries = {
+            channel: {"id": channel, "label": label, "input": {"password": "private-password", **settings}}
+            for channel, label, settings in sources
+        }
+        status, _, response = self.request("POST", CATALOG, "owner", {"action": "list"})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(response), {"channels": [
+            {"id": "patio-1", "label": "Pátio · canal 1", "status": "unknown", "lastOnlineAt": None,
+             "cameraGroup": "patio-1", "cameraLabel": "Pátio"},
+            {"id": "other", "label": "Pátio · canal 1", "status": "unknown", "lastOnlineAt": None},
+            {"id": "patio-2", "label": "Pátio - canal 2", "status": "unknown", "lastOnlineAt": None,
+             "cameraGroup": "patio-1", "cameraLabel": "Pátio"},
+            {"id": "yoosee-1", "label": "Entrada (Yoosee)", "status": "unknown", "lastOnlineAt": None,
+             "cameraGroup": "yoosee-1", "cameraLabel": "Entrada (Yoosee)"},
+            {"id": "yoosee-2", "label": "Entrada (Yoosee)", "status": "unknown", "lastOnlineAt": None,
+             "cameraGroup": "yoosee-1", "cameraLabel": "Entrada (Yoosee)"},
+            {"id": "unidentified", "label": "Pátio · canal 3", "status": "unknown", "lastOnlineAt": None},
+            {"id": "no-label", "label": None, "status": "unknown", "lastOnlineAt": None,
+             "cameraGroup": "no-label", "cameraLabel": "Jardim"},
+            {"id": "garden", "label": "Jardim · canal 2", "status": "unknown", "lastOnlineAt": None,
+             "cameraGroup": "no-label", "cameraLabel": "Jardim"},
+        ]})
+
     def test_request_cannot_choose_a_source_or_access_files_without_a_capability(self):
         self.assertEqual(self.request("POST", CATALOG, "owner",
                                       {"action": "play", "channelId": "https://example.com"})[0], 404)

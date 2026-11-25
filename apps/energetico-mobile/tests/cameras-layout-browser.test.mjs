@@ -32,6 +32,30 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
       assert.ok(lastOnline.left >= preview.left && lastOnline.right <= preview.right
         && lastOnline.top >= preview.top && lastOnline.bottom <= preview.bottom,
       `Last-online text is outside its preview at ${width}x${height}: ${JSON.stringify(layout.offlineStatus)}`);
+      assert.equal(layout.listHeadings.length, 9);
+      assert.equal(layout.selectionHeadings.length, 9);
+      assert.ok(layout.listHeadings.every(({ checkbox }) => !checkbox));
+      assert.ok(layout.selectionHeadings.every(({ checkbox }) => checkbox));
+      for (const [{ titleText, pencil }] of [layout.listHeadings, layout.selectionHeadings]) {
+        assert.ok(pencil.left - titleText.right >= 0 && pencil.left - titleText.right <= 12,
+          `Pencil must sit directly after a short camera name at ${width}x${height}`);
+      }
+      for (const { heading, title, pencil, checkbox } of [...layout.listHeadings, ...layout.selectionHeadings]) {
+        const context = `${width}x${height} ${checkbox ? 'selection' : 'list'}`;
+        assert.ok(pencil.left - title.right >= 0 && pencil.left - title.right <= 12,
+          `Pencil must sit directly after the camera name at ${context}`);
+        assert.ok(pencil.width === 44 && pencil.height === 44 && pencil.right <= heading.right,
+          `Pencil must be fully visible with a 44px circular touch target at ${context}`);
+        if (checkbox) assert.ok(checkbox.left > pencil.right && checkbox.right <= heading.right);
+      }
+      assert.equal(layout.groups.length, 1);
+      const [{ bounds, children }] = layout.groups;
+      assert.equal(children.length, 3);
+      assert.ok(children.every(card => card.left > bounds.left && card.right < bounds.right
+        && card.top > bounds.top && card.bottom < bounds.bottom));
+      const [first, second] = children;
+      if (width < 700) assert.ok(second.top >= first.bottom);
+      else assert.ok(second.left >= first.right && second.top === first.top);
     } else if (mode === 'visuals') {
       assert.equal(layout.visualCards.length,1);
       assert.ok(layout.tabs.left >= 0 && layout.tabs.right <= width);

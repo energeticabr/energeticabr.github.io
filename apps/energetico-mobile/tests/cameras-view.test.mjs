@@ -5,7 +5,7 @@ import { createCamerasView } from '../src/ui/cameras-view.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, readinessError,
-  cameraList, timerControl } = {}) {
+  cameraList, timerControl, catalog } = {}) {
   const dom = new JSDOM('<button>Menu</button>', { url: 'https://example.com' });
   t.after(() => dom.window.close());
   const { document, HTMLMediaElement, HTMLDialogElement } = dom.window;
@@ -27,7 +27,7 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, 
     return codecs.includes('hevc') ? 'https://video.example/hevc.m3u8' : 'https://video.example/index.m3u8';
   };
   const view = createCamerasView(document);
-  view.open({ accountKey, list: cameraList ?? (async () => Array.from({ length: 10 }, (_, index) => ({
+  view.open({ accountKey, list: cameraList ?? (async () => catalog ?? Array.from({ length: 10 }, (_, index) => ({
     id: `site-${index + 1}`, label: `Obra ${index + 1}`,
   }))),
     start,
@@ -89,6 +89,44 @@ test('atualiza status a cada minuto enquanto a lista está aberta e cancela ao f
   assert.deepEqual(timerControl.cleared, [41]);
   await timerControl.callback();
   assert.equal(reads, 2);
+});
+
+const mixedCatalog = [
+  { id: 'patio-1', label: 'Pátio · canal 1', cameraGroup: 'patio-1', cameraLabel: 'Pátio' },
+  { id: 'other', label: 'Pátio · canal 2' },
+  { id: 'patio-2', label: 'Pátio · canal 2', cameraGroup: 'patio-1', cameraLabel: 'Pátio' },
+];
+
+test('reúne canais intercalados da mesma câmera na lista e na seleção da grade', async t => {
+  const { document, grids } = setup(t, { catalog: mixedCatalog, useGrid: true, accountKey: 'conta' });
+  document.defaultView.localStorage.setItem('energetico:camera-name:v1:conta:patio-2', 'Portão');
+  await flush();
+
+  const group = document.querySelector('.camera-group');
+  assert.equal(group?.querySelector('h2')?.textContent, 'Pátio');
+  assert.deepEqual([...group.querySelectorAll('[data-camera-open]')].map(button => button.dataset.cameraOpen),
+    ['patio-1', 'patio-2']);
+  assert.equal(group.querySelector('[data-camera-open="patio-2"]').getAttribute('aria-label'), 'Abrir Portão');
+  assert.deepEqual([...document.querySelectorAll('[data-camera-open]')].map(button => button.dataset.cameraOpen),
+    ['patio-1', 'patio-2', 'other']);
+
+  document.querySelector('[data-camera-grid]').click();
+  for (const id of ['other', 'patio-2', 'patio-1']) {
+    document.querySelector(`[data-camera-select="${id}"]`).click();
+  }
+  document.querySelector('[data-camera-open-grid]').click();
+  assert.deepEqual(grids[0].ids, ['patio-1', 'patio-2', 'other']);
+});
+
+test('reúne canais da mesma câmera ao abrir um visual salvo com a ordem antiga', async t => {
+  const { document, grids } = setup(t, { catalog: mixedCatalog, useGrid: true, accountKey: 'conta' });
+  document.defaultView.localStorage.setItem('energetico:camera-visual:v1:conta', JSON.stringify([{
+    name: 'Entrada', cameraIds: ['patio-2', 'other', 'patio-1'],
+  }]));
+  await flush();
+  document.querySelector('[data-camera-tab="visuals"]').click();
+  document.querySelector('[data-camera-visual-open="0"]').click();
+  assert.deepEqual(grids[0].ids, ['patio-2', 'patio-1', 'other']);
 });
 function simulateFrame(document, video, image) {
   Object.defineProperties(video, {

@@ -23,6 +23,7 @@ MEDIA = "/api/portal-camera-media"
 MEDIA_FILE = re.compile(r"(?:index|h264|hevc)\.m3u8|init\.mp4|segment-[0-9]+\.(?:ts|m4s)")
 MEDIA_ROUTE = re.compile(rf"{MEDIA}/([A-Za-z0-9_-]{{43}})/({MEDIA_FILE.pattern})")
 CHANNEL_ID = re.compile(r"[a-z0-9-]{1,48}")
+CHANNEL_LABEL_SUFFIX = re.compile(r"\s*[·•–—-]\s*canal\s+\d+\s*$", re.IGNORECASE)
 GRAPH_ME = "https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,userType"
 MAX_STREAMS = 8
 MAX_STARTING_PREVIEWS = 2
@@ -244,7 +245,31 @@ class Gateway:
             status = self.status_store.get(entry["id"])
             channels.append({"id": entry["id"], "label": entry["label"],
                              "status": status["status"], "lastOnlineAt": status["lastOnlineAt"]})
+        self._add_camera_group_metadata(channels)
         return channels
+
+    def _add_camera_group_metadata(self, channels):
+        by_device = {}
+        for channel in channels:
+            settings = self.entries[channel["id"]].get("input")
+            if not isinstance(settings, dict):
+                continue
+            for field in ("cloudId", "deviceId"):
+                value = settings.get(field)
+                if type(value) in (str, int) and (device := str(value).strip()):
+                    by_device.setdefault((field, device), []).append(channel)
+                    break
+
+        for group in by_device.values():
+            if len(group) < 2:
+                continue
+            # Publish an existing channel ID instead of returning a private device ID.
+            group_id = group[0]["id"]
+            label = next((channel["label"].strip() for channel in group
+                          if isinstance(channel["label"], str) and channel["label"].strip()), "Câmera")
+            label = CHANNEL_LABEL_SUFFIX.sub("", label).strip() or label
+            for channel in group:
+                channel.update(cameraGroup=group_id, cameraLabel=label)
 
     def start_status_monitor(self):
         if self.status_monitor is None:
