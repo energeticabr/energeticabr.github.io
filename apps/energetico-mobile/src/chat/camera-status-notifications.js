@@ -42,6 +42,9 @@ export function createCameraStatusNotifications({
   onAuthError,
   storage,
   intervalMs = 60_000,
+  requestTimeoutMs = 20_000,
+  setTimeoutImpl = globalThis.setTimeout,
+  clearTimeoutImpl = globalThis.clearTimeout,
   setIntervalImpl = globalThis.setInterval,
   clearIntervalImpl = globalThis.clearInterval,
   documentRef = globalThis.document,
@@ -98,12 +101,44 @@ export function createCameraStatusNotifications({
     return active && !suspended && accountKey === key && revision === activeRevision;
   }
 
-  async function runPoll(key, activeRevision, controller) {
+  async function requestEvents(previous, request) {
+    const { controller } = request;
+    let timeout = null;
+    let abortListener = null;
+    const abortPromise = new Promise((_resolve, reject) => {
+      abortListener = () => {
+        const error = new Error("Camera status request aborted");
+        error.name = "AbortError";
+        reject(error);
+      };
+      if (controller.signal.aborted) abortListener();
+      else controller.signal.addEventListener("abort", abortListener, { once: true });
+    });
+    const timeoutPromise = new Promise((_resolve, reject) => {
+      timeout = setTimeoutImpl?.(() => {
+        controller.abort();
+        reject(new Error("Camera status request timed out"));
+      }, Math.max(1_000, Number(requestTimeoutMs) || 20_000));
+    });
+    try {
+      return await Promise.race([
+        Promise.resolve().then(() => listEvents({ ...(previous === null ? {} : { after: previous.cursor }),
+          signal: controller.signal })),
+        abortPromise,
+        timeoutPromise,
+      ]);
+    } finally {
+      if (timeout !== null) clearTimeoutImpl?.(timeout);
+      if (abortListener) controller.signal.removeEventListener("abort", abortListener);
+    }
+  }
+
+  async function runPoll(key, activeRevision, request) {
+    const { controller } = request;
     try {
       if (!isCurrent(key, activeRevision) || typeof listEvents !== "function") return false;
       const previous = readCursor(key);
-      let result = await listEvents({ ...(previous === null ? {} : { after: previous.cursor }),
-        signal: controller.signal });
+      let result = await requestEvents(previous, request);
       if (!isCurrent(key, activeRevision) || controller.signal.aborted) return false;
       if (!Number.isSafeInteger(result?.cursor) || result.cursor < 0 || !Array.isArray(result.events)
         || result.events.length > 100 || !/^[a-f0-9]{32}$/.test(result?.generation || "")) return false;
@@ -111,7 +146,7 @@ export function createCameraStatusNotifications({
       if (previous !== null && (previous.generation !== result.generation || result.cursor < previous.cursor)) {
         // A replacement queue may already contain multiple pages. An empty
         // cursor request asks the gateway for its current high-water baseline.
-        result = await listEvents({ signal: controller.signal });
+        result = await requestEvents(null, request);
         if (!isCurrent(key, activeRevision) || controller.signal.aborted) return false;
         if (!Number.isSafeInteger(result?.cursor) || result.cursor < 0 || !Array.isArray(result.events)
           || result.events.length > 100 || !/^[a-f0-9]{32}$/.test(result?.generation || "")
@@ -130,6 +165,7 @@ export function createCameraStatusNotifications({
         if (!isCurrent(key, activeRevision) || controller.signal.aborted) return false;
         if (!Number.isSafeInteger(event?.id) || event.id <= cursor) continue;
         if (typeof notify !== "function") return false;
+        request.stage = "notify";
         let notified = false;
         try {
           notified = await notify(event, {
@@ -168,9 +204,9 @@ export function createCameraStatusNotifications({
     // request instead of aborting a notification that is already being posted.
     if (currentRequest) return currentRequest.promise;
     const controller = new AbortController();
-    const request = { controller, promise: null };
+    const request = { controller, promise: null, stage: "query" };
     currentRequest = request;
-    request.promise = runPoll(activeAccount, activeRevision, controller).finally(() => {
+    request.promise = runPoll(activeAccount, activeRevision, request).finally(() => {
       if (currentRequest === request) currentRequest = null;
     });
     return request.promise;
@@ -180,6 +216,7 @@ export function createCameraStatusNotifications({
     if (!active || suspended) return false;
     suspended = true;
     clearTimer();
+    if (currentRequest?.stage === "query") currentRequest.controller.abort();
     return true;
   }
 

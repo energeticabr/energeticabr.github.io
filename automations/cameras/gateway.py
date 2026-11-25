@@ -38,7 +38,7 @@ PREVIEW_REPLACEMENT_GRACE_SECONDS = 5
 IDLE_SECONDS = 12
 SINGLE_REOPEN_SECONDS = 45
 PREVIEW_IDLE_SECONDS = 24
-STATUS_CHANNEL_PROBE_TIMEOUT_SECONDS = 45
+STATUS_CHANNEL_PROBE_TIMEOUT_SECONDS = START_TIMEOUT_SECONDS
 STATUS_PROBE_VIEWER = "__camera-status-probe__"
 
 
@@ -302,8 +302,22 @@ class Gateway:
         if self.status_monitor is None:
             self.status_monitor = CameraStatusMonitor(
                 self.entries, self.status_store, icsee_channel_query=self.probe_icsee_channel,
+                icsee_live_query=self.icsee_live_channel_status,
             )
         return self.status_monitor.start()
+
+    def _icsee_live_channel_status_locked(self, channel):
+        existing = [stream for stream in self.streams.values()
+                    if stream.channel == channel and stream.mode == "live"]
+        return "online" if any(stream.ready_to_play() for stream in existing) else "unknown"
+
+    def icsee_live_channel_status(self, entry):
+        channel = entry.get("id") if isinstance(entry, dict) else None
+        if not isinstance(channel, str) or channel not in self.entries or self.entries[channel] is not entry:
+            return "unknown"
+        with self.lock:
+            self.expire()
+            return self._icsee_live_channel_status_locked(channel)
 
     def probe_icsee_channel(self, entry):
         channel = entry.get("id") if isinstance(entry, dict) else None
@@ -312,17 +326,22 @@ class Gateway:
         probe_key = (STATUS_PROBE_VIEWER, channel, False)
         with self.lock:
             self.expire()
-            existing = [stream for stream in self.streams.values()
-                        if stream.channel == channel and stream.mode == "live"]
-            if existing:
-                return "online" if any(stream.ready_to_play() for stream in existing) else "unknown"
+            live_state = self._icsee_live_channel_status_locked(channel)
+            if live_state == "online":
+                return live_state
             if self.query_active or len(self.streams) >= MAX_STREAMS - 1:
                 return "unknown"
             stream = Stream(entry, self.ffmpeg, STATUS_PROBE_VIEWER, preview=True)
+            try:
+                # launch() sets startup_deadline before both subprocess handles
+                # exist. Keep expire()/reap() out until launch has completed.
+                stream.launch()
+            except (OSError, ValueError, subprocess.SubprocessError):
+                stream.close()
+                return "unknown"
             self.streams[probe_key] = stream
 
         try:
-            stream.launch()
             deadline = time.monotonic() + STATUS_CHANNEL_PROBE_TIMEOUT_SECONDS
             while True:
                 with self.lock:
@@ -335,10 +354,9 @@ class Gateway:
                     if stream.ready_to_play():
                         return "online"
                     if now >= deadline:
-                        # The CloudId status query just confirmed that the
-                        # recorder is reachable; an alive source with no video
-                        # for this input is channel-specific offline evidence.
-                        return "offline"
+                        # A stalled relay or media startup is not proof that
+                        # this individual channel is offline.
+                        return "unknown"
                 time.sleep(0.5)
         except (OSError, ValueError, subprocess.SubprocessError):
             return "unknown"

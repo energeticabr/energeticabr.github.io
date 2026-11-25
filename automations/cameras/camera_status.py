@@ -162,11 +162,15 @@ class CameraStatusStore:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
                 previous = self._connection.execute(
-                    "SELECT last_online_at, last_confirmed_state FROM camera_status WHERE channel_id = ?",
+                    "SELECT last_online_at, last_confirmed_state, checked_at FROM camera_status WHERE channel_id = ?",
                     (channel_id,),
                 ).fetchone()
                 previous_state = previous[1] if previous else None
                 previous_online = previous[0] if previous else None
+                previous_checked = _parse_time(previous[2]) if previous else None
+                if previous_checked and _parse_time(checked) < previous_checked:
+                    self._connection.rollback()
+                    return self.get(channel_id)
                 if status == "online":
                     last_online_at = utc_text(_parse_time(last_online_at) or _parse_time(checked))
                 elif last_online_at:
@@ -328,7 +332,7 @@ def provider_group(entry):
 
 class CameraStatusMonitor:
     def __init__(self, entries, store, *, socket_path=None, icsee_query=query_icsee_status,
-                 icsee_channel_query=None,
+                 icsee_channel_query=None, icsee_live_query=None,
                  yoosee_query=read_yoosee_status, clock=utc_now,
                  poll_seconds=YOOSEE_STATUS_POLL_SECONDS):
         self.entries = list(entries.values()) if isinstance(entries, dict) else list(entries)
@@ -336,23 +340,27 @@ class CameraStatusMonitor:
         self.socket_path = socket_path or os.environ.get("YOOSEE_SOCKET", "/run/energetico-yoosee/live.sock")
         self.icsee_query = icsee_query
         self.icsee_channel_query = icsee_channel_query or (lambda _entry: "online")
+        self.icsee_live_query = icsee_live_query or (lambda _entry: "unknown")
         self.yoosee_query = yoosee_query
         self.clock = clock
         self.poll_seconds = poll_seconds
         self.stop_event = threading.Event()
         self.thread = None
+        self.icsee_thread = None
+        self.icsee_thread_lock = threading.Lock()
 
-    def poll_once(self):
-        now = self.clock()
-        checked_at = utc_text(now)
+    def _groups(self):
         groups = {}
         for entry in self.entries:
             key = provider_group(entry)
             if key is not None:
                 groups.setdefault(key, []).append(entry)
+        return groups
 
+    def _poll_yoosee(self, groups):
         yoosee_groups = {key: group for key, group in groups.items() if key[0] == "yoosee"}
         if yoosee_groups:
+            checked_at = utc_text(self.clock())
             try:
                 snapshot = self.yoosee_query(self.socket_path)
             except (OSError, ValueError, TimeoutError):
@@ -367,52 +375,84 @@ class CameraStatusMonitor:
                     self.store.update(entry["id"], state, checked_at=checked_at,
                                       last_online_at=last_online)
 
+    def _poll_icsee(self, groups):
         for (_provider, cloud_id), group in groups.items():
             if _provider != "icsee":
                 continue
             source_key = "icsee:" + hashlib.sha256(cloud_id.encode("utf-8")).hexdigest()
             previous_provider = self.store.source_check(source_key)
+            now = self.clock()
             provider_due = is_icsee_status_due(
                 previous_provider["checkedAt"] if previous_provider else None, now
             )
             if provider_due:
+                provider_checked_at = utc_text(now)
                 try:
                     provider_state = self.icsee_query(group[0])
                 except Exception:
                     provider_state = "unknown"
                 if provider_state not in VALID_STATES:
                     provider_state = "unknown"
-                self.store.mark_source_checked(source_key, checked_at, provider_state)
+                self.store.mark_source_checked(source_key, provider_checked_at, provider_state)
             else:
                 provider_state = previous_provider["status"]
 
-            if provider_state != "online":
+            if provider_due and provider_state != "online":
                 for entry in group:
-                    self.store.update(entry["id"], provider_state, checked_at=checked_at)
+                    try:
+                        live_state = self.icsee_live_query(entry)
+                    except Exception:
+                        live_state = "unknown"
+                    if live_state == "online":
+                        self.store.update(entry["id"], "online", checked_at=utc_text(self.clock()))
+                    else:
+                        self.store.update(entry["id"], provider_state, checked_at=provider_checked_at)
+                continue
+            if provider_state != "online":
                 continue
 
             provider_recovered = previous_provider is not None and previous_provider["status"] != "online"
             for entry in group:
                 channel_key = "icsee-channel:" + hashlib.sha256(entry["id"].encode("utf-8")).hexdigest()
                 previous_channel = self.store.source_check(channel_key)
+                now = self.clock()
                 channel_due = is_icsee_status_due(
                     previous_channel["checkedAt"] if previous_channel else None, now
                 )
                 if not provider_recovered and not channel_due:
                     continue
+                channel_started_at = utc_text(now)
                 try:
                     state = self.icsee_channel_query(entry)
                 except Exception:
                     state = "unknown"
                 if state not in VALID_STATES:
                     state = "unknown"
-                self.store.update(entry["id"], state, checked_at=checked_at)
-                self.store.mark_source_checked(channel_key, checked_at, state)
+                self.store.update(entry["id"], state, checked_at=channel_started_at)
+                self.store.mark_source_checked(channel_key, utc_text(self.clock()), state)
+
+    def poll_once(self):
+        groups = self._groups()
+        self._poll_yoosee(groups)
+        self._poll_icsee(groups)
+
+    def _schedule_icsee(self, groups):
+        if not any(provider == "icsee" for provider, _key in groups):
+            return
+        with self.icsee_thread_lock:
+            if self.icsee_thread and self.icsee_thread.is_alive():
+                return
+            self.icsee_thread = threading.Thread(
+                target=self._poll_icsee, args=(groups,), name="icsee-status-monitor", daemon=True,
+            )
+            self.icsee_thread.start()
 
     def run(self):
         while not self.stop_event.is_set():
             try:
-                self.poll_once()
+                groups = self._groups()
+                self._poll_yoosee(groups)
+                self._schedule_icsee(groups)
             except Exception:
                 # A failed provider poll must not stop the camera catalog service.
                 pass

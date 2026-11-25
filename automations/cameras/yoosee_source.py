@@ -98,7 +98,8 @@ class Hub:
         self.started_at = time.monotonic()
         self.last_video_at = {device: None for device in devices}
         self.last_online_at = {device: None for device in devices}
-        self.observer_usable = {device: True for device in devices}
+        self.observer_confirmed = {device: False for device in devices}
+        self.observer_usable = {device: False for device in devices}
         self.workers = {}
         self.session = None
         self.session_at = 0.0
@@ -148,7 +149,7 @@ class Hub:
         result = {}
         for device in self.clients:
             last_video = self.last_video_at[device]
-            if not self.observer_usable[device]:
+            if not self.observer_confirmed[device] or not self.observer_usable[device]:
                 # Authentication, SDK startup, or the observation pipeline can
                 # fail without proving that the camera itself is offline.
                 status = "unknown"
@@ -163,7 +164,8 @@ class Hub:
         while True:
             process = None
             logger = None
-            self.observer_usable[device] = False
+            if not self.observer_confirmed[device]:
+                self.observer_usable[device] = False
             try:
                 async with self.start_lock:
                     started = time.monotonic()
@@ -174,7 +176,6 @@ class Hub:
                         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                     )
-                    self.observer_usable[device] = True
                     logger = asyncio.create_task(self.report(process.stderr, device))
                     process.stdin.write(sdk_input(session, device))
                     await process.stdin.drain()
@@ -190,6 +191,8 @@ class Hub:
                         raise EOFError("SDK stream ended")
                     self.publish(device, watchers, packet)
             except Exception as error:
+                if not self.observer_confirmed[device] or not isinstance(error, (asyncio.TimeoutError, EOFError)):
+                    self.observer_usable[device] = False
                 print(f"Yoosee {device % 10000:04d}: {type(error).__name__}", file=sys.stderr, flush=True)
                 self.buffers[device].clear()
                 # Keep players subscribed while the SDK reconnects.
@@ -212,6 +215,8 @@ class Hub:
         while True:
             line = await stream.readline()
             if not line:
+                if not self.observer_confirmed[device]:
+                    self.observer_usable[device] = False
                 return
             if line.startswith(b"Yoosee source failed: "):
                 self.observer_usable[device] = False
@@ -222,9 +227,12 @@ class Hub:
                     code = int(status_match.group(2))
                     if status_match.group(1) == b"playback error" and code != 0:
                         self.observer_usable[device] = False
-                    elif status_match.group(1) == b"state" and code == 5:
-                        # IoTVideoPlayerCommon.h defines STATE_PLAY as 5.
-                        self.observer_usable[device] = True
+                    elif status_match.group(1) == b"state":
+                        # STATE_PLAY is 5; a newly spawned subprocess alone
+                        # is not evidence that the SDK can observe the camera.
+                        self.observer_usable[device] = code == 5
+                        if code == 5:
+                            self.observer_confirmed[device] = True
                 codec_match = re.fullmatch(rb"YOOSEE device [0-9]{1,4} codec ([0-9]+) resolution [0-9]+x[0-9]+\r?\n", line)
                 if codec_match and int(codec_match.group(1)) != 5:
                     # The decoder cannot inspect a format other than the
@@ -232,8 +240,13 @@ class Hub:
                     self.observer_usable[device] = False
                 sys.stderr.buffer.write(line)
                 sys.stderr.buffer.flush()
+            else:
+                # Unexpected SDK/runtime output means the observer cannot
+                # safely distinguish camera inactivity from its own failure.
+                self.observer_usable[device] = False
 
     def publish(self, device, watchers, packet):
+        self.observer_confirmed[device] = True
         self.observer_usable[device] = True
         self.last_video_at[device] = time.monotonic()
         self.last_online_at[device] = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
