@@ -15,7 +15,7 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
   const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)), cacheDir, logLevel: 'silent', server: { host:'127.0.0.1',port:0 } });
   await server.listen(); t.after(async () => { await server.close(); await rm(cacheDir, { recursive:true,force:true }); });
   const viewports = [{width:320,height:844},{width:390,height:844},{width:844,height:320},{width:844,height:390},{width:1365,height:768}];
-  for (const {width,height} of viewports) for (const mode of ['list', 'player', 'pair', 'single']) {
+  for (const {width,height} of viewports) for (const mode of ['list', 'visuals', 'player', 'pair', 'single']) {
     const { stdout, screenshot } = await runBrowserLayout(browser, { width,height,mobile:width < 700 || height < 500,
       captureScreenshot: width === 390 && mode === 'single' && Boolean(process.env.CAMERA_CONTROLS_SCREENSHOT),
       url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/cameras-layout.html?${mode}` });
@@ -24,6 +24,10 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
     if (mode === 'list') {
       assert.equal(layout.cards.length,9);
       assert.ok(layout.cards.every(card => card.left >= 0 && card.right <= width));
+    } else if (mode === 'visuals') {
+      assert.equal(layout.visualCards.length,1);
+      assert.ok(layout.tabs.left >= 0 && layout.tabs.right <= width);
+      assert.ok(layout.visualCards.every(card => card.left >= 0 && card.right <= width));
     } else {
       assert.equal(layout.portrait,String(height > width));
       if (height < width) assert.equal(layout.liveStateColor, 'rgb(242, 244, 246)');

@@ -3,6 +3,7 @@ import { reportOrientation } from '../native/report-orientation.js';
 const GRID_LIMIT = 8;
 const THUMBNAIL_PREFIX = 'energetico:camera-preview:v1:';
 const CAMERA_NAME_PREFIX = 'energetico:camera-name:v1:';
+const CAMERA_VISUAL_PREFIX = 'energetico:camera-visual:v1:';
 const HLS_MIME = 'application/vnd.apple.mpegurl';
 const HEVC_MIME = 'video/mp4; codecs="hvc1.1.6.L120.B0"';
 const GRID_RECONNECT_DELAY_MS = 12000;
@@ -13,6 +14,10 @@ function thumbnailStoragePrefix(accountKey) {
 
 function cameraNameStoragePrefix(accountKey) {
   return accountKey ? `${CAMERA_NAME_PREFIX}${encodeURIComponent(accountKey)}:` : '';
+}
+
+function cameraVisualStorageKey(accountKey) {
+  return accountKey ? `${CAMERA_VISUAL_PREFIX}${encodeURIComponent(accountKey)}` : '';
 }
 
 function isThumbnail(value) {
@@ -47,8 +52,10 @@ export function createCamerasView(documentRef) {
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
     let player, gridRequest, playback = [], playerChannels = [], channels = [], choosing = false;
+    let activeTab = 'cameras', creatingVisual = false, camerasLoaded = false, visuals = [];
     let cameraOrientationBinding = null;
     let nameEditor = null, nameEditorReturnFocus = null, nameEditorChannelId = null;
+    let visualNameEditor = null, visualNameEditorReturnFocus = null;
     let playerReturnFocus = null, playerReturnChannelId = null;
     let playerSuspended = false;
     let thumbnailsChanged = false;
@@ -57,6 +64,7 @@ export function createCamerasView(documentRef) {
     const windowRef = documentRef.defaultView;
     const storagePrefix = thumbnailStoragePrefix(accountKey);
     const nameStoragePrefix = cameraNameStoragePrefix(accountKey);
+    const visualStorageKey = cameraVisualStorageKey(accountKey);
 
     function loadCameraNames() {
       if (!nameStoragePrefix) return;
@@ -67,6 +75,30 @@ export function createCamerasView(documentRef) {
           if (typeof saved === 'string' && saved.trim() && saved.trim().length <= 120) channel.label = saved.trim();
         }
       } catch { /* Camera names remain usable when storage is unavailable. */ }
+    }
+
+    function loadVisuals() {
+      if (!visualStorageKey) return [];
+      try {
+        const saved = JSON.parse(windowRef?.localStorage?.getItem(visualStorageKey) ?? '[]');
+        if (!Array.isArray(saved)) return [];
+        const valid = [];
+        for (const item of saved) {
+          if (!item || typeof item !== 'object' || typeof item.name !== 'string'
+              || !Array.isArray(item.cameraIds)) continue;
+          const name = item.name.trim();
+          if (!name || name.length > 120) continue;
+          const cameraIds = [];
+          for (const value of item.cameraIds) {
+            if (typeof value !== 'string' && typeof value !== 'number') continue;
+            const id = String(value).trim();
+            if (id && !cameraIds.includes(id)) cameraIds.push(id);
+            if (cameraIds.length >= GRID_LIMIT) break;
+          }
+          if (cameraIds.length) valid.push({ name, cameraIds });
+        }
+        return valid;
+      } catch { return []; }
     }
 
     function loadThumbnails() {
@@ -110,17 +142,34 @@ export function createCamerasView(documentRef) {
     dialog.innerHTML = `
       <header class="cameras-header">
         <div class="cameras-header__bar"><button type="button" data-camera-back aria-label="Voltar">‹</button>
-        <h1>Câmeras</h1><button type="button" data-camera-grid aria-label="Selecionar várias câmeras" title="Selecionar várias câmeras">▦</button></div>
+        <h1 data-camera-heading>Câmeras</h1><button type="button" data-camera-grid aria-label="Selecionar várias câmeras" title="Selecionar várias câmeras">▦</button></div>
+        <nav class="cameras-header__tabs" data-camera-tabs role="tablist" aria-label="Câmeras e visuais">
+          <button type="button" id="camera-tab-cameras" role="tab" aria-selected="true" data-camera-tab="cameras">Câmeras</button>
+          <button type="button" id="camera-tab-visuals" role="tab" aria-selected="false" data-camera-tab="visuals">Visuais</button>
+        </nav>
       </header>
-      <main class="cameras-list"><p role="status" aria-live="polite"></p><div data-camera-cards></div></main>
-      <footer class="cameras-selection" hidden><span data-camera-count></span><button type="button" data-camera-open-grid disabled>Abrir câmeras</button></footer>`;
+      <main class="cameras-list" id="camera-panel" role="tabpanel" aria-labelledby="camera-tab-cameras">
+        <p role="status" aria-live="polite"></p>
+        <button class="camera-visuals__create" type="button" data-camera-create-visual hidden>＋ Criar visual</button>
+        <div data-camera-cards></div>
+      </main>
+      <footer class="cameras-selection" hidden><span data-camera-count></span>
+        <div class="cameras-selection__actions"><button type="button" data-camera-create-cancel hidden>Cancelar</button>
+          <button type="button" data-camera-open-grid disabled>Abrir câmeras</button></div></footer>`;
     const status = dialog.querySelector('[role=status]');
     const cards = dialog.querySelector('[data-camera-cards]');
     const selection = dialog.querySelector('.cameras-selection');
     const background = Array.from(dialog.children);
     const gridButton = dialog.querySelector('[data-camera-grid]');
     const gridOpen = dialog.querySelector('[data-camera-open-grid]');
+    const gridCancel = dialog.querySelector('[data-camera-create-cancel]');
     const count = dialog.querySelector('[data-camera-count]');
+    const heading = dialog.querySelector('[data-camera-heading]');
+    const tabs = dialog.querySelector('[data-camera-tabs]');
+    const cameraTab = dialog.querySelector('[data-camera-tab="cameras"]');
+    const visualsTab = dialog.querySelector('[data-camera-tab="visuals"]');
+    const createVisualButton = dialog.querySelector('[data-camera-create-visual]');
+    const cameraPanel = dialog.querySelector('#camera-panel');
     const make = (tag, className, text) => {
       const node = documentRef.createElement(tag);
       node.className = className;
@@ -200,12 +249,131 @@ export function createCamerasView(documentRef) {
       input.select();
     }
 
+    function closeVisualNameEditor({ restoreFocus = true } = {}) {
+      if (!visualNameEditor) return;
+      const editor = visualNameEditor;
+      visualNameEditor = null;
+      if (editor.open && typeof editor.close === 'function') editor.close();
+      editor.remove();
+      if (restoreFocus) visualNameEditorReturnFocus?.focus?.({ preventScroll: true });
+      visualNameEditorReturnFocus = null;
+    }
+
+    function requestVisualName(cameraIds, trigger) {
+      if (visualNameEditor || !cameraIds.length) return;
+      const editor = documentRef.createElement('dialog');
+      editor.className = 'camera-visual-editor';
+      editor.dataset.cameraVisualEditor = '';
+      editor.setAttribute('aria-labelledby', 'camera-visual-editor-title');
+      editor.innerHTML = `
+        <form class="camera-name-editor__form" data-camera-visual-form>
+          <h2 id="camera-visual-editor-title">Nomeie seu visual</h2>
+          <label for="camera-visual-editor-input">Nome do visual</label>
+          <input id="camera-visual-editor-input" data-camera-visual-name type="text" maxlength="120" autocomplete="off">
+          <p class="camera-name-editor__error" role="alert" aria-live="polite"></p>
+          <div class="camera-name-editor__actions">
+            <button type="button" data-camera-visual-cancel>Cancelar</button>
+            <button type="submit">Salvar visual</button>
+          </div>
+        </form>`;
+      const form = editor.querySelector('[data-camera-visual-form]');
+      const input = editor.querySelector('[data-camera-visual-name]');
+      const error = editor.querySelector('[role="alert"]');
+      visualNameEditor = editor;
+      visualNameEditorReturnFocus = trigger;
+      editor.addEventListener('cancel', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeVisualNameEditor();
+      });
+      editor.querySelector('[data-camera-visual-cancel]').addEventListener('click', () => closeVisualNameEditor());
+      form.addEventListener('submit', event => {
+        event.preventDefault();
+        error.textContent = '';
+        const name = input.value.trim();
+        if (!name || name.length > 120) {
+          error.textContent = 'Digite um nome para o visual com até 120 caracteres.';
+          input.focus();
+          return;
+        }
+        const next = [...visuals, { name, cameraIds }];
+        try {
+          const storage = windowRef?.localStorage;
+          if (!visualStorageKey || !storage) throw new Error('Visual storage is unavailable.');
+          storage.setItem(visualStorageKey, JSON.stringify(next));
+        } catch {
+          error.textContent = 'Não foi possível salvar este visual neste dispositivo.';
+          input.focus();
+          return;
+        }
+        visuals = next;
+        closeVisualNameEditor({ restoreFocus: false });
+        creatingVisual = false;
+        choosing = false;
+        activeTab = 'visuals';
+        selected.clear();
+        status.textContent = 'Visual salvo.';
+        render();
+        dialog.querySelector(`[data-camera-visual-open="${visuals.length - 1}"]`)?.focus?.({ preventScroll: true });
+      });
+      documentRef.body.append(editor);
+      editor.showModal();
+      input.focus({ preventScroll: true });
+    }
+
+    function openVisual(visual, trigger) {
+      const available = new Map(channels.map(channel => [String(channel.id), channel]));
+      const chosen = visual.cameraIds.map(id => available.get(String(id))).filter(Boolean);
+      const missing = visual.cameraIds.length - chosen.length;
+      if (!chosen.length) {
+        status.textContent = 'Nenhuma câmera deste visual está disponível agora.';
+        return;
+      }
+      let notice = '';
+      if (missing) {
+        const noun = missing === 1 ? 'câmera' : 'câmeras';
+        const verb = missing === 1 ? 'não está' : 'não estão';
+        notice = `${missing} ${noun} deste visual ${verb} disponível${missing === 1 ? '' : 'is'} agora.`;
+        status.textContent = notice;
+      } else status.textContent = '';
+      openPlayer(chosen, trigger, { visualName: visual.name, notice });
+    }
+
     function render() {
       cards.replaceChildren();
+      tabs.hidden = creatingVisual;
+      heading.textContent = creatingVisual ? 'Selecione câmeras' : 'Câmeras';
+      cameraTab.setAttribute('aria-selected', String(activeTab === 'cameras'));
+      visualsTab.setAttribute('aria-selected', String(activeTab === 'visuals'));
+      cameraPanel.setAttribute('aria-labelledby', activeTab === 'visuals' ? 'camera-tab-visuals' : 'camera-tab-cameras');
+      createVisualButton.hidden = activeTab !== 'visuals' || creatingVisual;
+      createVisualButton.disabled = channels.length === 0;
+      gridButton.hidden = creatingVisual || activeTab !== 'cameras';
       selection.hidden = !choosing;
+      gridCancel.hidden = !creatingVisual;
       gridButton.setAttribute('aria-pressed', String(choosing));
       count.textContent = `${selected.size} de ${GRID_LIMIT} selecionadas`;
+      gridOpen.textContent = creatingVisual ? 'Criar visual' : 'Abrir câmeras';
       gridOpen.disabled = selected.size === 0;
+
+      if (activeTab === 'visuals' && !creatingVisual) {
+        visuals.forEach((visual, index) => {
+          const card = make('article', 'camera-visual-card');
+          card.dataset.cameraVisualCard = String(index);
+          const details = make('div', 'camera-visual-card__details');
+          details.append(make('strong', 'camera-visual-card__name', visual.name));
+          details.append(make('span', 'camera-visual-card__count', `${visual.cameraIds.length} ${visual.cameraIds.length === 1 ? 'câmera' : 'câmeras'}`));
+          const openButton = make('button', 'camera-visual-card__open', 'Abrir visual');
+          openButton.type = 'button'; openButton.dataset.cameraVisualOpen = String(index);
+          openButton.setAttribute('aria-label', `Abrir visual ${visual.name}`);
+          openButton.addEventListener('click', () => openVisual(visual, openButton));
+          card.append(details, openButton);
+          cards.append(card);
+        });
+        if (!visuals.length && camerasLoaded && !status.textContent) status.textContent = 'Nenhum visual salvo.';
+        return;
+      }
+
       for (const channel of channels) {
         const card = make('article', 'camera-card');
         const heading = make('div', 'camera-card__heading');
@@ -330,7 +498,8 @@ export function createCamerasView(documentRef) {
       connectPlayer();
     }
     function close() {
-      page.abort(); closeNameEditor({ restoreFocus: false }); stopPlayer({ restoreFocus: false });
+      page.abort(); closeNameEditor({ restoreFocus: false }); closeVisualNameEditor({ restoreFocus: false });
+      stopPlayer({ restoreFocus: false });
       cameraOrientationBinding?.destroy(); cameraOrientationBinding = null;
       documentRef.removeEventListener('visibilitychange', visibilityChanged);
       windowRef?.removeEventListener('pagehide', pageHidden);
@@ -490,7 +659,7 @@ export function createCamerasView(documentRef) {
         item.status.textContent = error.message || 'Não foi possível abrir esta câmera.';
       }
     }
-    function openPlayer(chosen, trigger = documentRef.activeElement) {
+    function openPlayer(chosen, trigger = documentRef.activeElement, { visualName = '', notice = '' } = {}) {
       const preview = chosen.length > 1;
       const replacingPlayer = Boolean(player);
       if (!replacingPlayer) {
@@ -509,7 +678,7 @@ export function createCamerasView(documentRef) {
       const back = make('button', 'cameras-player__back', '‹'); back.type = 'button'; back.dataset.cameraPlayerBack = '';
       back.setAttribute('aria-label', 'Voltar para a lista de câmeras');
       back.addEventListener('click', stopPlayer);
-      const title = make('strong', 'cameras-player__title', chosen.length === 1 ? chosen[0].label : `${chosen.length} câmeras`);
+      const title = make('strong', 'cameras-player__title', visualName || (chosen.length === 1 ? chosen[0].label : `${chosen.length} câmeras`));
       const liveState = make('span', 'cameras-player__live-state', 'Conectando…');
       liveState.setAttribute('role', 'status');
       const expand = make('button', 'cameras-player__expand', '⛶'); expand.type = 'button';
@@ -521,6 +690,8 @@ export function createCamerasView(documentRef) {
         expand.setAttribute('aria-label', expanded ? 'Restaurar controles' : 'Expandir vídeo');
       });
       header.append(back, title, liveState, expand);
+      const visualNotice = notice ? make('p', 'cameras-player__visual-notice', notice) : null;
+      visualNotice?.setAttribute('role', 'status');
       const stage = make('main', 'cameras-player__stage');
       stage.dataset.count = String(chosen.length);
       const tileItems = [];
@@ -769,7 +940,9 @@ export function createCamerasView(documentRef) {
         actions.append(audioButton);
       }
       const modeNote = chosen.length > 1 ? make('p', 'cameras-player__multi-note', 'Toque em “1 tela” para controlar essa câmera.') : null;
-      panel.append(header, stage);
+      panel.append(header);
+      if (visualNotice) panel.append(visualNotice);
+      panel.append(stage);
       if (ptzPanel) panel.append(ptzPanel);
       if (modeNote) panel.append(modeNote);
       panel.append(actions, controlStatus);
@@ -794,12 +967,40 @@ export function createCamerasView(documentRef) {
     dialog.addEventListener('cancel', event => {
       event.preventDefault();
       if (nameEditor) closeNameEditor();
+      else if (visualNameEditor) closeVisualNameEditor();
       else if (player) stopPlayer();
       else close();
     });
     dialog.querySelector('[data-camera-back]').addEventListener('click', close);
+    cameraTab.addEventListener('click', () => {
+      activeTab = 'cameras'; creatingVisual = false; choosing = false; selected.clear();
+      status.textContent = camerasLoaded ? channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.' : 'Carregando câmeras…';
+      render();
+    });
+    visualsTab.addEventListener('click', () => {
+      activeTab = 'visuals'; creatingVisual = false; choosing = false; selected.clear();
+      status.textContent = camerasLoaded ? visuals.length ? '' : 'Nenhum visual salvo.' : 'Carregando câmeras…';
+      render();
+    });
+    createVisualButton.addEventListener('click', () => {
+      if (!channels.length) return;
+      activeTab = 'cameras'; creatingVisual = true; choosing = true; selected.clear();
+      status.textContent = 'Selecione até 8 câmeras para este visual.';
+      render();
+      dialog.querySelector('[data-camera-select]')?.focus({ preventScroll: true });
+    });
+    gridCancel.addEventListener('click', () => {
+      activeTab = 'visuals'; creatingVisual = false; choosing = false; selected.clear();
+      status.textContent = visuals.length ? '' : 'Nenhum visual salvo.';
+      render();
+      createVisualButton.focus({ preventScroll: true });
+    });
     gridButton.addEventListener('click', () => { choosing = !choosing; selected.clear(); render(); });
-    gridOpen.addEventListener('click', () => openPlayer(channels.filter(channel => selected.has(channel.id)), gridOpen));
+    gridOpen.addEventListener('click', () => {
+      const chosen = channels.filter(channel => selected.has(channel.id));
+      if (creatingVisual) requestVisualName(chosen.map(channel => String(channel.id)), gridOpen);
+      else openPlayer(chosen, gridOpen);
+    });
     documentRef.body.append(dialog); dialog.showModal();
     cameraOrientationBinding = reportOrientation.bindCameraPlayer(dialog);
     status.textContent = 'Carregando câmeras…';
@@ -808,9 +1009,18 @@ export function createCamerasView(documentRef) {
       channels = result.map(channel => ({ ...channel }));
       loadCameraNames();
       loadThumbnails();
-      status.textContent = channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.';
+      visuals = loadVisuals();
+      camerasLoaded = true;
+      status.textContent = activeTab === 'visuals'
+        ? visuals.length ? '' : 'Nenhum visual salvo.'
+        : channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.';
       render();
-    }).catch(error => { if (!page.signal.aborted) status.textContent = error.message || 'Não foi possível carregar as câmeras.'; });
+    }).catch(error => {
+      if (!page.signal.aborted) {
+        camerasLoaded = true;
+        status.textContent = error.message || 'Não foi possível carregar as câmeras.';
+      }
+    });
     return true;
   }
   return {

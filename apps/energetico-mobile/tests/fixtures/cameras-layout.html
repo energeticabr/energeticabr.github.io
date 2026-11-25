@@ -1,7 +1,12 @@
 <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/src/ui/cameras-view.css"></head>
 <body><script type="module">
 import { createCamerasView } from '/src/ui/cameras-view.js';
+const accountKey = 'layout-check';
+localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify([{
+  name: 'Portão e pátio', cameraIds: ['camera-1', 'camera-2'],
+}]));
 createCamerasView(document).open({
+  accountKey,
   list: async () => Array.from({ length: 9 }, (_, index) => ({
     id: 'camera-' + (index + 1), label: 'Obra Xavante • canal ' + (index + 1),
   })),
@@ -14,6 +19,8 @@ await new Promise(resolve => setTimeout(resolve, 100));
 if (location.search.includes('single')) {
   document.querySelector('[data-camera-open]').click();
   document.querySelector('[data-camera-recordings]').click();
+} else if (location.search.includes('visuals')) {
+  document.querySelector('[data-camera-tab="visuals"]').click();
 } else if (location.search.includes('pair')) {
   document.querySelector('[data-camera-grid]').click();
   document.querySelectorAll('[data-camera-select]')[0].click();
@@ -39,7 +46,8 @@ if (location.search.includes('single')) {
 }
 const dialog=document.querySelector('.cameras-view'), player=document.querySelector('.cameras-player');
 const rect=node=>{const r=node.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
-document.documentElement.dataset.layout=JSON.stringify({viewport:rect(dialog), cards:[...document.querySelectorAll('.camera-card')].map(rect),
+document.documentElement.dataset.layout=JSON.stringify({viewport:rect(dialog), tabs:document.querySelector('.cameras-header__tabs') && rect(document.querySelector('.cameras-header__tabs')),
+  cards:[...document.querySelectorAll('.camera-card')].map(rect), visualCards:[...document.querySelectorAll('.camera-visual-card')].map(rect),
   player:player && rect(player), portrait:String(window.matchMedia('(orientation: portrait)').matches), tiles:[...document.querySelectorAll('.cameras-player__tile')].map(rect),
   controls:document.querySelector('.cameras-player__actions') && rect(document.querySelector('.cameras-player__actions')),
   drawer:document.querySelector('.cameras-player__drawer') && rect(document.querySelector('.cameras-player__drawer')),
