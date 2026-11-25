@@ -5,7 +5,7 @@ import { createCamerasView } from '../src/ui/cameras-view.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, readinessError,
-  cameraList, timerControl, catalog } = {}) {
+  cameraList, timerControl, catalog, startError } = {}) {
   const dom = new JSDOM('<button>Menu</button>', { url: 'https://example.com' });
   t.after(() => dom.window.close());
   const { document, HTMLMediaElement, HTMLDialogElement } = dom.window;
@@ -23,6 +23,8 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, 
   const starts = [], grids = [], moves = [], searches = [], archives = [];
   const start = async (id, { signal, codecs }) => {
     starts.push({ id, signal, codecs });
+    const failure = startError?.({ id, attempt: starts.length, codecs, window: dom.window });
+    if (failure) throw failure;
     if (id === 'site-1' && codecs.length && readinessError) throw readinessError;
     return codecs.includes('hevc') ? 'https://video.example/hevc.m3u8' : 'https://video.example/index.m3u8';
   };
@@ -206,12 +208,115 @@ test('preserva o erro terminal e atualiza o cabeçalho durante reconexão', asyn
   video.dispatchEvent(new Event('playing'));
   assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
   video.dispatchEvent(new Event('waiting'));
-  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Reconectando…');
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
   video.dispatchEvent(new Event('error'));
   assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Transmissão interrompida');
   video.dispatchEvent(new Event('waiting'));
   video.dispatchEvent(new Event('playing'));
   assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Transmissão interrompida');
+});
+
+test('retoma uma câmera individual quando a rede volta e preserva o áudio escolhido', async t => {
+  const { document, starts } = setup(t); await flush();
+  document.querySelector('[data-camera-open]').click(); await flush();
+  const window = document.defaultView;
+  const video = document.querySelector('video');
+  video.dispatchEvent(new window.Event('playing'));
+  document.querySelector('[data-camera-audio]').click();
+  assert.equal(video.muted, false);
+  Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+  Object.defineProperty(video, 'error', { configurable: true, value: { code: 2 } });
+  video.dispatchEvent(new window.Event('error'));
+  await flush();
+  assert.equal(starts.length, 1);
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Reconectando…');
+  Object.defineProperty(window.navigator, 'onLine', { value: true });
+  window.dispatchEvent(new window.Event('online'));
+  await flush();
+  assert.equal(starts.length, 2);
+  assert.equal(video.muted, false);
+  video.dispatchEvent(new window.Event('playing'));
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
+});
+
+test('mantém a sessão ao voltar rapidamente e a suspende se o app ficar em segundo plano', async t => {
+  const { document, starts, view } = setup(t); await flush();
+  document.querySelector('[data-camera-open]').click(); await flush();
+  const window = document.defaultView;
+  Object.defineProperty(document, 'hidden', { value: false });
+  const video = document.querySelector('video');
+  let suspend;
+  window.setTimeout = callback => { suspend = callback; return 1; };
+  window.clearTimeout = () => { suspend = null; };
+  video.dispatchEvent(new window.Event('playing'));
+  view.suspend();
+  assert.equal(starts[0].signal.aborted, false);
+  assert.equal(typeof suspend, 'function');
+  view.resume();
+  assert.equal(suspend, null);
+  await flush();
+  assert.equal(starts.length, 1);
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
+
+  view.suspend();
+  suspend();
+  assert.equal(starts[0].signal.aborted, true);
+  view.resume();
+  await flush();
+  assert.equal(starts.length, 2);
+});
+
+test('aguarda a rede se a chamada de recuperação falhar enquanto o aparelho fica offline', async t => {
+  const { document, starts } = setup(t, { startError: ({ attempt, window }) => {
+    if (attempt === 2) return Object.assign(new Error('Serviço ocupado'), { status: 429 });
+    if (attempt !== 3) return null;
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    return Object.assign(new Error('Rede indisponível'), { code: 'NETWORK_UNAVAILABLE' });
+  } });
+  await flush();
+  document.querySelector('[data-camera-open]').click(); await flush();
+  const window = document.defaultView;
+  const video = document.querySelector('video');
+  let retry;
+  window.setTimeout = callback => { retry = callback; return 1; };
+  window.clearTimeout = () => { retry = null; };
+  video.dispatchEvent(new window.Event('playing'));
+  Object.defineProperty(video, 'error', { configurable: true, value: { code: 2 } });
+  video.dispatchEvent(new window.Event('error'));
+  await flush();
+  assert.equal(starts.length, 2);
+  retry();
+  await flush();
+  assert.equal(starts.length, 3);
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Reconectando…');
+  Object.defineProperty(window.navigator, 'onLine', { value: true });
+  window.dispatchEvent(new window.Event('online'));
+  await flush();
+  assert.equal(starts.length, 4);
+  video.dispatchEvent(new window.Event('playing'));
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
+});
+
+test('usa o modo compatível se o formato direto deixar de abrir durante a recuperação', async t => {
+  const { document, starts } = setup(t, { supportsHevc: true,
+    startError: ({ attempt, codecs }) => attempt > 1 && codecs.length
+      ? Object.assign(new Error('Fonte indisponível'), { status: 503 }) : null,
+  });
+  await flush();
+  document.querySelector('[data-camera-open]').click(); await flush();
+  const window = document.defaultView;
+  const video = document.querySelector('video');
+  let retry;
+  window.setTimeout = callback => { retry = callback; return 1; };
+  window.clearTimeout = () => { retry = null; };
+  video.dispatchEvent(new window.Event('playing'));
+  Object.defineProperty(video, 'error', { configurable: true, value: { code: 2 } });
+  video.dispatchEvent(new window.Event('error'));
+  await flush();
+  retry();
+  await flush();
+  assert.deepEqual(starts.map(item => item.codecs), [['h264', 'hevc'], ['h264', 'hevc'], ['h264', 'hevc'], []]);
+  assert.match(video.src, /index\.m3u8$/);
 });
 
 test('pede HEVC apenas quando o aparelho suporta e retorna a H.264 se a mídia falhar', async t => {
@@ -251,32 +356,48 @@ test('a grade reconecta uma transmissão interrompida sem reabrir os demais cana
   const video = document.querySelector('video');
   const notice = video.parentElement.querySelector('[role="status"]');
   const { Event } = document.defaultView;
-  let reconnectTimer;
+  const timers = new Map();
+  let timerId = 0;
   document.defaultView.setTimeout = (callback, delay) => {
-    assert.equal(delay, 12000);
-    reconnectTimer = callback;
-    return 1;
+    timers.set(++timerId, { callback, delay });
+    return timerId;
   };
-  document.defaultView.clearTimeout = () => { reconnectTimer = null; };
+  document.defaultView.clearTimeout = id => timers.delete(id);
+  const elapse = () => {
+    const [id, timer] = [...timers.entries()][0];
+    timers.delete(id);
+    timer.callback();
+    return timer.delay;
+  };
   video.dispatchEvent(new Event('playing'));
   video.dispatchEvent(new Event('waiting'));
+  assert.equal(notice.textContent, '');
+  video.dispatchEvent(new Event('playing'));
+  assert.equal(timers.size, 0);
+  video.dispatchEvent(new Event('waiting'));
+  assert.equal(elapse(), 2000);
   assert.equal(notice.textContent, 'Reconectando…');
-  video.dispatchEvent(new Event('playing'));
-  assert.equal(reconnectTimer, null);
-  video.dispatchEvent(new Event('waiting'));
-  reconnectTimer();
+  assert.equal(elapse(), 18000);
   await flush();
   assert.deepEqual(grids.map(grid => grid.ids), [['site-1', 'site-2'], ['site-1']]);
   assert.deepEqual(starts.at(-1).codecs, ['h264', 'hevc']);
   video.dispatchEvent(new Event('playing'));
   video.dispatchEvent(new Event('waiting'));
-  reconnectTimer();
+  elapse();
+  elapse();
+  assert.equal(elapse(), 4000);
   await flush();
-  assert.equal(grids.length, 2);
+  assert.equal(grids.length, 3);
+  video.dispatchEvent(new Event('playing'));
+  video.dispatchEvent(new Event('waiting'));
+  elapse();
+  elapse();
+  await flush();
+  assert.equal(grids.length, 3);
   assert.match(notice.textContent, /Toque no vídeo para tentar novamente/);
   video.click();
   await flush();
-  assert.equal(grids.length, 3);
+  assert.equal(grids.length, 4);
   assert.equal(starts.filter(item => item.id === 'site-2').length, 1);
 });
 

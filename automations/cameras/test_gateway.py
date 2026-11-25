@@ -222,6 +222,7 @@ class CameraGatewayTest(unittest.TestCase):
                 stream.expires = stream.last_request + 60
                 stream.alive.return_value = True
                 stream.ready.return_value = False
+                stream.ready_to_play.side_effect = stream.ready
                 return stream
             source.side_effect = preview
             status, _, result = self.request("POST", CATALOG, "owner",
@@ -273,7 +274,8 @@ class CameraGatewayTest(unittest.TestCase):
                 viewer=viewer, channel=name, direct=direct, preview=preview, mode="live",
                 last_request=now, expires=300, startup_deadline=None, started_at=None, has_video=False,
                 capability=secrets.token_urlsafe(32), playlist="index.m3u8",
-                alive=lambda: True, ready=lambda: name == "ch-3", close=MagicMock(),
+                alive=lambda: True, ready=lambda: name == "ch-3",
+                ready_to_play=lambda: name == "ch-3", close=MagicMock(),
             )
             stream.path = f"{MEDIA}/{stream.capability}/{stream.playlist}"
 
@@ -332,6 +334,66 @@ class CameraGatewayTest(unittest.TestCase):
             clock.return_value = 270
             self.gateway.expire(check_progress=True)
             self.assertFalse(self.gateway.streams)
+
+    def test_preview_recovery_waits_for_fresh_segments_from_a_stalled_source(self):
+        entry = self.gateway.entries["ch-1"]
+        stream = Stream(entry, "/unused", "owner", preview=True)
+        stream.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(stream.close)
+        stream.startup_deadline = 175
+        stream.alive = lambda: True
+        self.gateway.streams[("owner", "ch-1", False)] = stream
+        manifest = Path(stream.directory.name) / stream.playlist
+        with patch("gateway.time.monotonic") as clock:
+            clock.return_value = 100
+            manifest.write_text("#EXTM3U\n#EXTINF:2\nsegment-00000010.ts\n")
+            self.assertTrue(self.gateway.preview_ready(stream.capability))
+            clock.return_value = 125
+            stream.last_request = 124
+            self.assertFalse(self.gateway.preview_ready(stream.capability))
+            manifest.write_text("#EXTM3U\n#EXTINF:2\nsegment-00000011.ts\n")
+            self.assertTrue(self.gateway.preview_ready(stream.capability))
+
+    def test_active_live_encoder_survives_capability_expiry_and_renews_with_authentication(self):
+        entry = self.gateway.entries["ch-1"]
+        for action in ("play", "play-grid"):
+            with self.subTest(action=action), patch("gateway.time.monotonic") as clock:
+                clock.return_value = 100
+                stream = Stream(entry, "/unused", "owner", preview=True)
+                stream.preview = action == "play-grid"
+                stream.directory = tempfile.TemporaryDirectory()
+                stream.alive = lambda: True
+                stream.startup_deadline = 175
+                key = ("owner", "ch-1", False)
+                self.gateway.streams[key] = stream
+                try:
+                    manifest = Path(stream.directory.name) / stream.playlist
+                    manifest.write_text("#EXTM3U\n#EXTINF:2\nsegment-00000001.ts\n")
+                    self.assertTrue(stream.ready_to_play())
+                    old_path = stream.path
+                    clock.return_value = stream.expires - 1
+                    stream.last_request = clock.return_value - 2
+                    manifest.write_text("#EXTM3U\n#EXTINF:2\nsegment-00000002.ts\n")
+                    self.assertEqual(self.request("GET", old_path)[0], 200)
+                    clock.return_value += 2
+                    self.assertEqual(self.request("GET", old_path)[0], 404)
+                    self.assertIs(self.gateway.streams.get(key), stream)
+                    self.assertEqual(self.request("POST", CATALOG, "another", {"action": action})[0], 403)
+                    body = {"action": action, "channelId": "ch-1", "channelIds": ["ch-1"]}
+                    status, _, payload = self.request("POST", CATALOG, "owner", body)
+                    self.assertEqual(status, 200)
+                    refreshed = json.loads(payload)
+                    new_path = refreshed["paths"]["ch-1"] if stream.preview else refreshed["path"]
+                    self.assertIs(self.gateway.streams[key], stream)
+                    self.assertNotEqual(new_path, old_path)
+                    self.assertEqual(self.request("GET", new_path)[0], 200)
+                    self.assertEqual(self.request("GET", old_path)[0], 404)
+                    clock.return_value += 46
+                    self.assertEqual(self.request("GET", new_path)[0], 404)
+                    self.assertNotIn(key, self.gateway.streams)
+                finally:
+                    self.gateway.streams.pop(key, None)
+                    stream.close()
 
     def test_decoder_fallback_reuses_only_an_inactive_preview_from_the_same_account(self):
         import gateway
@@ -401,6 +463,7 @@ class CameraGatewayTest(unittest.TestCase):
                 self.closed = False
             def alive(self): return not self.closed
             def ready(self): return True
+            def ready_to_play(self): return self.ready()
             def read(self, filename): return b"#EXTINF" if filename.endswith(".m3u8") else b"video"
             def close(self): self.closed = True
         with patch.object(gateway, "Stream", FakeStream):

@@ -300,9 +300,8 @@ def main():
                 assembler = LiveXStreamHevcAssembler(track_timestamps=True)
                 return run_guarded_live_attempt(play, lambda data, key: forward_video(assembler, data, key))
 
-            preview = os.environ.get("ENERGETICO_CAMERA_LIVE_PREVIEW") == "1"
             result = run_live_source(attempt_live, stop,
-                                     can_reconnect=lambda: preview and sent_video,
+                                     can_reconnect=lambda: sent_video,
                                      capture_error=service.MonitorCaptureError)
         if result is not None and os.environ.get("ENERGETICO_CAMERA_DIAGNOSTIC") == "1":
             print("Source stage:", service._detect_failure_stage(result.result).get("stage"),
