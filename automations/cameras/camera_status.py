@@ -257,6 +257,14 @@ class CameraStatusStore:
             self._connection.commit()
         return misses
 
+    def reset_source_misses(self, source_key):
+        with self._lock:
+            self._connection.execute(
+                "UPDATE camera_status_checks SET consecutive_misses = 0 WHERE source_key = ?",
+                (source_key,),
+            )
+            self._connection.commit()
+
     def events_after(self, cursor, *, limit=100):
         cursor = max(0, int(cursor))
         limit = max(1, min(100, int(limit)))
@@ -416,6 +424,8 @@ class CameraStatusMonitor:
 
             if provider_due and provider_state != "online":
                 for entry in group:
+                    channel_key = "icsee-channel:" + hashlib.sha256(entry["id"].encode("utf-8")).hexdigest()
+                    self.store.reset_source_misses(channel_key)
                     try:
                         live_state = self.icsee_live_query(entry)
                     except Exception:

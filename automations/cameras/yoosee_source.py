@@ -180,11 +180,6 @@ class Hub:
                         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                     )
-                    # A refreshed, valid cloud session plus a successfully
-                    # launched SDK can continue a previously confirmed feed.
-                    # A first-ever process is never trusted before SDK/video evidence.
-                    if self.observer_confirmed[device]:
-                        self.observer_usable[device] = True
                     logger = asyncio.create_task(self.report(process.stderr, device))
                     process.stdin.write(sdk_input(session, device))
                     await process.stdin.drain()

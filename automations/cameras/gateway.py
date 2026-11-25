@@ -2,6 +2,7 @@
 
 import contextlib
 from datetime import date
+import hashlib
 import json
 import math
 import os
@@ -16,7 +17,7 @@ from urllib.error import HTTPError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from camera_status import CameraStatusMonitor, CameraStatusStore, utc_text
+from camera_status import CameraStatusMonitor, CameraStatusStore, is_icsee_entry, utc_text
 
 
 CATALOG = "/api/portal-cameras"
@@ -306,6 +307,13 @@ class Gateway:
             )
         return self.status_monitor.start()
 
+    def _mark_live_channel_online(self, channel):
+        self.status_store.update(channel, "online", checked_at=utc_text())
+        entry = self.entries.get(channel)
+        if isinstance(entry, dict) and is_icsee_entry(entry):
+            channel_key = "icsee-channel:" + hashlib.sha256(channel.encode("utf-8")).hexdigest()
+            self.status_store.reset_source_misses(channel_key)
+
     def _icsee_live_channel_status_locked(self, channel):
         existing = [stream for stream in self.streams.values()
                     if stream.channel == channel and stream.mode == "live"]
@@ -568,7 +576,7 @@ class Gateway:
                 stream.last_request = time.monotonic()
                 if stream.ready_to_play():
                     if stream.mode == "live":
-                        self.status_store.update(channel, "online", checked_at=utc_text())
+                        self._mark_live_channel_online(channel)
                     return stream.path
             time.sleep(0.25)
         with self.lock:
@@ -611,7 +619,7 @@ class Gateway:
             now = time.monotonic()
             stream.last_request = now
             if ready and stream.mode == "live":
-                self.status_store.update(stream.channel, "online", checked_at=utc_text())
+                self._mark_live_channel_online(stream.channel)
             return ready
 
     def get(self, capability, filename):
