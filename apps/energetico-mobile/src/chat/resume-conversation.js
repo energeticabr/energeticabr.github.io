@@ -40,6 +40,7 @@ export async function resumeConversation(client, { signal, timeoutMs = RESUME_IN
   check(signal);
   signal?.addEventListener('abort', cancelLifetime, { once: true });
   const progressByStage = new Map();
+  let diaryEvidenceChecked = false;
   let totalTimer;
   const touchTotal = () => {
     clearTimeout(totalTimer);
@@ -70,6 +71,14 @@ export async function resumeConversation(client, { signal, timeoutMs = RESUME_IN
             }
             onEvidenceProgress?.(value);
           } });
+          check(request.signal);
+          // Finishing the preflight is progress, even if there was no PDF.
+          // Later retries must still share the existing inactivity window.
+          if (!diaryEvidenceChecked) {
+            diaryEvidenceChecked = true;
+            touch();
+            touchTotal();
+          }
         }
         check(request.signal);
         const result = await client.sendText({ text: '', replyId: 'input_continue' }, {

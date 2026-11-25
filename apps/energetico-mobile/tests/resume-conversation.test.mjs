@@ -25,6 +25,26 @@ test('ordinary resume can skip the diary evidence preflight', async () => {
   assert.equal(resumes, 1);
 });
 
+test('a completed diary check leaves a fresh window to load the current question', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let finishCheck, finishQuestion, signal;
+  const recovery = resumeConversation({
+    waitForDiaryEvidence: () => new Promise(resolve => { finishCheck = resolve; }),
+    sendText: (_body, options) => {
+      signal = options.progressSignal;
+      return new Promise(resolve => { finishQuestion = resolve; });
+    },
+  }).catch(error => error.code);
+  t.mock.timers.tick(27_600);
+  finishCheck();
+  await new Promise(setImmediate);
+  t.mock.timers.tick(34_300);
+  await new Promise(setImmediate);
+  assert.equal(signal.aborted, false);
+  finishQuestion('menu');
+  assert.equal(await recovery, 'menu');
+});
+
 test('authentication and throttling failures do not cause automatic reconnection retries', async () => {
   for (const status of [401, 403, 429]) {
     let requests = 0;

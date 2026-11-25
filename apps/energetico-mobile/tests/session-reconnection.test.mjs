@@ -68,17 +68,22 @@ test('startup accepts the current menu when the VM responds after 34 seconds', a
   const startup = h.controller.start();
   await turn();
   h.emit('draft-changed', { value: 'rascunho local' });
+  h.controller.handleBackground();
+  await h.controller.handleForeground();
   t.mock.timers.tick(34_300);
   await turn();
   assert.equal(h.state().resuming, true);
   assert.equal(h.state().error, null);
   assert.deepEqual(backgroundReads, []);
+  h.controller.handleBackground();
   finish(menu());
   await startup;
   assert.equal(h.state().resuming, false);
   assert.equal(h.state().error, null);
   assert.equal(h.store.getState().draft, 'rascunho local');
   assert.deepEqual(sent, [{ text: '', replyId: 'input_continue' }]);
+  assert.deepEqual(backgroundReads, []);
+  await h.controller.handleForeground();
   assert.deepEqual(backgroundReads.sort(), ['DDA', 'SEFAZ']);
 });
 

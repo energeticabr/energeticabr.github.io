@@ -1454,6 +1454,8 @@ export function createAppController({
     }
   }
   let starting = false;
+  let initialConversationRevision = null;
+  let appInForeground = true;
   let sessionRevision = 0;
   let operationProgress = null;
   let foregroundProgress = null;
@@ -2530,6 +2532,7 @@ export function createAppController({
   }
 
   function handleBackground() {
+    appInForeground = false;
     view.suspendCameras?.();
     cameraStatusNotifications.suspend();
     sefazSyncSession?.suspend();
@@ -2570,8 +2573,10 @@ export function createAppController({
   }
 
   async function handleForeground() {
+    appInForeground = true;
     view.resumeCameras?.();
-    cameraStatusNotifications.resume();
+    if (initialConversationRevision === sessionRevision) return true;
+    if (!cameraStatusNotifications.resume()) startCameraStatusNotificationsIfEnabled();
     void refreshSwileReminder();
     resumeDdaSync();
     resumeSefazSync();
@@ -11700,9 +11705,7 @@ export function createAppController({
       pendingProvisionSharePointAuthorization = null;
       openRecovery();
       render();
-      await continueConversation();
-      if (stopped || sessionRevision !== signInRevision) return false;
-      startSessionMonitors();
+      if (!(await restoreSessionConversation())) return false;
       await refreshPendingProvisionSnapshot();
       await refreshPendingConstructionDiaries();
       await refreshPendingNotesSnapshot();
@@ -11752,15 +11755,26 @@ export function createAppController({
 
   function startCameraStatusNotificationsIfEnabled() {
     const key = cameraPreviewAccountKey();
-    if (!account || stopped || !key || !cameraStatusAlertsEnabled(key)) return false;
+    if (!account || stopped || sessionStatus !== "authenticated" || !key || !cameraStatusAlertsEnabled(key)) return false;
     return cameraStatusNotifications.start(key);
   }
 
-  function startSessionMonitors() {
-    startCameraStatusNotificationsIfEnabled();
-    refreshDdaMenuAlert();
-    resumeDdaSync();
-    resumeSefazSync();
+  async function restoreSessionConversation(options) {
+    const revision = sessionRevision;
+    initialConversationRevision = revision;
+    try {
+      await continueConversation(options);
+    } finally {
+      if (initialConversationRevision === revision) initialConversationRevision = null;
+    }
+    if (stopped || sessionRevision !== revision) return false;
+    if (appInForeground && !globalThis.document?.hidden) {
+      startCameraStatusNotificationsIfEnabled();
+      refreshDdaMenuAlert();
+      resumeDdaSync();
+      resumeSefazSync();
+    }
+    return true;
   }
 
   function openCameras() {
@@ -13325,9 +13339,10 @@ export function createAppController({
     render();
     const sharedFileIdsPromise = importSharedFiles();
     if (account) {
-      await continueConversation({ checkDiaryEvidence: startupNeedsDiaryEvidenceCheck() });
-      if (stopped || sessionRevision !== startRevision) { starting = false; return; }
-      startSessionMonitors();
+      if (!(await restoreSessionConversation({ checkDiaryEvidence: startupNeedsDiaryEvidenceCheck() }))) {
+        starting = false;
+        return;
+      }
       await refreshPendingProvisionSnapshot();
       await refreshPendingConstructionDiaries();
       await refreshPendingNotesSnapshot();
