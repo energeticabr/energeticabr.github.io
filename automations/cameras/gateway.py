@@ -15,6 +15,8 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from camera_status import CameraStatusMonitor, CameraStatusStore, utc_text
+
 
 CATALOG = "/api/portal-cameras"
 MEDIA = "/api/portal-camera-media"
@@ -202,7 +204,7 @@ class Stream:
 
 
 class Gateway:
-    def __init__(self, config, identity=graph_identity):
+    def __init__(self, config, identity=graph_identity, status_store=None):
         self.users = {uid.casefold() for uid in config["viewers"]}
         self.origins = set(config["origins"])
         self.entries = {}
@@ -222,6 +224,8 @@ class Gateway:
         self.query_slots = threading.BoundedSemaphore(1)
         self.query_active = False
         self.recording_tokens = {}
+        self.status_store = status_store or CameraStatusStore(":memory:")
+        self.status_monitor = None
 
     def authorize(self, authorization):
         scheme, _, token = authorization.partition(" ")
@@ -241,7 +245,11 @@ class Gateway:
         return viewer
 
     def catalog(self):
-        channels = [{"id": entry["id"], "label": entry["label"]} for entry in self.entries.values()]
+        channels = []
+        for entry in self.entries.values():
+            status = self.status_store.get(entry["id"])
+            channels.append({"id": entry["id"], "label": entry["label"],
+                             "status": status["status"], "lastOnlineAt": status["lastOnlineAt"]})
         self._add_camera_group_metadata(channels)
         return channels
 
@@ -267,6 +275,11 @@ class Gateway:
             label = CHANNEL_LABEL_SUFFIX.sub("", label).strip() or label
             for channel in group:
                 channel.update(cameraGroup=group_id, cameraLabel=label)
+
+    def start_status_monitor(self):
+        if self.status_monitor is None:
+            self.status_monitor = CameraStatusMonitor(self.entries, self.status_store)
+        return self.status_monitor.start()
 
     def recordings(self, channel, viewer, day, hour=None):
         if not isinstance(channel, str) or channel not in self.entries:
@@ -467,6 +480,7 @@ class Gateway:
                     raise PlaybackError(503)
                 stream.last_request = time.monotonic()
                 if stream.ready_to_play():
+                    self.status_store.update(channel, "online", checked_at=utc_text())
                     return stream.path
             time.sleep(0.25)
         with self.lock:
@@ -508,6 +522,8 @@ class Gateway:
             ready = stream.ready_to_play()
             now = time.monotonic()
             stream.last_request = now
+            if ready and stream.mode == "live":
+                self.status_store.update(stream.channel, "online", checked_at=utc_text())
             return ready
 
     def get(self, capability, filename):
@@ -640,7 +656,10 @@ def handler_for(gateway):
 
 if __name__ == "__main__":
     config = json.loads(Path(os.environ["ENERGETICO_CAMERA_CONFIG"]).read_text(encoding="utf-8"))
-    gateway = Gateway(config)
+    status_path = os.environ.get("ENERGETICO_CAMERA_STATUS_DB",
+                                 "/var/lib/energetico-cameras/camera-status.sqlite3")
+    gateway = Gateway(config, status_store=CameraStatusStore(status_path))
+    gateway.start_status_monitor()
     threading.Thread(target=gateway.reap, daemon=True).start()
     with ThreadingHTTPServer(("127.0.0.1", int(config.get("port", 8872))), handler_for(gateway)) as server:
         server.serve_forever()

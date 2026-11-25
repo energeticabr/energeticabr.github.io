@@ -6,6 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 DynamicUser=yes
+StateDirectory=energetico-cameras
+StateDirectoryMode=0700
 WorkingDirectory=/opt/energetico-cameras
 Environment=PYTHONPATH=/opt/energetico-cameras/client:/opt/energetico-cameras/deps
 Environment=ENERGETICO_CAMERA_CONFIG=%d/cameras.json

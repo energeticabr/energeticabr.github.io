@@ -20,6 +20,7 @@ test('retomada aguarda o PDF pendente antes de consultar a pergunta e preserva r
   const h = makeHarness(); t.after(() => h.controller.stop());
   await h.controller.start();
   h.store.setDraft('observação preservada');
+  h.store.queueFiles([new File(['pdf'], 'pendente.pdf', { type: 'application/pdf' })]);
   let release;
   const pending = new Promise(resolve => { release = resolve; });
   h.chatCalls.length = 0;

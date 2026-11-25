@@ -10,6 +10,8 @@ Para vídeo ao vivo, o gateway repassa H.264 em MPEG-TS ou HEVC em MP4 fragmenta
 
 Instale `gateway.py`, o adaptador da fonte e seus runtimes em `/opt/energetico-cameras`. A unidade systemd lê o arquivo privado `/etc/energetico-cameras/cameras.json` por meio de `LoadCredential`. O proxy HTTPS deve enviar somente `/api/portal-cameras` e `/api/portal-camera-media/*` para `127.0.0.1:8872`. Se configurar um tempo limite para a resposta de `/api/portal-cameras`, permita pelo menos 100 segundos para cobrir a autenticação e a abertura do vídeo. Remova o caminho de mídia dos logs de acesso do proxy, pois ele contém uma chave temporária de reprodução.
 
+O catálogo inclui `status` (`online`, `offline` ou `unknown`) e `lastOnlineAt` em UTC. O gateway persiste esses valores em `/var/lib/energetico-cameras/camera-status.sqlite3`, dentro do `StateDirectory` privado da unidade. A cada duas horas, consulta o status iCSee pelo `CloudIdClient` da instalação existente, sem abrir vídeo nem enviar usuário ou senha da câmera. Falha de comunicação resulta em status desconhecido. A lista do aplicativo atualiza a cada minuto enquanto estiver aberta.
+
 O JSON tem os campos `viewers` (IDs dos usuários no diretório), `origins` (origens HTTPS e Capacitor autorizadas), `ffmpeg` (caminho absoluto, com libx264), e `channels`. Cada canal define `id`, `label`, `format` (`hevc`, `h264` ou `mpegts`), `command` (lista de argumentos com executável absoluto), e opcionalmente `input` (JSON recebido pelo processo via stdin). A fonte escreve somente o fluxo de vídeo no stdout. As credenciais ficam no arquivo privado.
 
 O catálogo identifica os canais da mesma câmera pelo `input.cloudId` do iCSee ou pelo `input.deviceId` do Yoosee. Para câmeras com mais de um canal, o catálogo inclui o ID do primeiro canal como `cameraGroup` e o primeiro nome cadastrado disponível, sem o sufixo de canal, como `cameraLabel`. O aplicativo mantém juntas as entradas do mesmo grupo, na posição em que aparece o primeiro canal.
@@ -23,6 +25,8 @@ Se uma transmissão iCSee ao vivo que já enviou vídeo perder a conexão, o ada
 ## Fonte Yoosee
 
 A fonte Yoosee abre vídeo ao vivo pela nuvem e entrega HEVC ao gateway. Cada canal aponta para `/usr/bin/python3`, `/opt/energetico-cameras/yoosee/yoosee_source.py` e `/opt/energetico-cameras/yoosee`, com formato `hevc` e `input.deviceId` numérico. O adaptador atual oferece vídeo ao vivo.
+
+Para status, o gateway envia `STATUS` pelo socket Unix local da fonte. A resposta informa a atividade do mesmo fluxo de vídeo; nenhum fluxo ou sondagem extra da câmera é iniciado. Pacotes recentes significam on-line. Após 130 segundos sem pacote, o estado fica off-line; durante os primeiros 130 segundos de inicialização sem imagem, fica desconhecido. A última imagem recebida fica persistida pelo gateway.
 
 Compile `yoosee_live.cpp` com MSVC x64 e `/MD`, usando o cabeçalho e a biblioteca de importação do mesmo pacote do [GWTimes IoTVideo-PC](https://github.com/GWTimes/IoTVideo-PC). Instale o executável e as DLLs correspondentes em `yoosee/bin`. Instale o Wine x64 e os arquivos de idioma e dependências MinGW em `yoosee/runtime`, preservando a estrutura `usr` dos pacotes. Instale também o módulo de autenticação `yoosee_cloud` com seu arquivo de chaves e sua licença no diretório `yoosee`.
 

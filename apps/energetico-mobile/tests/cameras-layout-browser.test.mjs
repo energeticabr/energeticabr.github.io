@@ -24,6 +24,14 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
     if (mode === 'list') {
       assert.equal(layout.cards.length,9);
       assert.ok(layout.cards.every(card => card.left >= 0 && card.right <= width));
+      assert.ok(layout.offlineStatus, `Offline status ribbon missing at ${width}x${height}`);
+      const { ribbon, lastOnline, preview } = layout.offlineStatus;
+      assert.ok(ribbon.left >= preview.left && ribbon.right <= preview.right
+        && ribbon.top >= preview.top && ribbon.bottom <= preview.bottom,
+      `Offline ribbon is outside its preview at ${width}x${height}: ${JSON.stringify(layout.offlineStatus)}`);
+      assert.ok(lastOnline.left >= preview.left && lastOnline.right <= preview.right
+        && lastOnline.top >= preview.top && lastOnline.bottom <= preview.bottom,
+      `Last-online text is outside its preview at ${width}x${height}: ${JSON.stringify(layout.offlineStatus)}`);
       assert.equal(layout.listHeadings.length, 9);
       assert.equal(layout.selectionHeadings.length, 9);
       assert.ok(layout.listHeadings.every(({ checkbox }) => !checkbox));

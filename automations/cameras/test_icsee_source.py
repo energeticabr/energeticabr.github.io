@@ -1,7 +1,9 @@
 import unittest
+from io import BufferedReader, BytesIO
+from types import SimpleNamespace
 from unittest.mock import Mock
 
-from icsee_source import run_guarded_live_attempt, run_live_source
+from icsee_source import discover_device_status, read_motion_command, run_guarded_live_attempt, run_live_source
 
 
 class CaptureError(Exception):
@@ -9,6 +11,34 @@ class CaptureError(Exception):
 
 
 class CameraSourceTest(unittest.TestCase):
+    def test_motion_reader_keeps_commands_prefetched_with_the_initial_settings_line(self):
+        stream = BufferedReader(BytesIO(b'{"cloudId":"AB12345678"}\n{"move":"left"}\n'))
+        self.assertEqual(stream.readline(), b'{"cloudId":"AB12345678"}\n')
+        ptz = Mock()
+        self.assertTrue(read_motion_command(stream, ptz))
+        ptz.enqueue_pulse.assert_called_once_with("left", speed=4, hold=0.35)
+        self.assertFalse(read_motion_command(stream, ptz))
+
+    def test_motion_reader_rejects_oversized_commands_and_stops(self):
+        stream = BufferedReader(BytesIO(b"x" * 16385 + b"\n"))
+        self.assertFalse(read_motion_command(stream, Mock()))
+
+    def test_status_discovery_uses_cloud_id_without_authenticating_or_starting_video(self):
+        codes = object()
+        client = Mock()
+        client.auth_codes.return_value = codes
+        client.discover_status.return_value = SimpleNamespace(status="Offline")
+        self.assertEqual(discover_device_status("AB12345678", client), "Offline")
+        client.auth_codes.assert_called_once_with("AB12345678")
+        client.discover_status.assert_called_once_with(codes)
+
+    def test_status_discovery_rejects_unknown_provider_states(self):
+        client = Mock()
+        client.auth_codes.return_value = object()
+        client.discover_status.return_value = SimpleNamespace(status="Maybe")
+        with self.assertRaises(ValueError):
+            discover_device_status("AB12345678", client)
+
     def test_preview_reopens_once_after_the_source_ends(self):
         for first in ("finished", CaptureError()):
             with self.subTest(first=first):

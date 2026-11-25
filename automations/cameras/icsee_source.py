@@ -5,7 +5,6 @@ import http.client
 import ipaddress
 import json
 import os
-import select
 import ssl
 import sys
 import threading
@@ -158,17 +157,49 @@ def run_guarded_live_attempt(run, forward):
             stopped.set()
 
 
+def discover_device_status(cloud_id, status_client):
+    codes = status_client.auth_codes(cloud_id)
+    status = status_client.discover_status(codes)
+    if status.status not in {"Online", "Offline"}:
+        raise ValueError("Invalid iCSee status")
+    return status.status
+
+
+def read_motion_command(stream, ptz):
+    """Read and dispatch one PTZ command from the buffered settings stream."""
+    raw = stream.readline(16385)
+    if not raw or len(raw) > 16384:
+        return False
+    try:
+        command = json.loads(raw)
+        direction = command.get("move") if isinstance(command, dict) else None
+        if direction in {"up", "down", "left", "right"}:
+            ptz.enqueue_pulse(direction, speed=4, hold=0.35)
+    except (ValueError, TypeError):
+        pass
+    return True
+
+
 def main():
     # Keep any messages printed by the vendor runtime out of its media output.
     media = os.fdopen(os.dup(sys.stdout.fileno()), "wb", buffering=0)
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+    from xmplayer.core import legacy_api
+    settings = json.loads(sys.stdin.buffer.readline(16384))
+    install_transport(legacy_api, settings["tlsPins"])
+    operation = settings.get("operation", "live")
+    if operation == "status":
+        from xmplayer.core.cloud_id import CloudIdClient
+        status = discover_device_status(settings["cloudId"], CloudIdClient())
+        media.write(json.dumps({"status": status}).encode("utf-8"))
+        media.close()
+        return
+
     from xmplayer.config.loader import load_monitor_config
-    from xmplayer.core import legacy_api, service
+    from xmplayer.core import service
     from xmplayer.core.ptz import PtzCommandQueue
     from xmplayer.media.live_hevc import LiveXStreamHevcAssembler
 
-    settings = json.loads(sys.stdin.buffer.readline(16384))
-    install_transport(legacy_api, settings["tlsPins"])
     config = load_monitor_config()
     config.connection_mode = "cloud_id"
     config.device_id = settings["cloudId"]
@@ -183,7 +214,6 @@ def main():
         kwargs["wakeup_probe_enabled"] = False
         return run(self, **kwargs)
     legacy_api.RpsLiveChain.run = run_channel
-    operation = settings.get("operation", "live")
     if operation == "recordings":
         build_query = service._build_opfilequery_followup
         def build_channel_query(begin, end):
@@ -221,25 +251,11 @@ def main():
     ptz = PtzCommandQueue()
 
     def commands():
-        buffer = b""
-        while not stop.is_set():
-            if not select.select([sys.stdin.fileno()], [], [], 0.25)[0]:
-                continue
-            chunk = os.read(sys.stdin.fileno(), 4096)
-            if not chunk:
-                return
-            buffer += chunk
-            if len(buffer) > 16384:
-                return
-            while b"\n" in buffer:
-                raw, buffer = buffer.split(b"\n", 1)
-                try:
-                    command = json.loads(raw)
-                    direction = command.get("move") if isinstance(command, dict) else None
-                    if direction in {"up", "down", "left", "right"}:
-                        ptz.enqueue_pulse(direction, speed=4, hold=0.35)
-                except (ValueError, TypeError):
-                    continue
+        # Keep using the buffered reader used for the initial settings line.
+        # readline() may prefetch a PTZ command that arrived during startup;
+        # reading the same descriptor with os.read() would skip that buffer.
+        while not stop.is_set() and read_motion_command(sys.stdin.buffer, ptz):
+            pass
 
     command_thread = None
     if operation == "live":

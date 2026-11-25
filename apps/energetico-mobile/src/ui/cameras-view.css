@@ -170,7 +170,10 @@
   margin-inline-start: auto;
   accent-color: #3279e8;
 }
-.camera-card__wifi { color: #31b8a5; font-size: 18px; }
+.camera-card__wifi { font-size: 18px; }
+.camera-card__wifi--online { color: #31b8a5; }
+.camera-card__wifi--offline { color: #c33232; }
+.camera-card__wifi--unknown { color: #9299a1; }
 .camera-card__rename {
   display: grid;
   flex: none;
@@ -203,6 +206,29 @@
 }
 .camera-card__image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(.68); }
 .camera-card__play, .camera-card__caption { position: relative; }
+.camera-card__status-ribbon {
+  position: absolute;
+  inset: 0 0 auto;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  background: #a92727e8;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: .04em;
+  text-align: left;
+}
+.camera-card__last-online {
+  position: absolute;
+  inset: 34px 0 auto;
+  box-sizing: border-box;
+  padding: 7px 12px;
+  background: #111b;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: left;
+}
 .camera-card__play {
   display: grid;
   place-items: center;
@@ -427,6 +453,12 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
 }
 .cameras-player__saved-frame[hidden] ~ .cameras-player__tile-footer .cameras-player__saved-label {
   display: none;
+}
+.cameras-player__tile--focusable .cameras-player__saved-label {
+  max-width: calc(100% - 88px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cameras-player__stage[data-focused="true"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
 .cameras-player__tile[hidden] { display: none !important; }

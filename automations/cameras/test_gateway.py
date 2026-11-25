@@ -27,6 +27,7 @@ class CameraGatewayTest(unittest.TestCase):
         self.thread.start()
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
+        self.addCleanup(gateway.status_store.close)
 
     def request(self, method, path, token=None, body=None, origin=None):
         connection = http.client.HTTPConnection("127.0.0.1", self.server.server_port)
@@ -48,7 +49,20 @@ class CameraGatewayTest(unittest.TestCase):
                                               "https://www.energeticabr.com")
         self.assertEqual(status, 200)
         self.assertIn(("Cache-Control", "private, no-store"), headers)
-        self.assertEqual(json.loads(result), {"channels": [{"id": "ch-1", "label": "Câmera de teste"}]})
+        self.assertEqual(json.loads(result), {"channels": [{
+            "id": "ch-1", "label": "Câmera de teste", "status": "unknown", "lastOnlineAt": None,
+        }]})
+
+    def test_catalog_includes_persisted_status_without_exposing_source_configuration(self):
+        self.gateway.status_store.update("ch-1", "offline", checked_at="2026-11-24T14:00:00Z",
+                                         last_online_at="2026-11-24T12:00:00Z")
+        status, _, result = self.request("POST", CATALOG, "owner", {"action": "list"})
+        self.assertEqual(status, 200)
+        channel = json.loads(result)["channels"][0]
+        self.assertEqual(channel["status"], "offline")
+        self.assertEqual(channel["lastOnlineAt"], "2026-11-24T12:00:00Z")
+        self.assertNotIn("input", channel)
+        self.assertNotIn("command", channel)
 
     def test_catalog_identifies_channels_from_the_same_physical_camera(self):
         sources = [
@@ -69,14 +83,20 @@ class CameraGatewayTest(unittest.TestCase):
         status, _, response = self.request("POST", CATALOG, "owner", {"action": "list"})
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(response), {"channels": [
-            {"id": "patio-1", "label": "Pátio · canal 1", "cameraGroup": "patio-1", "cameraLabel": "Pátio"},
-            {"id": "other", "label": "Pátio · canal 1"},
-            {"id": "patio-2", "label": "Pátio - canal 2", "cameraGroup": "patio-1", "cameraLabel": "Pátio"},
-            {"id": "yoosee-1", "label": "Entrada (Yoosee)", "cameraGroup": "yoosee-1", "cameraLabel": "Entrada (Yoosee)"},
-            {"id": "yoosee-2", "label": "Entrada (Yoosee)", "cameraGroup": "yoosee-1", "cameraLabel": "Entrada (Yoosee)"},
-            {"id": "unidentified", "label": "Pátio · canal 3"},
-            {"id": "no-label", "label": None, "cameraGroup": "no-label", "cameraLabel": "Jardim"},
-            {"id": "garden", "label": "Jardim · canal 2", "cameraGroup": "no-label", "cameraLabel": "Jardim"},
+            {"id": "patio-1", "label": "Pátio · canal 1", "status": "unknown", "lastOnlineAt": None,
+             "cameraGroup": "patio-1", "cameraLabel": "Pátio"},
+            {"id": "other", "label": "Pátio · canal 1", "status": "unknown", "lastOnlineAt": None},
+            {"id": "patio-2", "label": "Pátio - canal 2", "status": "unknown", "lastOnlineAt": None,
+             "cameraGroup": "patio-1", "cameraLabel": "Pátio"},
+            {"id": "yoosee-1", "label": "Entrada (Yoosee)", "status": "unknown", "lastOnlineAt": None,
+             "cameraGroup": "yoosee-1", "cameraLabel": "Entrada (Yoosee)"},
+            {"id": "yoosee-2", "label": "Entrada (Yoosee)", "status": "unknown", "lastOnlineAt": None,
+             "cameraGroup": "yoosee-1", "cameraLabel": "Entrada (Yoosee)"},
+            {"id": "unidentified", "label": "Pátio · canal 3", "status": "unknown", "lastOnlineAt": None},
+            {"id": "no-label", "label": None, "status": "unknown", "lastOnlineAt": None,
+             "cameraGroup": "no-label", "cameraLabel": "Jardim"},
+            {"id": "garden", "label": "Jardim · canal 2", "status": "unknown", "lastOnlineAt": None,
+             "cameraGroup": "no-label", "cameraLabel": "Jardim"},
         ]})
 
     def test_request_cannot_choose_a_source_or_access_files_without_a_capability(self):

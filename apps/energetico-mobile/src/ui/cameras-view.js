@@ -6,6 +6,8 @@ const CAMERA_NAME_PREFIX = 'energetico:camera-name:v1:';
 const CAMERA_VISUAL_PREFIX = 'energetico:camera-visual:v1:';
 const HLS_MIME = 'application/vnd.apple.mpegurl';
 const HEVC_MIME = 'video/mp4; codecs="hvc1.1.6.L120.B0"';
+const GRID_RECONNECT_DELAY_MS = 12000;
+const CAMERA_STATUS_REFRESH_MS = 60_000;
 const LIVE_WAIT_NOTICE_MS = 2_000;
 const LIVE_STALL_MS = 20_000;
 const LIVE_STABLE_MS = 30_000;
@@ -47,6 +49,11 @@ function groupCameraChannels(channels) {
   return [...groups.values()];
 }
 
+function formatCameraLastOnline(value) {
+  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return null;
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
+}
+
 export function createCamerasView(documentRef) {
   let dialog, closeCurrent, suspendCurrent, resumeCurrent;
 
@@ -67,6 +74,7 @@ export function createCamerasView(documentRef) {
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
     let player, gridRequest, playback = [], playerChannels = [], channels = [], choosing = false;
+    let refreshTimer = null, refreshing = false;
     let cameraGroups = [];
     let activeTab = 'cameras', creatingVisual = false, camerasLoaded = false, visuals = [];
     let cameraOrientationBinding = null;
@@ -83,15 +91,16 @@ export function createCamerasView(documentRef) {
     const nameStoragePrefix = cameraNameStoragePrefix(accountKey);
     const visualStorageKey = cameraVisualStorageKey(accountKey);
 
-    function loadCameraNames() {
-      if (!nameStoragePrefix) return;
+    function loadCameraNames(source = channels) {
+      if (!nameStoragePrefix) return source;
       try {
         const storage = windowRef?.localStorage;
-        for (const channel of channels) {
+        return source.map(channel => {
           const saved = storage?.getItem(nameStoragePrefix + channel.id);
-          if (typeof saved === 'string' && saved.trim() && saved.trim().length <= 120) channel.label = saved.trim();
-        }
-      } catch { /* Camera names remain usable when storage is unavailable. */ }
+          return typeof saved === 'string' && saved.trim() && saved.trim().length <= 120
+            ? { ...channel, label: saved.trim() } : channel;
+        });
+      } catch { return source; /* Camera names remain usable when storage is unavailable. */ }
     }
 
     function loadVisuals() {
@@ -416,7 +425,10 @@ export function createCamerasView(documentRef) {
     function createCameraCard(channel) {
       const card = make('article', 'camera-card');
       const heading = make('div', 'camera-card__heading');
-      const symbol = make('span', 'camera-card__wifi', '◉'); symbol.setAttribute('aria-hidden', 'true');
+      const cameraStatus = channel.status === 'online' || channel.status === 'offline' ? channel.status : 'unknown';
+      const symbol = make('span', `camera-card__wifi camera-card__wifi--${cameraStatus}`, '◉');
+      symbol.setAttribute('aria-label', cameraStatus === 'online' ? 'On-line'
+        : cameraStatus === 'offline' ? 'Off-line' : 'Status desconhecido');
       const title = make('strong', '', channel.label);
       const rename = make('button', 'camera-card__rename');
       rename.type = 'button'; rename.dataset.cameraRename = channel.id;
@@ -439,11 +451,20 @@ export function createCamerasView(documentRef) {
       }
       const openButton = make('button', 'camera-card__preview');
       openButton.type = 'button'; openButton.dataset.cameraOpen = channel.id;
-      openButton.setAttribute('aria-label', `Abrir ${channel.label}`);
+      const lastOnline = cameraStatus === 'offline' ? formatCameraLastOnline(channel.lastOnlineAt) : null;
+      openButton.setAttribute('aria-label', `Abrir ${channel.label}${cameraStatus === 'offline'
+        ? `, câmera off-line. ${lastOnline ? `Última vez on-line: ${lastOnline}` : 'Sem registro de conexão'}` : ''}`);
       if (thumbnails.has(channel.id)) {
         const image = documentRef.createElement('img');
         image.className = 'camera-card__image'; image.src = thumbnails.get(channel.id); image.alt = '';
         openButton.append(image);
+      }
+      if (cameraStatus === 'offline') {
+        const ribbon = make('span', 'camera-card__status-ribbon', 'OFF-LINE');
+        ribbon.dataset.cameraStatus = '';
+        ribbon.setAttribute('role', 'status');
+        openButton.append(ribbon, make('span', 'camera-card__last-online', lastOnline
+          ? `Última vez on-line: ${lastOnline}` : 'Sem registro de conexão'));
       }
       const play = make('span', 'camera-card__play', '▶'); play.setAttribute('aria-hidden', 'true');
       const caption = make('span', 'camera-card__caption', 'Toque para ver ao vivo');
@@ -457,6 +478,54 @@ export function createCamerasView(documentRef) {
       });
       card.append(heading, openButton);
       return card;
+    }
+
+    function sameChannels(next) {
+      return channels.length === next.length && channels.every((channel, index) => {
+        const current = next[index];
+        return channel.id === current.id && channel.label === current.label
+          && channel.status === current.status && channel.lastOnlineAt === current.lastOnlineAt
+          && channel.cameraGroup === current.cameraGroup && channel.cameraLabel === current.cameraLabel;
+      });
+    }
+
+    async function refreshChannels({ initial = false } = {}) {
+      if (page.signal.aborted || player || (!initial && documentRef.hidden) || refreshing) return;
+      refreshing = true;
+      try {
+        const result = await list({ signal: page.signal });
+        if (page.signal.aborted) return;
+        const nextChannels = loadCameraNames(result.map(channel => ({ ...channel })));
+        const nextGroups = groupCameraChannels(nextChannels);
+        const flatNextChannels = nextGroups.flat();
+        const initial = !camerasLoaded;
+        const changed = initial || !sameChannels(flatNextChannels);
+        if (initial) visuals = loadVisuals();
+        camerasLoaded = true;
+        if (changed) {
+          const focused = documentRef.activeElement;
+          const focusedOpenId = focused?.dataset?.cameraOpen;
+          const focusedSelectId = focused?.dataset?.cameraSelect;
+          const focusGrid = focused === gridButton;
+          cameraGroups = nextGroups;
+          channels = flatNextChannels;
+          for (const id of selected) if (!channels.some(channel => channel.id === id)) selected.delete(id);
+          loadThumbnails();
+          status.textContent = creatingVisual ? 'Selecione até 8 câmeras para este visual.'
+            : activeTab === 'visuals' ? visuals.length ? '' : 'Nenhum visual salvo.'
+              : channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.';
+          render();
+          if (focusGrid && !gridButton.hidden) gridButton.focus({ preventScroll: true });
+          else if (focusedOpenId && activeTab === 'cameras' && !creatingVisual) Array.from(dialog.querySelectorAll('[data-camera-open]'))
+            .find(button => button.dataset.cameraOpen === focusedOpenId)?.focus({ preventScroll: true });
+          else if (focusedSelectId && activeTab === 'cameras' && choosing) Array.from(dialog.querySelectorAll('[data-camera-select]'))
+            .find(input => input.dataset.cameraSelect === focusedSelectId)?.focus({ preventScroll: true });
+        }
+      } catch (error) {
+        if (initial && !page.signal.aborted) status.textContent = error.message || 'Não foi possível carregar as câmeras.';
+      } finally {
+        refreshing = false;
+      }
     }
 
     function detachVideo(item) {
@@ -569,7 +638,11 @@ export function createCamerasView(documentRef) {
       connectPlayer();
     }
     function close() {
-      page.abort(); closeNameEditor({ restoreFocus: false }); closeVisualNameEditor({ restoreFocus: false });
+      page.abort();
+      if (refreshTimer !== null) windowRef?.clearInterval(refreshTimer);
+      refreshTimer = null;
+      closeNameEditor({ restoreFocus: false });
+      closeVisualNameEditor({ restoreFocus: false });
       stopPlayer({ restoreFocus: false });
       cameraOrientationBinding?.destroy(); cameraOrientationBinding = null;
       documentRef.removeEventListener('visibilitychange', visibilityChanged);
@@ -927,6 +1000,7 @@ export function createCamerasView(documentRef) {
         playback.push(item); tileItems.push({ tile, video, item, channel });
         tile.append(video, savedFrame, label, liveBadge, notice, retry, footer);
         if (chosen.length > 1 && (move || listRecordings)) {
+          tile.classList.add('cameras-player__tile--focusable');
           const focus = make('button', 'cameras-player__focus', '1 tela');
           focus.type = 'button'; focus.setAttribute('aria-label', `Abrir ${channel.label} em tela individual`);
           focus.addEventListener('click', () => openPlayer([channel], focus));
@@ -1150,24 +1224,8 @@ export function createCamerasView(documentRef) {
     documentRef.body.append(dialog); dialog.showModal();
     cameraOrientationBinding = reportOrientation.bindCameraPlayer(dialog);
     status.textContent = 'Carregando câmeras…';
-    Promise.resolve().then(() => list({ signal: page.signal })).then(result => {
-      if (page.signal.aborted) return;
-      cameraGroups = groupCameraChannels(result.map(channel => ({ ...channel })));
-      channels = cameraGroups.flat();
-      loadCameraNames();
-      loadThumbnails();
-      visuals = loadVisuals();
-      camerasLoaded = true;
-      status.textContent = activeTab === 'visuals'
-        ? visuals.length ? '' : 'Nenhum visual salvo.'
-        : channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.';
-      render();
-    }).catch(error => {
-      if (!page.signal.aborted) {
-        camerasLoaded = true;
-        status.textContent = error.message || 'Não foi possível carregar as câmeras.';
-      }
-    });
+    Promise.resolve().then(() => refreshChannels({ initial: true }));
+    if (windowRef?.setInterval) refreshTimer = windowRef.setInterval(() => { void refreshChannels(); }, CAMERA_STATUS_REFRESH_MS);
     return true;
   }
   return {
