@@ -331,3 +331,22 @@ button.ddr-link-cluster:focus-visible { outline:2px solid #105367; outline-offse
 .ddr-status-cluster.ddr-schedule-cluster{margin-bottom:0;font-size:inherit;padding:8px}
 .ddr-status-cluster[data-status-tone=scheduled]{border-color:#b5ddc3;border-left-color:#27814d;background:#eaf8ee;color:#17643f}
 .ddr-status-cluster.ddr-schedule-cluster small{color:inherit;white-space:normal;overflow-wrap:normal;word-break:normal}
+.dda-provision-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, min(52%, 14rem));
+  gap: 8px;
+}
+.dda-provision-filters > * {
+  min-width: 0;
+  box-sizing: border-box;
+}
+.dda-provision-status {
+  min-height: 42px;
+  border: 1px solid #9eb9c8;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+}

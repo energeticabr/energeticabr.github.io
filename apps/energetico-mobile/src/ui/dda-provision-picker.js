@@ -10,10 +10,16 @@ const DDA_COPY = {
  targetLabel:'Descritivo provisão',
  searchLabel:'Buscar descritivo provisão',
  listLabel:'Descritivos provisão disponíveis',
- loading:'Carregando descritivos sem pagamento efetuado…',
- options:count=>`${count} descritivo(s) sem data de pagamento efetuado. Escolha um para vincular.`,
- empty:'Nenhum descritivo provisão sem data de pagamento efetuado foi encontrado.',
+ loading:'Carregando descritivos de provisão…',
+ options:count=>`${count} descritivo(s). Escolha um para vincular.`,
+ empty:'Nenhum descritivo encontrado para os filtros selecionados.',
  loadError:'Não foi possível carregar os descritivos. Tente novamente.',
+};
+
+const DDA_STATUS_FILTER = {
+ label:'Status do pagamento',
+ choices:[['pending','PAGAMENTO PREVISTO'],['paid','PAGAMENTO EFETUADO']],
+ options:(items,row,status)=>rankDdaProvisionOptions(items.filter(item=>(item.paymentStatus??'pending')===status),row),
 };
 
 export function createReportLinkComparison(doc,value,matches,label,reference){
@@ -37,12 +43,14 @@ function appendDdaComparisons(node,amount,totalMatch,{due,dueMatch}){
 export function createDdaProvisionPicker({service, ...options}){
  return createReportLinkPicker({
   ...options, copy:DDA_COPY,
-  loadOptions:service && (async (row, signal)=>rankDdaProvisionOptions(await service.loadOptions({signal}),row)),
+  loadOptions:service && ((_row,signal)=>service.loadOptions({signal})),
+  optionFilter:DDA_STATUS_FILTER,
   saveLink:(row,id,signal,sharedLinkETag)=>service.save({ddaId:row.id,provisionId:id,signal,sharedLinkETag}),
   sharedLinkQuestion:'Tem certeza que deseja atribuir dois DDAS ao mesmo descritivo provisão?',
   currentLink:row=>row.provisionId,
   rowAmount:row=>row.amount,
-  afterLink:service?.prepareDueAdjustment&& (async (receipt,{form,signal,run,feedback})=>{
+  afterLink:service?.prepareDueAdjustment&& (async (receipt,{form,signal,run,feedback,choices})=>{
+   if(choices[0].paymentStatus==='paid')return receipt;
    try{
     feedback.textContent='Conferindo a data prevista de pagamento…';
     const plan=await run(signal=>service.prepareDueAdjustment(receipt,{signal}));
@@ -71,7 +79,7 @@ export function createDdaProvisionPicker({service, ...options}){
  });
 }
 
-export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveLink,currentLink,rowAmount,amountInCents,renderOptionLabel,afterLink,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,selectCurrent=false,multiple=false,timeoutMs=35000}){
+export function createReportLinkPicker({document:doc,host,copy,loadOptions,optionFilter,saveLink,currentLink,rowAmount,amountInCents,renderOptionLabel,afterLink,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,selectCurrent=false,multiple=false,timeoutMs=35000}){
  let current=null;ensureEditReviewStyles(doc);
  const el=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const money=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^-?\d+(?:\.\d+)?$/.test(text)?Number(text):NaN;return Number.isFinite(number)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(number):'Valor não informado';};
@@ -103,6 +111,16 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
   const referenceAmount=rowAmount(row);
   const summary=el('p','dda-provision-summary',`${row.supplier} · ${copy.sourceLabel} #${row.id} · ${money(referenceAmount)}${selectCurrent&&!multiple&&linkedId?` · Pedido atual ID ${linkedId}`:''}`);
   const search=el('input','dda-provision-search');search.type='search';search.placeholder='Buscar fornecedor ou ID';search.setAttribute('aria-label',copy.searchLabel);
+  let filters=search,status;
+  if(optionFilter){
+   filters=el('div','dda-provision-filters');
+   status=el('select','dda-provision-status');status.setAttribute('aria-label',optionFilter.label);
+   for(const [value,label] of optionFilter.choices){
+    const option=el('option','',label);option.value=value;status.append(option);
+   }
+   search.disabled=status.disabled=true;
+   filters.append(search,status);
+  }
   const feedback=el('p','dda-provision-feedback',copy.loading);feedback.setAttribute('role','status');
   const list=el('div','dda-provision-options');list.setAttribute('role',multiple?'group':'radiogroup');list.setAttribute('aria-label',copy.listLabel);
   const actions=el('div','gallery-record-dialog-buttons'),cancel=el('button','gallery-record-dialog-button','Cancelar'),save=el('button','gallery-record-dialog-button dda-provision-save','SUBMETER');
@@ -110,12 +128,12 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
   const total=amountInCents&&el('output','dda-provision-selection-total','Total selecionado —');
   const referenceCents=amountInCents?.(referenceAmount);
   if(total)actions.append(total);
-  actions.append(cancel,save);dialog.append(header,summary,search,feedback,list,actions);overlay.append(dialog);
+  actions.append(cancel,save);dialog.append(header,summary,filters,feedback,list,actions);overlay.append(dialog);
   const background=[...host.children].map(node=>[node,node.inert===true]);for(const [node] of background)node.inert=true;
   const entry={overlay,dialog,trigger,background,controller:new AbortController(),options:[],selected:new Set(selectCurrent?linkedIds:[]),busy:false,reviewing:false};current=entry;host.append(overlay);dialog.focus();
   const cancelEdit=()=>{if(current===entry&&!entry.busy)close();};cancel.addEventListener('click',cancelEdit);back.addEventListener('click',cancelEdit);
   bindBackdropDismiss(overlay,()=>{if(!entry.reviewing)cancelEdit();});
-  overlay.addEventListener('keydown',event=>{if(event.key==='Escape'&&!entry.busy){event.preventDefault();event.stopPropagation();close();}if(event.key==='Tab'){const nodes=[...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled)')];const index=nodes.indexOf(doc.activeElement);if(nodes.length){event.preventDefault();event.stopPropagation();nodes[(index+(event.shiftKey?-1:1)+nodes.length)%nodes.length].focus();}}});
+  overlay.addEventListener('keydown',event=>{if(event.key==='Escape'&&!entry.busy){event.preventDefault();event.stopPropagation();close();}if(event.key==='Tab'){const nodes=[...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled)')];const index=nodes.indexOf(doc.activeElement);if(nodes.length){event.preventDefault();event.stopPropagation();nodes[(index+(event.shiftKey?-1:1)+nodes.length)%nodes.length].focus();}}});
   function optionLabel(item){
    const text=el('span'),amount=money(item.amount);
    if(renderOptionLabel)renderOptionLabel(text,item,amount);
@@ -127,7 +145,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
   function updateFeedback(){
    const count=list.childElementCount;
    feedback.setAttribute('role','status');
-   feedback.textContent=entry.options.length?copy.options(count,entry.selected.size):copy.empty;
+   feedback.textContent=(status?count:entry.options.length)?copy.options(count,entry.selected.size):copy.empty;
   }
   function updateSelection(){
    let matches=false;
@@ -183,6 +201,17 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
    updateFeedback();
   }
   search.addEventListener('input',render);
+  let allOptions=[];
+  function applyStatus(){
+   entry.options=optionFilter.options(allOptions,row,status.value);
+   render();
+  }
+  status?.addEventListener('change',()=>{
+   if(entry.busy||entry.reviewing)return;
+   entry.selected.clear();
+   save.disabled=true;
+   applyStatus();
+  });
   save.addEventListener('click',async()=>{
    if(current!==entry||entry.busy||entry.reviewing||!canSave())return;
    const selected=[...entry.selected];
@@ -196,6 +225,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
    entry.reviewing=false;
    if(!accepted||current!==entry||host.hidden)return;
    entry.busy=true;save.disabled=cancel.disabled=back.disabled=search.disabled=true;feedback.setAttribute('role','status');feedback.textContent='Gravando vínculo no SharePoint…';
+   if(status)status.disabled=true;
    if(propose)propose.disabled=true;
    for(const choice of list.querySelectorAll('input'))choice.disabled=true;
    async function run(operation){
@@ -231,7 +261,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
      if(current!==entry||host.hidden)return;
     }
     if(afterLink){
-     receipt=await afterLink(receipt,{form:dialog,signal:entry.controller.signal,run,feedback});
+     receipt=await afterLink(receipt,{form:dialog,signal:entry.controller.signal,run,feedback,choices});
      if(current!==entry||host.hidden)return;
     }
     onLinked?.(receipt);
@@ -246,13 +276,24 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,saveL
     if(current===entry){
      save.disabled=!canSave();
      cancel.disabled=back.disabled=search.disabled=false;
+     if(status)status.disabled=false;
      if(propose)propose.disabled=false;
      for(const choice of list.querySelectorAll('input'))choice.disabled=false;
      save.focus();
     }
    }
   });
-  try{const options=await loadOptions(row,entry.controller.signal);if(current!==entry||host.hidden)return;entry.options=options;render();}
+  try{
+   allOptions=await loadOptions(row,entry.controller.signal);
+   if(current!==entry||host.hidden)return;
+   if(status){
+    search.disabled=status.disabled=false;
+    applyStatus();
+   }else{
+    entry.options=allOptions;
+    render();
+   }
+  }
   catch{if(current===entry){feedback.textContent=copy.loadError;feedback.setAttribute('role','alert');}}
  }
  return {show,close,destroy:close,get isOpen(){return current!==null;}};

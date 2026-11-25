@@ -52,9 +52,20 @@ function dueColumn(columns,names){
  if(!column?.dateTime||column.readOnly||column.hidden||column.computed)throw new Error('A data prevista de pagamento não está disponível para edição.');
  return column.name;
 }
-function hasRecordedPayment(fields,names){
- return Boolean(String(fields[names.DATAPGTOEFETUADO]??'').trim())||nameKey(fields[names.STATUS])==='PAGAMENTO EFETUADO'
-  ||nameKey(fields[names.PGTOAGENDADO])==='PAGO';
+function hasRecordedPayment(date,status,schedule){
+ const paymentStatus=nameKey(status);
+ return Boolean(String(date??'').trim())||paymentStatus==='PAGAMENTO EFETUADO'||paymentStatus==='PAGO'||nameKey(schedule)==='PAGO';
+}
+const defaultDueFields=provisionDueFields();
+const recordedPayment=(fields,names)=>
+ hasRecordedPayment(fields[names.DATAPGTOEFETUADO],fields[names.STATUS],fields[names.PGTOAGENDADO]);
+function descriptionPaymentStatus(fields,names=defaultDueFields){
+ if(recordedPayment(fields,names))return 'paid';
+ const status=String(fields[names.STATUS]??'').trim();
+ const executed=Boolean(String(fields.DATAEXECUCAOAGENDAMENTO??'').trim());
+ // The description gallery uses the execution date when a legacy row has no status.
+ if(!status)return executed?'paid':'pending';
+ return !executed&&nameKey(status)==='PAGAMENTO PREVISTO'?'pending':'';
 }
 export function rankDdaProvisionOptions(options,{supplier,amount,due}={}){
  const parts=tokens(supplier),wanted=amountKey(amount);
@@ -107,23 +118,30 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   // getItems follows all repository pages, including children outside the visible gallery.
   const lines=await repository.getItems(siteKey,children.id,'?$expand=fields',{signal});assertSession();
   if(!Array.isArray(lines))throw new Error('Consulta de provisões incompleta.');
-  const byParent=new Map();
+  const paidByParent=new Map(),pendingByParent=new Map();
   for(const line of lines){
    const fields=line?.fields,parent=String(fields?.[linkName]??'').trim();
    if(!validId(line?.id)||!validId(parent)||!fields)continue;
    const read=(...aliases)=>childField(fields,childColumns,...aliases);
    if(read('STATUS')===PROVISION_FISCAL_DRAFT_STATUS)continue;
-   if(String(read('DATAPGTOEFETUADO')??'').trim()||nameKey(read('STATUS'))==='PAGAMENTO EFETUADO'||nameKey(read('PGTOAGENDADO'))==='PAGO')continue;
+   const paid=hasRecordedPayment(read('DATAPGTOEFETUADO'),read('STATUS'),read('PGTOAGENDADO'));
+   const byParent=paid?paidByParent:pendingByParent;
    const amount=provisionTotal(read('VALORTOTAL'),read('QTD','QUANTIDADE'),read('FRETE'));
    if(amountKey(amount)==null)continue;
    if(!byParent.has(parent))byParent.set(parent,[]);
    byParent.get(parent).push({id:String(line.id),amount,due:paymentDateKey(read('DATAPREVISTOPGTO','DATAPGTOPREVISTO'))});
   }
-  return items.filter(item=>validId(item.id)&&item.fields&&item.fields.STATUS!==PROVISION_FISCAL_DRAFT_STATUS
-   &&!String(item.fields.DATAPGTOEFETUADO??'').trim()).map(item=>({
-   id:String(item.id),supplier:String(item.fields.FORNECEDOR||'Fornecedor não informado'),amount:item.fields.VALORTOTAL??null,
-   due:item.fields.DATAPREVISTOPGTO||'',label:`#${item.id} · ${item.fields.FORNECEDOR||'Fornecedor não informado'}`,provisions:byParent.get(String(item.id))||[],
-  }));
+  const options=[];
+  for(const {id,fields} of items){
+   if(!validId(id)||!fields||fields.STATUS===PROVISION_FISCAL_DRAFT_STATUS)continue;
+   const paymentStatus=descriptionPaymentStatus(fields);
+   if(!paymentStatus)continue;
+   const supplier=String(fields.FORNECEDOR||'Fornecedor não informado');
+   const byParent=paymentStatus==='paid'?paidByParent:pendingByParent;
+   options.push({id:String(id),supplier,amount:fields.VALORTOTAL??null,due:fields.DATAPREVISTOPGTO||'',
+    label:`#${id} · ${supplier}`,paymentStatus,provisions:byParent.get(String(id))||[]});
+  }
+  return options;
  }
  async function loadSettledDdaIds(rows,{signal}={}){
   const candidates=new Map(),settled=new Set();
@@ -192,7 +210,7 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   assertSession();const {dda,provision}=await lists(signal);
   const target=await repository.getItem(siteKey,provision.id,provisionId,'?$expand=fields',{signal});
   if(target?.fields?.STATUS===PROVISION_FISCAL_DRAFT_STATUS)throw new Error('A proposta de provisão ainda está em gravação. Atualize as opções.');
-  if(!target?.fields||String(target.fields.DATAPGTOEFETUADO??'').trim())throw new Error('O descritivo já possui pagamento efetuado. Atualize as opções.');
+  if(!target?.fields)throw new Error('O descritivo está indisponível. Atualize as opções.');
   const current=await repository.getItem(siteKey,dda.id,ddaId,'?$expand=fields',{signal});
   const eTag=itemVersion(current);
   if(!current?.fields||!eTag)throw new Error('Não foi possível verificar a versão atual do DDA.');
@@ -263,7 +281,7 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   active(signal);
   if(String(child.fields[linkName]??'').trim()!==provisionId)return null;
   const childNames=provisionDueFields(childColumns),parentNames=provisionDueFields(parentColumns);
-  if(hasRecordedPayment(child.fields,childNames)||hasRecordedPayment(parent.fields,parentNames))return null;
+  if(recordedPayment(child.fields,childNames)||descriptionPaymentStatus(parent.fields,parentNames)!=='pending')return null;
   const childField=dueColumn(childColumns,childNames),parentField=dueColumn(parentColumns,parentNames);
   return {
    plan:{ddaId,provisionId,due,childId:ids[0],childDue:paymentDateKey(child.fields[childField]),parentDue:paymentDateKey(parent.fields[parentField]),

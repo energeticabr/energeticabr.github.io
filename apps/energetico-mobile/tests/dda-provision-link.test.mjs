@@ -130,18 +130,82 @@ test('rechecks the linked group before dating it and restores its line if the de
   assert.deepEqual(writes.map(({list})=>list),['dda','children','provision']);
  });
 });
-test('lists only unpaid provision descriptions and ranks supplier or exact total, without auto-linking',async()=>{
+test('loads and classifies linkable descriptions while excluding unfinished fiscal proposals',async()=>{
  const {state,api}=repository(),service=createDdaProvisionLink({repository:api});
+ state.items[0].fields.STATUS='PAGAMENTO PREVISTO';
+ state.items.push(provision(4,'PAGO POR STATUS',200),provision(5,'PAGO POR MARCADOR',200),provision(6,'AGENDADO',200));
+ state.items[3].fields.STATUS='PAGAMENTO EFETUADO';
+ state.items[4].fields.PGTOAGENDADO='PAGO';
+ state.items[5].fields.PGTOAGENDADO='AGENDADO';
+ state.items.push(provision(7,'LEGADO COM EXECUÇÃO',200),provision(9,'AGENDAMENTO EXECUTADO',200),provision(10,'OUTRO STATUS',200));
+ state.items[6].fields.DATAEXECUCAOAGENDAMENTO='2026-10-28';
+ Object.assign(state.items[7].fields,{STATUS:'PAGAMENTO PREVISTO',DATAEXECUCAOAGENDAMENTO:'2026-10-28'});
+ state.items[8].fields.STATUS='CANCELADO';
  state.items.push(provision(8,'PROPOSTA COM ENVIO PENDENTE','58.21'));
  state.items.at(-1).fields.STATUS='PROPOSTA FISCAL EM GRAVAÇÃO';
- const options=await service.loadOptions();assert.deepEqual(options.map(item=>item.id),['1','2']);
+ const options=await service.loadOptions();
+ assert.deepEqual(options.map(({id,paymentStatus})=>[id,paymentStatus]),[
+  ['1','pending'],['2','pending'],['3','paid'],['4','paid'],['5','paid'],['6','pending'],['7','paid'],
+ ]);
  await assert.rejects(service.save({ddaId:'31',provisionId:'8'}),/gravação/i);
  const ranked=rankDdaProvisionOptions(options,{supplier:'Swile do Brasil',amount:'58.21'});
  assert.equal(ranked[0].id,'1');assert.equal(ranked[0].recommended,true);assert.equal(ranked[1].amountMatch,true);
  assert.equal(state.writes.length,0);
- state.items[0].fields.DATAPGTOEFETUADO='2026-10-29';
- await assert.rejects(service.save({ddaId:'31',provisionId:'1'}),/pagamento efetuado/);
- assert.equal(state.writes.length,0);
+});
+test('filters the DDA picker by payment status and links a paid description without changing its dates',async t=>{
+ const {records,writes,service}=dueAdjustmentFixture();
+ records.provision.push({id:'50',eTag:'"p2"',fields:{
+  FORNECEDOR:'SÓ ANDAIMES',VALORTOTAL:'100,00',STATUS:'PAGAMENTO EFETUADO',DATAPGTOEFETUADO:'2026-11-01',
+ }});
+ records.children.push({id:'400',eTag:'"c2"',fields:{
+  DESCRITIVOPROVISAO:'50',VALORTOTAL:'40,00',DATAPREVISTOPGTO:'2026-11-23',PGTOAGENDADO:'PAGO',
+ }});
+ const {createDdaProvisionPicker}=await import('../src/ui/dda-provision-picker.js');
+ const dom=new JSDOM('<body><main></main></body>'),doc=dom.window.document;
+ const picker=createDdaProvisionPicker({document:doc,host:doc.querySelector('main'),service});
+ t.after(()=>{picker.destroy();dom.window.close();});
+ const row={id:'43',supplier:'SÓ ANDAIMES',amount:40,due:'2026-11-23'};
+ await picker.show(row);
+ const status=doc.querySelector('select[aria-label="Status do pagamento"]');
+ const choices=()=>[...doc.querySelectorAll('input[type=radio]')].map(input=>input.value);
+ const search=doc.querySelector('.dda-provision-search'),save=doc.querySelector('.dda-provision-save');
+ assert.equal(status.selectedOptions[0].textContent,'PAGAMENTO PREVISTO');
+ assert.deepEqual(choices(),['49']);
+ doc.querySelector('input[value="49"]').click();
+ search.value='50';search.dispatchEvent(new dom.window.Event('input'));
+ assert.deepEqual(choices(),[]);
+ status.value='paid';status.dispatchEvent(new dom.window.Event('change'));
+ assert.equal(status.selectedOptions[0].textContent,'PAGAMENTO EFETUADO');
+ assert.deepEqual(choices(),['50']);
+ assert.equal(save.disabled,true);
+ assert.match(doc.querySelector('.dda-provision-line-match').textContent,/Provisão #400/);
+ doc.querySelector('input[value="50"]').click();
+ save.click();
+ doc.querySelector('[data-edit-review-confirm]').click();
+ await tick();
+ assert.equal(picker.isOpen,false);
+ assert.deepEqual(writes,[{list:'dda',fields:{[DDA_PROVISION_FIELD]:'50'}}]);
+ await picker.show(row);
+ assert.equal(doc.querySelector('select').value,'pending');
+ assert.deepEqual(choices(),['49']);
+});
+test('linking from the paid filter never asks to change dates after a concurrent payment correction',async t=>{
+ const {records,writes,service}=dueAdjustmentFixture();
+ records.provision[0].fields.STATUS='PAGAMENTO EFETUADO';
+ const {createDdaProvisionPicker}=await import('../src/ui/dda-provision-picker.js');
+ const dom=new JSDOM('<body><main></main></body>'),doc=dom.window.document;
+ const picker=createDdaProvisionPicker({document:doc,host:doc.querySelector('main'),service});
+ t.after(()=>{picker.destroy();dom.window.close();});
+ await picker.show({id:'43',supplier:'SÓ ANDAIMES',amount:40,due:'2026-11-23'});
+ const status=doc.querySelector('select');
+ status.value='paid';status.dispatchEvent(new dom.window.Event('change'));
+ doc.querySelector('input[value="49"]').click();
+ doc.querySelector('.dda-provision-save').click();
+ records.provision[0].fields.STATUS='PAGAMENTO PREVISTO';
+ doc.querySelector('[data-edit-review-confirm]').click();
+ await tick();
+ assert.equal(picker.isOpen,false);
+ assert.deepEqual(writes,[{list:'dda',fields:{[DDA_PROVISION_FIELD]:'49'}}]);
 });
 test('loads unpaid child amounts with quantity and freight under their actual parent and explains the match',async t=>{
  const {state,api}=repository();
