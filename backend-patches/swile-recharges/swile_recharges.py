@@ -5,6 +5,7 @@ from contextlib import closing, contextmanager
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
+import argparse
 import json
 import logging
 from pathlib import Path
@@ -22,6 +23,8 @@ CONFIG = Path('/etc/energetica-swile.json')
 DATABASE = Path('/var/lib/energetica-whatsapp/swile/orders.sqlite')
 WALLET = 'v13'
 PREVIEW_TTL = 15 * 60
+GALLERY_DOCUMENT_DELAY = 60 * 60
+GALLERY_ORDER_VISIBILITY_GRACE = 15 * 60
 BLOCKING_ORDER = """(state='sending' OR
                      (state='created' AND COALESCE(status, '') NOT IN ('CANCELED', 'CREATION_ERROR')))"""
 ORIGINS = {
@@ -313,6 +316,10 @@ class Service:
                         reference TEXT PRIMARY KEY, state TEXT NOT NULL, plan TEXT,
                         parent INTEGER, next_try REAL NOT NULL, error TEXT,
                         FOREIGN KEY (reference) REFERENCES orders(id))""")
+            db.execute("""CREATE TABLE IF NOT EXISTS gallery_order_refresh (
+                        reference TEXT PRIMARY KEY, documents_due REAL NOT NULL,
+                        initial_done INTEGER NOT NULL DEFAULT 0,
+                        FOREIGN KEY (reference) REFERENCES orders(id))""")
             yield db
 
     def receipt(self, row):
@@ -420,6 +427,8 @@ class Service:
             if invoice_text and not saved.get('payerDocument'):
                 raise SwileError('Gere um novo resumo para incluir a descrição na nota fiscal.')
             db.execute("UPDATE orders SET state='sending' WHERE id=?", (identifier,))
+            db.execute('INSERT INTO gallery_order_refresh (reference, documents_due) VALUES (?, ?)',
+                       (identifier, self.clock() + GALLERY_DOCUMENT_DELAY))
         # Preserve the claim before contacting Swile. The same externalId is
         # also recorded at Swile for reconciliation after an interrupted response.
         payload = {'summaryId': row['summary'], 'externalId': identifier, **dates}
@@ -433,13 +442,19 @@ class Service:
                 with self.db() as db:
                     db.execute("UPDATE orders SET state=? WHERE id=? AND state='sending'",
                                ('rejected' if error.status == 422 else 'ready', identifier))
+                    db.execute('DELETE FROM gallery_order_refresh WHERE reference=?', (identifier,))
                 raise
+            self.signal_gallery_refresh()
             return self.receipt(row)
         code, status = result.get('orderGroupCode'), result.get('status')
         if not isinstance(code, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', code) or not isinstance(status, str):
+            self.signal_gallery_refresh()
             return self.receipt(row)
         with self.db() as db:
             db.execute("UPDATE orders SET state='created', code=?, status=? WHERE id=?", (code, status, identifier))
+            db.execute('UPDATE gallery_order_refresh SET documents_due=? WHERE reference=?',
+                       (self.clock() + GALLERY_DOCUMENT_DELAY, identifier))
+        self.signal_gallery_refresh()
         return self.receipt(dict(row, code=code, status=status))
 
     def weekly_reminder(self):
@@ -600,6 +615,49 @@ class Service:
                 return json.loads(snapshot['history' if history else 'pending'])
         return self.refresh_gallery()[int(history)]
 
+    def signal_gallery_refresh(self):
+        try:
+            self.database.with_name(f'{self.database.stem}-gallery-request').touch(mode=0o600)
+        except OSError:
+            logging.warning('A atualização imediata da Galeria Swile ficou na fila.')
+
+    def refresh_queued_orders(self):
+        now = self.clock()
+        with self.db() as db:
+            due = db.execute("""SELECT o.*, job.initial_done, job.documents_due
+                             FROM gallery_order_refresh job JOIN orders o ON o.id=job.reference
+                             WHERE job.initial_done=0 OR job.documents_due<=?""", (now,)).fetchall()
+        if not due:
+            return 0
+        codes = {}
+        for row in due:
+            code = row['code']
+            if code is None:
+                match = self.reconcile(row, self.receipt(row))
+                if match:
+                    code = match['orderGroupCode']
+                    with self.db() as db:
+                        db.execute("UPDATE orders SET state='created', code=?, status=? WHERE id=? AND state='sending'",
+                                   (code, match['status'], row['id']))
+            codes[row['id']] = code
+        history = self.refresh_gallery()[1] if any(codes.values()) else []
+        visible = {order['orderCode'] for order in history}
+        updated = 0
+        with self.db() as db:
+            for row in due:
+                reference = row['id']
+                if codes[reference] not in visible:
+                    if row['documents_due'] + GALLERY_ORDER_VISIBILITY_GRACE <= now:
+                        db.execute('DELETE FROM gallery_order_refresh WHERE reference=?', (reference,))
+                        logging.warning('Pedido da fila não apareceu na consulta à Swile no prazo de atualização.')
+                    continue
+                if row['initial_done']:
+                    db.execute('DELETE FROM gallery_order_refresh WHERE reference=?', (reference,))
+                else:
+                    db.execute('UPDATE gallery_order_refresh SET initial_done=1 WHERE reference=?', (reference,))
+                updated += 1
+        return updated
+
     def corporate_group(self, code):
         if not valid_order_code(code):
             raise SwileError('Código de pedido Swile inválido.')
@@ -725,13 +783,21 @@ def handle_portal(identity, body):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--queued-orders', action='store_true')
+    args = parser.parse_args()
     try:
         service, _ = load_service()
-        pending, history = service.refresh_gallery()
+        if args.queued_orders:
+            updated = service.refresh_queued_orders()
+            if updated:
+                logging.info('Galeria Swile atualizada para %d pedidos da fila.', updated)
+        else:
+            pending, history = service.refresh_gallery()
+            logging.info('Galeria Swile atualizada: %d pedidos em aberto e %d no histórico.', len(pending), len(history))
     except SwileError as error:
         logging.error('Falha ao atualizar a Galeria Swile: %s', error)
         raise SystemExit(1)
     except (OSError, sqlite3.Error, KeyError, TypeError, ValueError):
         logging.error('Não foi possível validar ou salvar os pedidos da Galeria Swile.')
         raise SystemExit(1)
-    logging.info('Galeria Swile atualizada: %d pedidos em aberto e %d no histórico.', len(pending), len(history))

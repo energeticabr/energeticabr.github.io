@@ -23,6 +23,8 @@ A Galeria Swile atualiza as listas **Em aberto** e **Histórico** todos os dias 
 
 Após implantar o módulo, instale `energetica-swile-gallery.service` e `energetica-swile-gallery.timer` com modo `0644` em `/etc/systemd/system`. Execute `sudo systemctl daemon-reload`, `sudo systemctl start energetica-swile-gallery.service` para a primeira coleta e `sudo systemctl enable --now energetica-swile-gallery.timer` para manter o agendamento. Confira a coleta no journal da unidade de serviço e o próximo horário em `systemctl list-timers energetica-swile-gallery.timer`.
 
+Para pedidos enviados pelo Energético, o servidor solicita uma atualização após a confirmação e outra uma hora depois para buscar os documentos disponíveis. Instale também `energetica-swile-gallery-orders.service`, `energetica-swile-gallery-orders.path` e `energetica-swile-gallery-orders.timer` com modo `0644` em `/etc/systemd/system`. Execute `sudo systemctl daemon-reload` e `sudo systemctl enable --now energetica-swile-gallery-orders.path energetica-swile-gallery-orders.timer`. O timer verifica a fila local e só consulta a Swile quando há pedidos do Energético com atualização pendente. As cargas das 07h e 17h continuam incluindo pedidos feitos no portal da Swile.
+
 O pedido e o pagamento têm estados distintos. Consulte a Dash RH para pagar e acompanhe o status na aba Swile.
 
 [Documentação oficial da Swile](https://corporate-gateway.swile.com.br/docs/integration-guide.html)

@@ -1,0 +1,9 @@
+[Unit]
+Description=Disparar a Galeria Swile após confirmar um pedido no Energético
+
+[Path]
+PathChanged=/var/lib/energetica-whatsapp/swile/orders-gallery-request
+PathChanged=/var/lib/energetica-whatsapp/swile/staging-orders-gallery-request
+
+[Install]
+WantedBy=multi-user.target

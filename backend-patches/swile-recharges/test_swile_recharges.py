@@ -280,6 +280,88 @@ class ServiceTests(unittest.TestCase):
                 self.assertEqual(502, handle_portal(identity, {**request, 'refresh': True})[0])
                 self.assertEqual(result['swile'], reader.gallery_orders(history=True))
 
+    def test_confirm_signals_gallery_after_saving_the_order(self):
+        preview = self.service.preview('user-a', self.data)
+        self.assertFalse((self.database.parent / 'journal-gallery-request').exists())
+        receipt = self.service.confirm('user-a', preview['id'])
+        self.assertEqual('SWO123', receipt['orderCode'])
+        self.assertTrue((self.database.parent / 'journal-gallery-request').is_file())
+
+    def test_app_order_refreshes_gallery_now_and_fetches_documents_after_one_hour(self):
+        preview = self.service.preview('user-a', self.data)
+        order = {'groupCode': 'SWO123', 'valueCredit': 225.05, 'statusCode': 'WAITING_PAYMENT',
+                 'orders': [{'orderCode': 'A'}]}
+        payload = {'last': True, 'orderGroups': []}
+        self.service.confirm('user-a', preview['id'])
+        with patch.object(self.gateway, 'request', return_value=payload) as upstream:
+            self.assertEqual(0, self.service.refresh_queued_orders())
+            payload['orderGroups'] = [order]
+            self.assertEqual(1, self.service.refresh_queued_orders())
+            self.assertEqual('SWO123', self.service.gallery_orders(history=False)[0]['orderCode'])
+
+            self.now += 3599
+            restarted = Service(self.gateway, self.database, clock=lambda: self.now)
+            upstream.reset_mock()
+            self.assertEqual(0, restarted.refresh_queued_orders())
+            upstream.assert_not_called()
+
+            self.now += 1
+            order['orders'][0].update(
+                slipLink='https://dash-rh.swile.com.br/boleto/ORDER-A',
+                invoiceLink='https://nfe.prefeitura.sp.gov.br/contribuinte/notaprint.aspx?inscricao=1&nf=2&verificacao=X',
+            )
+            upstream.side_effect = SwileError('Indisponível', 429)
+            with self.assertRaises(SwileError):
+                restarted.refresh_queued_orders()
+            self.assertEqual([], restarted.gallery_orders(history=False)[0]['documents'])
+            upstream.side_effect = None
+            self.assertEqual(1, restarted.refresh_queued_orders())
+            self.assertEqual([{'orderCode': 'A', 'kind': 'boleto'}, {'orderCode': 'A', 'kind': 'invoice'}],
+                             restarted.gallery_orders(history=False)[0]['documents'])
+        restarted.confirm('user-a', preview['id'])
+        with patch.object(self.gateway, 'request') as upstream:
+            self.assertEqual(0, restarted.refresh_queued_orders())
+            upstream.assert_not_called()
+
+    def test_regular_gallery_refresh_does_not_schedule_orders_from_the_swile_portal(self):
+        order = {'groupCode': 'PORTAL', 'valueCredit': 50, 'statusCode': 'WAITING_PAYMENT'}
+        with patch.object(self.gateway, 'request', return_value={'last': True, 'orderGroups': [order]}) as upstream:
+            self.assertEqual('PORTAL', self.service.refresh_gallery()[0][0]['orderCode'])
+            self.now += 3600
+            self.assertEqual(0, self.service.refresh_queued_orders())
+            upstream.assert_called_once()
+
+    def test_gallery_recovers_lost_create_response_without_user_reopening_the_app(self):
+        self.gateway.uncertain = True
+        preview = self.service.preview('user-a', self.data)
+        self.assertEqual('UNCONFIRMED', self.service.confirm('user-a', preview['id'])['status'])
+        order = {'groupCode': 'SWO123', 'valueCredit': 225.05, 'statusCode': 'WAITING_PAYMENT',
+                 'totalEmployees': 1}
+        fetch = self.gateway.request
+
+        def request(path, **kwargs):
+            if path == 'order/group':
+                return {'last': True, 'orderGroups': [order]}
+            return fetch(path, **kwargs)
+
+        with patch.object(self.gateway, 'request', side_effect=request):
+            self.assertEqual(1, self.service.refresh_queued_orders())
+            self.assertEqual('SWO123', self.service.gallery_orders(history=False)[0]['orderCode'])
+            self.assertEqual('SWO123', self.service.confirm('user-a', preview['id'])['orderCode'])
+        self.assertEqual(1, sum(path == 'order/create' for path, _, _ in self.gateway.calls))
+
+    def test_gallery_stops_retrying_a_missing_order_after_the_followup_window(self):
+        preview = self.service.preview('user-a', self.data)
+        self.service.confirm('user-a', preview['id'])
+        with patch.object(self.gateway, 'request', return_value={'last': True, 'orderGroups': []}) as upstream:
+            self.assertEqual(0, self.service.refresh_queued_orders())
+            self.now += 3600 + 15 * 60
+            with self.assertLogs(level='WARNING'):
+                self.assertEqual(0, self.service.refresh_queued_orders())
+            upstream.reset_mock()
+            self.assertEqual(0, self.service.refresh_queued_orders())
+            upstream.assert_not_called()
+
     def test_pending_gallery_paginates_corporate_orders_and_omits_closed_groups(self):
         slip = 'https://dash-rh.swile.com.br/boleto/ORDER-A'
         nota = 'https://nfe.prefeitura.sp.gov.br/contribuinte/notaprint.aspx?inscricao=1&nf=2&verificacao=X'
