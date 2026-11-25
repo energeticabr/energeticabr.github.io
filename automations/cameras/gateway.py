@@ -28,7 +28,9 @@ MAX_STARTING_PREVIEWS = 2
 MAX_STARTING_WITH_SLOW_PREVIEWS = 3
 SLOW_PREVIEW_SECONDS = 12
 START_TIMEOUT_SECONDS = 75
-PREVIEW_STALL_SECONDS = 130
+LIVE_STALL_SECONDS = 130
+LIVE_HANDOFF_STALE_SECONDS = 20
+PLAYBACK_URL_SECONDS = 20 * 60
 PREVIEW_REPLACEMENT_GRACE_SECONDS = 5
 IDLE_SECONDS = 12
 SINGLE_REOPEN_SECONDS = 45
@@ -66,7 +68,7 @@ class Stream:
         self.last_move = 0
         self.last_request = time.monotonic()
         self.capability = secrets.token_urlsafe(32)
-        self.expires = self.last_request + 20 * 60
+        self.expires = self.last_request + PLAYBACK_URL_SECONDS
         self.started_at = None
         self.startup_deadline = None
         self.has_video = False
@@ -85,7 +87,7 @@ class Stream:
         now = time.monotonic()
         self.started_at = now
         self.startup_deadline = now + START_TIMEOUT_SECONDS
-        self.expires = now + 20 * 60
+        self.expires = now + PLAYBACK_URL_SECONDS
         width, fps = (384, 6) if preview else (640, 10)
         segment_seconds = 1 if self.mode == "live" and not self.direct else 2
         probe_duration = ("500000" if self.mode == "live" and entry["format"] in {"h264", "hevc"}
@@ -165,8 +167,11 @@ class Stream:
                 pass
         return self.has_video
 
-    def stalled_preview(self, now):
-        if not self.preview or self.mode != "live" or not self.has_video:
+    def ready_to_play(self):
+        return self.ready() and not self.stalled_live(time.monotonic(), LIVE_HANDOFF_STALE_SECONDS)
+
+    def stalled_live(self, now, limit=LIVE_STALL_SECONDS):
+        if self.mode != "live" or not self.has_video:
             return False
         try:
             lines = self.read(self.playlist).splitlines()
@@ -176,7 +181,7 @@ class Stream:
         if latest and latest != self.latest_segment:
             self.latest_segment = latest
             self.last_video_at = now
-        return now - self.last_video_at >= PREVIEW_STALL_SECONDS
+        return now - self.last_video_at >= limit
 
     def close(self):
         for process in (self.encoder, self.source):
@@ -341,6 +346,12 @@ class Gateway:
     def _stream_key(self, channel, viewer, codecs):
         return viewer, channel, self.entries[channel]["format"] in codecs
 
+    @staticmethod
+    def _renew_live_capability(stream, now):
+        if stream.mode == "live" and now >= stream.expires:
+            stream.capability = secrets.token_urlsafe(32)
+            stream.expires = now + PLAYBACK_URL_SECONDS
+
     def _open_stream(self, key, *, recording=None, preview=False):
         viewer, channel, direct = key
         entry = dict(self.entries[channel])
@@ -391,7 +402,6 @@ class Gateway:
             if self.query_active:
                 raise PlaybackError(429)
             paths = {}
-            prepared = []
             busy = []
             retry_after = None
             requested = {channel: self._stream_key(channel, viewer, codecs) for channel in channels}
@@ -414,13 +424,12 @@ class Gateway:
                         continue
                 else:
                     stream.shared = True
-                prepared.append(stream)
-                paths[channel] = stream.path
-            if not prepared and busy and retry_after is None:
-                raise PlaybackError(429)
-            now = time.monotonic()
-            for stream in prepared:
+                now = time.monotonic()
+                self._renew_live_capability(stream, now)
                 stream.last_request = now
+                paths[channel] = stream.path
+            if not paths and busy and retry_after is None:
+                raise PlaybackError(429)
             result = {"paths": paths, "busy": busy}
             if retry_after:
                 result["retryAfterMs"] = retry_after
@@ -450,13 +459,14 @@ class Gateway:
             if stream.startup_deadline is None:
                 self._launch_preview(stream)
             stream.last_request = time.monotonic()
+            self._renew_live_capability(stream, stream.last_request)
         deadline = time.monotonic() + START_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
             with self.lock:
                 if self.streams.get(key) is not stream or not stream.alive():
                     raise PlaybackError(503)
                 stream.last_request = time.monotonic()
-                if stream.ready():
+                if stream.ready_to_play():
                     return stream.path
             time.sleep(0.25)
         with self.lock:
@@ -467,8 +477,9 @@ class Gateway:
 
     def _find_stream(self, capability):
         self.expire()
+        now = time.monotonic()
         stream = next((item for item in self.streams.values()
-                       if secrets.compare_digest(item.capability, capability)), None)
+                       if now < item.expires and secrets.compare_digest(item.capability, capability)), None)
         if not stream:
             raise PlaybackError(404)
         return stream
@@ -494,7 +505,7 @@ class Gateway:
                 if active >= MAX_STARTING_PREVIEWS or len(pending) >= MAX_STARTING_WITH_SLOW_PREVIEWS:
                     return False
                 self._launch_preview(stream)
-            ready = stream.ready()
+            ready = stream.ready_to_play()
             now = time.monotonic()
             stream.last_request = now
             return ready
@@ -512,15 +523,18 @@ class Gateway:
     def expire(self, *, check_progress=False):
         now = time.monotonic()
         warm = max((stream for stream in self.streams.values()
-                    if self._is_warm_single(stream, now) and now <= stream.expires and stream.alive()),
+                    if self._is_warm_single(stream, now) and stream.alive()),
                    key=lambda stream: stream.last_request, default=None)
         for key, stream in list(self.streams.items()):
             idle_seconds = PREVIEW_IDLE_SECONDS if stream.preview else IDLE_SECONDS
+            # Expired media URLs stop working immediately. A live source can stay
+            # within the normal idle window so authorized viewers can reuse it.
+            expired = now >= stream.expires and (stream.mode != "live" or not stream.has_video)
             if ((stream is not warm and now - stream.last_request > idle_seconds)
-                    or now > stream.expires or not stream.alive()
+                    or expired or not stream.alive()
                     or (stream.preview and stream.startup_deadline is not None
                         and now >= stream.startup_deadline and not stream.ready())
-                    or (check_progress and stream.stalled_preview(now))):
+                    or (check_progress and stream.stalled_live(now))):
                 del self.streams[key]
                 stream.close()
 
