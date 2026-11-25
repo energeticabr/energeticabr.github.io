@@ -103,8 +103,10 @@ test('the total inactivity cap releases recovery when the VM request never settl
     signal = options.progressSignal; return new Promise(() => {});
   } }).then(() => { settled = true; return 'unexpected success'; }, error => { settled = true; return error.code; });
   await new Promise(setImmediate);
-  t.mock.timers.tick(30_000); await new Promise(setImmediate);
-  assert.equal(settled, true, 'all attempts share the established thirty-second inactivity budget');
+  t.mock.timers.tick(59_999); await new Promise(setImmediate);
+  assert.equal(settled, false);
+  t.mock.timers.tick(1); await new Promise(setImmediate);
+  assert.equal(settled, true, 'all attempts share the sixty-second inactivity budget');
   assert.equal(await pending, 'RESUME_TIMEOUT');
   assert.equal(signal.aborted, true);
 });
@@ -165,7 +167,7 @@ test('unchanged operation progress and prepared animations cannot extend a hung 
   } }, { onOperationProgress() {} }).catch(error => error.code);
   await new Promise(setImmediate);
   report({ percent: 40 });
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 6; i++) {
     t.mock.timers.tick(10_000); report({ percent: 40 }); report({ percent: 33 });
     await new Promise(setImmediate);
   }

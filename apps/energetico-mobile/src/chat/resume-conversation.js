@@ -28,11 +28,13 @@ function timeoutError() {
   return Object.assign(new Error('A retomada demorou demais. Seu rascunho foi preservado; tente novamente.'), { code: 'RESUME_TIMEOUT' });
 }
 
+const RESUME_INACTIVITY_MS = 60_000;
+
 // Only the current-question control query is retried. User answers, uploads,
 // confirmations and the controller's subsequent automatic actions stay outside.
-export async function resumeConversation(client, { signal, timeoutMs = 30_000, maxWaitMs = 30_000, retryDelay,
+export async function resumeConversation(client, { signal, timeoutMs = RESUME_INACTIVITY_MS, maxWaitMs = RESUME_INACTIVITY_MS, retryDelay,
   onEvidenceProgress, checkDiaryEvidence = true, ...options } = {}) {
-  const deadline = Math.max(1, Number(timeoutMs) || 30_000);
+  const deadline = Math.max(1, Number(timeoutMs) || RESUME_INACTIVITY_MS);
   const lifetime = new AbortController();
   const cancelLifetime = () => lifetime.abort(cancellation(signal));
   check(signal);
@@ -41,7 +43,7 @@ export async function resumeConversation(client, { signal, timeoutMs = 30_000, m
   let totalTimer;
   const touchTotal = () => {
     clearTimeout(totalTimer);
-    totalTimer = setTimeout(() => lifetime.abort(timeoutError()), Math.max(1, Number(maxWaitMs) || 30_000));
+    totalTimer = setTimeout(() => lifetime.abort(timeoutError()), Math.max(1, Number(maxWaitMs) || RESUME_INACTIVITY_MS));
   };
   touchTotal();
   try {

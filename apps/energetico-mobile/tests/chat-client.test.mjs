@@ -162,6 +162,25 @@ test('PDF preflight preserves temporary HTTP status so reconnection can retry a 
   await assert.rejects(clientWith(async () => jsonResponse({}, 503)).waitForDiaryEvidence(), error => error.status === 503);
 });
 
+test('a slow PDF preflight can return without starting another request', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const requests = [];
+  let finish;
+  const client = clientWith((_url, options) => {
+    requests.push(options);
+    return new Promise(resolve => { finish = resolve; });
+  });
+  const pending = client.waitForDiaryEvidence();
+  const turn = () => new Promise(setImmediate);
+  await turn();
+  t.mock.timers.tick(27_600);
+  await turn();
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].signal.aborted, false);
+  finish(jsonResponse({ status: 'unavailable' }));
+  await pending;
+});
+
 function jsonResponse(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
