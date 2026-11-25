@@ -15,13 +15,18 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
   const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)), cacheDir, logLevel: 'silent', server: { host:'127.0.0.1',port:0 } });
   await server.listen(); t.after(async () => { await server.close(); await rm(cacheDir, { recursive:true,force:true }); });
   const viewports = [{width:320,height:844},{width:390,height:844},{width:844,height:320},{width:844,height:390},{width:1365,height:768}];
-  for (const {width,height} of viewports) for (const mode of ['list', 'visuals', 'player', 'pair', 'single']) {
+  for (const {width,height} of viewports) for (const mode of ['list', 'visuals', 'player', 'pair', 'single', ...(width === 844 && height === 390 ? ['live-grid'] : [])]) {
     const { stdout, screenshot } = await runBrowserLayout(browser, { width,height,mobile:width < 700 || height < 500,
       captureScreenshot: width === 390 && mode === 'single' && Boolean(process.env.CAMERA_CONTROLS_SCREENSHOT),
       url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/cameras-layout.html?${mode}` });
     if (screenshot) writeFileSync(process.env.CAMERA_CONTROLS_SCREENSHOT, screenshot);
     const dom=new JSDOM(stdout), layout=JSON.parse(dom.window.document.documentElement.dataset.layout); dom.window.close();
-    if (mode === 'list') {
+    if (mode === 'live-grid') {
+      assert.equal(layout.playbackError, undefined);
+      assert.deepEqual(layout.cycles, Array.from({ length: 3 }, () => ({
+        zoomedVideoIsOnTop: true, renderableVideos: 5, restored: Array(5).fill(true),
+      })));
+    } else if (mode === 'list') {
       assert.equal(layout.cards.length,9);
       assert.ok(layout.cards.every(card => card.left >= 0 && card.right <= width));
       assert.ok(layout.offlineStatus, `Offline status ribbon missing at ${width}x${height}`);

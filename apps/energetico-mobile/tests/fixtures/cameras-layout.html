@@ -3,11 +3,12 @@
 import { createCamerasView } from '/src/ui/cameras-view.js';
 const accountKey = 'layout-check';
 const listMode = location.search === '?list';
-const wallMode = location.search === '?player';
+const liveGridMode = location.search === '?live-grid';
+const wallMode = location.search === '?player' || liveGridMode;
 localStorage.setItem('energetico:camera-preview:v1:' + accountKey + ':camera-1', 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8Af//Z');
 localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify([{
   name: wallMode ? 'Visual 1' : 'Portão e pátio',
-  cameraIds: wallMode ? Array.from({ length: 8 }, (_, index) => 'camera-' + (index + 1)) : ['camera-1', 'camera-2'],
+  cameraIds: wallMode ? Array.from({ length: liveGridMode ? 5 : 8 }, (_, index) => 'camera-' + (index + 1)) : ['camera-1', 'camera-2'],
 }]));
 createCamerasView(document).open({
   accountKey,
@@ -102,17 +103,72 @@ const layout = {viewport:rect(dialog),
 if (wallMode) {
   const measurePlayer = () => ({
     stage: rect(dialog.querySelector('.cameras-player__stage')),
-    videos: [...dialog.querySelectorAll('.cameras-player__tile:not([hidden]) video')].map(rect),
+    videos: [...dialog.querySelectorAll('.cameras-player__tile:not([inert]):not([hidden]) video')].map(rect),
   });
-  const video = player.querySelector('[data-camera-video="camera-1"]');
-  video.click();
-  video.click();
-  layout.focused = measurePlayer();
-  video.click();
-  video.click();
-  layout.restored = measurePlayer();
-  video.closest('.cameras-player__tile').querySelector('.cameras-player__focus').click();
-  layout.individual = measurePlayer();
+  const doubleTap = video => { video.click(); video.click(); };
+  if (liveGridMode) {
+    const videos = [...player.querySelectorAll('video')];
+    const sources = videos.map((video, index) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 32;
+      const context = canvas.getContext('2d');
+      const draw = () => {
+        context.fillStyle = `rgb(${60 + index * 35}, 100, 160)`;
+        context.fillRect(0, 0, 32, 32);
+      };
+      draw();
+      const stream = canvas.captureStream(25);
+      video.srcObject = stream;
+      return { stream, draw };
+    });
+    const repaint = setInterval(() => sources.forEach(({ draw }) => draw()), 40);
+    const nextFrames = () => Promise.race([
+      Promise.all(videos.map(video => new Promise(resolve => {
+        video.requestVideoFrameCallback((_, frame) => resolve(frame.presentedFrames));
+      }))),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('No video frame rendered.')), 4000)),
+    ]);
+    const sample = document.createElement('canvas').getContext('2d');
+    try {
+      await Promise.all(videos.map(video => video.play()));
+      let previousFrames = await nextFrames();
+      layout.cycles = [];
+      for (const index of [4, 0, 2]) {
+        const video = videos[index];
+        doubleTap(video);
+        const { left, top, width, height } = rect(video);
+        const zoomedVideoIsOnTop = document.elementFromPoint(left + width / 2, top + height / 2) === video;
+        const renderableVideos = videos.filter(other => other.getBoundingClientRect().height > 0).length;
+        await new Promise(resolve => setTimeout(resolve, 120));
+        doubleTap(video);
+        const frames = await nextFrames();
+        const restored = videos.map((restoredVideo, videoIndex) => {
+          sample.drawImage(restoredVideo, 0, 0, 1, 1);
+          const red = sample.getImageData(0, 0, 1, 1).data[0];
+          const bounds = restoredVideo.getBoundingClientRect();
+          const onTop = document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2) === restoredVideo;
+          return onTop && !restoredVideo.paused && Math.abs(red - (60 + videoIndex * 35)) < 10
+            && frames[videoIndex] > previousFrames[videoIndex];
+        });
+        layout.cycles.push({ zoomedVideoIsOnTop, renderableVideos, restored });
+        previousFrames = frames;
+      }
+    } catch (error) {
+      layout.playbackError = error.message;
+    } finally {
+      clearInterval(repaint);
+      for (const { stream } of sources) stream.getTracks().forEach(track => track.stop());
+    }
+  } else {
+    const video = player.querySelector('[data-camera-video="camera-1"]');
+    doubleTap(video);
+    layout.focused = measurePlayer();
+    doubleTap(video);
+    layout.restored = measurePlayer();
+    video.closest('.cameras-player__tile').querySelector('.cameras-player__focus').click();
+    layout.individual = measurePlayer();
+  }
 }
 document.documentElement.dataset.layout = JSON.stringify(layout);
 </script></body></html>

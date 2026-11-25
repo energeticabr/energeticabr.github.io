@@ -390,31 +390,38 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   position: relative;
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 125px;
   overflow: hidden;
   background: #050607;
   touch-action: pan-y;
 }
-.cameras-player__stage[data-count="2"],
-.cameras-player__stage[data-count="3"],
-.cameras-player__stage[data-count="4"] {
+.cameras-player__grid, .cameras-player__slot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+.cameras-player__grid { overflow: hidden; }
+.cameras-player__grid[data-count="2"],
+.cameras-player__grid[data-count="3"],
+.cameras-player__grid[data-count="4"] {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: repeat(2, minmax(0, 1fr));
 }
-.cameras-player__stage[data-count="3"],
-.cameras-player__stage[data-count="4"] { overflow-y: auto; grid-auto-rows: minmax(140px, 1fr); }
-.cameras-player__stage[data-count="5"],
-.cameras-player__stage[data-count="6"],
-.cameras-player__stage[data-count="7"],
-.cameras-player__stage[data-count="8"] {
+.cameras-player__grid[data-count="3"],
+.cameras-player__grid[data-count="4"] { overflow-y: auto; grid-auto-rows: minmax(140px, 1fr); }
+.cameras-player__grid[data-count="5"],
+.cameras-player__grid[data-count="6"],
+.cameras-player__grid[data-count="7"],
+.cameras-player__grid[data-count="8"] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(4, minmax(0, 1fr));
 }
 .cameras-player__tile {
   position: relative;
+  z-index: 0;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -460,7 +467,7 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cameras-player__tile[hidden] { display: none !important; }
+.cameras-player__tile[data-focused="true"] { position: absolute; inset: 0; z-index: 1; }
 .cameras-player__video--focusable { touch-action: manipulation; cursor: zoom-in; }
 .cameras-player__stage[data-focused="true"] .cameras-player__video--focusable { cursor: zoom-out; }
 .cameras-player__label, .cameras-player__tile-live {
@@ -716,19 +723,19 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   .cameras-player__live-state[data-mode="playback"]::before { background: #9dc2ff; }
   .cameras-player__live-state[data-state="error"] { color: #ffaaa5; }
   .cameras-player__live-state[data-state="error"]::before { background: #ffaaa5; }
-  .cameras-player__stage[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); }
-  .cameras-player__stage[data-count="3"] {
+  .cameras-player__grid[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); }
+  .cameras-player__grid[data-count="3"] {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: minmax(0, 1fr);
     overflow: hidden;
   }
-  .cameras-player__stage[data-count="4"] {
+  .cameras-player__grid[data-count="4"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
     overflow: hidden;
   }
-  .cameras-player__stage[data-count="5"], .cameras-player__stage[data-count="6"],
-  .cameras-player__stage[data-count="7"], .cameras-player__stage[data-count="8"] {
+  .cameras-player__grid[data-count="5"], .cameras-player__grid[data-count="6"],
+  .cameras-player__grid[data-count="7"], .cameras-player__grid[data-count="8"] {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
   }
@@ -767,7 +774,7 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   .cameras-player__title { font-size: 14px; }
   .cameras-player__back, .cameras-player__expand { width: 36px; }
   .cameras-player__live-state { font-size: 9px; }
-  .cameras-player__stage[data-count="3"], .cameras-player__stage[data-count="4"] { grid-auto-rows: minmax(135px, 1fr); }
+  .cameras-player__grid[data-count="3"], .cameras-player__grid[data-count="4"] { grid-auto-rows: minmax(135px, 1fr); }
   .cameras-player__action { flex-basis: 58px; min-width: 56px; }
   .cameras-player__action-label { font-size: 10px; }
   .cameras-player__drawer[data-open="true"] { height: min(40vh, 330px); }

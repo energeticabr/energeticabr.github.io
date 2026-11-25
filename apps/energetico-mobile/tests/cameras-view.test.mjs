@@ -595,14 +595,38 @@ test('grade seleciona até oito câmeras e abre todas simultaneamente', async t 
   const videos = [...document.querySelectorAll('.cameras-player__stage video')];
   assert.equal(videos.length, 8);
   assert.ok(videos.every(video => !video.controls && video.muted && video.playsInline));
-  const focusedVideo = videos[0];
-  const tap = () => focusedVideo.dispatchEvent(new document.defaultView.MouseEvent('click', { clientX: 12, clientY: 18 }));
-  tap(); tap();
-  assert.equal(document.querySelector('.cameras-player__stage').dataset.focused, 'true');
-  assert.equal(document.querySelectorAll('.cameras-player__tile:not([hidden])').length, 1);
-  tap(); tap();
-  assert.equal(document.querySelector('.cameras-player__stage').dataset.focused, 'false');
-  assert.equal(document.querySelectorAll('.cameras-player__tile:not([hidden])').length, 8);
+  const { Event, MouseEvent } = document.defaultView;
+  const resumed = [];
+  const paused = new Set();
+  for (const video of videos) {
+    Object.defineProperty(video, 'paused', { get: () => paused.has(video) });
+    video.play = async () => {
+      paused.delete(video);
+      resumed.push(video);
+    };
+    video.dispatchEvent(new Event('playing'));
+  }
+  const stage = document.querySelector('.cameras-player__stage');
+  const tiles = [...stage.querySelectorAll('.cameras-player__tile')];
+  const doubleTap = video => {
+    for (let tap = 0; tap < 2; tap++) {
+      video.dispatchEvent(new MouseEvent('click', { clientX: 12, clientY: 18 }));
+    }
+  };
+  for (const index of [4, 2, 4]) {
+    const focusedVideo = videos[index];
+    doubleTap(focusedVideo);
+    assert.equal(stage.dataset.focused, 'true');
+    assert.deepEqual(tiles.filter(tile => !tile.hasAttribute('inert')), [tiles[index]]);
+    assert.ok(tiles.every(tile => !tile.hidden));
+    paused.add(videos[0]);
+    doubleTap(focusedVideo);
+    assert.equal(stage.dataset.focused, 'false');
+    assert.ok(tiles.every(tile => !tile.hidden && !tile.hasAttribute('inert')));
+    assert.deepEqual([...stage.querySelectorAll('video')], videos);
+  }
+  assert.deepEqual(resumed, [videos[0], videos[0], videos[0]]);
+  assert.deepEqual(starts.map(item => item.id), selected);
   document.querySelector('[data-camera-player-back]').click();
   assert.ok(starts.every(item => item.signal.aborted));
   assert.equal(grids[0].signal.aborted, true);
