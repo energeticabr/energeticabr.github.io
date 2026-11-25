@@ -19,7 +19,7 @@ const DDA_COPY = {
 const DDA_STATUS_FILTER = {
  label:'Status do pagamento',
  choices:[['pending','PAGAMENTO PREVISTO'],['paid','PAGAMENTO EFETUADO']],
- options:(items,row,status)=>rankDdaProvisionOptions(items.filter(item=>Boolean(item.paid)===(status==='paid')),row),
+ options:(items,row,status)=>rankDdaProvisionOptions(items.filter(item=>(item.paymentStatus??'pending')===status),row),
 };
 
 export function createReportLinkComparison(doc,value,matches,label,reference){
@@ -49,7 +49,8 @@ export function createDdaProvisionPicker({service, ...options}){
   sharedLinkQuestion:'Tem certeza que deseja atribuir dois DDAS ao mesmo descritivo provisão?',
   currentLink:row=>row.provisionId,
   rowAmount:row=>row.amount,
-  afterLink:service?.prepareDueAdjustment&& (async (receipt,{form,signal,run,feedback})=>{
+  afterLink:service?.prepareDueAdjustment&& (async (receipt,{form,signal,run,feedback,choices})=>{
+   if(choices[0].paymentStatus==='paid')return receipt;
    try{
     feedback.textContent='Conferindo a data prevista de pagamento…';
     const plan=await run(signal=>service.prepareDueAdjustment(receipt,{signal}));
@@ -260,7 +261,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,optio
      if(current!==entry||host.hidden)return;
     }
     if(afterLink){
-     receipt=await afterLink(receipt,{form:dialog,signal:entry.controller.signal,run,feedback});
+     receipt=await afterLink(receipt,{form:dialog,signal:entry.controller.signal,run,feedback,choices});
      if(current!==entry||host.hidden)return;
     }
     onLinked?.(receipt);
