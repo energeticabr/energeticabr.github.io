@@ -906,16 +906,23 @@ export function createCamerasView(documentRef) {
       const visualNotice = notice ? make('p', 'cameras-player__visual-notice', notice) : null;
       visualNotice?.setAttribute('role', 'status');
       const stage = make('main', 'cameras-player__stage');
-      stage.dataset.count = String(chosen.length);
+      const grid = make('div', 'cameras-player__grid');
+      grid.dataset.count = String(chosen.length);
+      stage.append(grid);
       const tileItems = [];
       let focusedCameraId = null;
       let pendingCameraTap = null;
       function toggleCameraFocus(channel) {
         focusedCameraId = focusedCameraId === String(channel.id) ? null : String(channel.id);
         stage.dataset.focused = String(Boolean(focusedCameraId));
-        stage.dataset.count = String(focusedCameraId ? 1 : chosen.length);
-        for (const { tile, channel: tileChannel } of tileItems) {
-          tile.hidden = Boolean(focusedCameraId && String(tileChannel.id) !== focusedCameraId);
+        // Keep all media elements rendered when another camera covers the grid.
+        for (const { tile, item } of tileItems) {
+          const focused = focusedCameraId === String(item.channelId);
+          tile.dataset.focused = String(focused);
+          tile.toggleAttribute('inert', Boolean(focusedCameraId) && !focused);
+          if (!focusedCameraId && item.connected && item.video.paused) {
+            void item.video.play().catch(() => {});
+          }
         }
       }
       for (const channel of chosen) {
@@ -1016,7 +1023,9 @@ export function createCamerasView(documentRef) {
           focus.addEventListener('click', () => openPlayer([channel], focus));
           footer.append(focus);
         }
-        stage.append(tile);
+        const slot = make('div', 'cameras-player__slot');
+        slot.append(tile);
+        grid.append(slot);
       }
       function updateHeader() {
         const connected = playback.filter(item => item.connectionState === 'playing' && item.mode === 'live').length;
