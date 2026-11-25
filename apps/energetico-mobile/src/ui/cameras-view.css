@@ -428,15 +428,31 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   pointer-events: none;
 }
 .cameras-player__saved-image { display: block; width: 100%; height: 100%; object-fit: contain; }
-.cameras-player__saved-label {
+.cameras-player__tile-footer {
   position: absolute;
+  right: 8px;
   bottom: 8px;
   left: 8px;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+.cameras-player__saved-label {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  overflow: hidden;
   padding: 3px 6px;
   border-radius: 3px;
   background: #000c;
   color: #fff;
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cameras-player__saved-frame[hidden] ~ .cameras-player__tile-footer .cameras-player__saved-label {
+  display: none;
 }
 .cameras-player__tile--focusable .cameras-player__saved-label {
   max-width: calc(100% - 88px);
@@ -515,10 +531,10 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
 }
 .cameras-player__retry[hidden] { display: none !important; }
 .cameras-player__focus {
-  position: absolute;
+  position: relative;
   z-index: 2;
-  right: 8px;
-  bottom: 8px;
+  flex: none;
+  margin-left: auto;
   padding: 6px 9px;
   border: 1px solid #ffffff70;
   border-radius: 20px;
@@ -526,6 +542,7 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   color: #fff;
   font: inherit;
   font-size: 12px;
+  pointer-events: auto;
 }
 .cameras-player__actions {
   z-index: 3;
