@@ -253,7 +253,7 @@ test('a stalled VM resume releases the interface without resending the draft or 
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const resuming = h.emit('retry-session');
   await new Promise(setImmediate);
-  t.mock.timers.tick(30_000);
+  t.mock.timers.tick(60_000);
   await new Promise(setImmediate);
   assert.equal(h.renders.at(-1).resuming, false);
   assert.equal(await resuming, false);

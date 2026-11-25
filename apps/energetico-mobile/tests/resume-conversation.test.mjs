@@ -25,6 +25,26 @@ test('ordinary resume can skip the diary evidence preflight', async () => {
   assert.equal(resumes, 1);
 });
 
+test('a completed diary check leaves a fresh window to load the current question', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let finishCheck, finishQuestion, signal;
+  const recovery = resumeConversation({
+    waitForDiaryEvidence: () => new Promise(resolve => { finishCheck = resolve; }),
+    sendText: (_body, options) => {
+      signal = options.progressSignal;
+      return new Promise(resolve => { finishQuestion = resolve; });
+    },
+  }).catch(error => error.code);
+  t.mock.timers.tick(27_600);
+  finishCheck();
+  await new Promise(setImmediate);
+  t.mock.timers.tick(34_300);
+  await new Promise(setImmediate);
+  assert.equal(signal.aborted, false);
+  finishQuestion('menu');
+  assert.equal(await recovery, 'menu');
+});
+
 test('authentication and throttling failures do not cause automatic reconnection retries', async () => {
   for (const status of [401, 403, 429]) {
     let requests = 0;
@@ -103,8 +123,10 @@ test('the total inactivity cap releases recovery when the VM request never settl
     signal = options.progressSignal; return new Promise(() => {});
   } }).then(() => { settled = true; return 'unexpected success'; }, error => { settled = true; return error.code; });
   await new Promise(setImmediate);
-  t.mock.timers.tick(30_000); await new Promise(setImmediate);
-  assert.equal(settled, true, 'all attempts share the established thirty-second inactivity budget');
+  t.mock.timers.tick(59_999); await new Promise(setImmediate);
+  assert.equal(settled, false);
+  t.mock.timers.tick(1); await new Promise(setImmediate);
+  assert.equal(settled, true, 'all attempts share the sixty-second inactivity budget');
   assert.equal(await pending, 'RESUME_TIMEOUT');
   assert.equal(signal.aborted, true);
 });
@@ -165,7 +187,7 @@ test('unchanged operation progress and prepared animations cannot extend a hung 
   } }, { onOperationProgress() {} }).catch(error => error.code);
   await new Promise(setImmediate);
   report({ percent: 40 });
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 6; i++) {
     t.mock.timers.tick(10_000); report({ percent: 40 }); report({ percent: 33 });
     await new Promise(setImmediate);
   }

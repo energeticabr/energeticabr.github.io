@@ -1044,7 +1044,7 @@ export function createAppController({
   recovery,
   mediaLoadTimeoutMs = 30_000,
   rhidReportTimeoutMs = 30_000,
-  conversationResumeTimeoutMs = 30_000,
+  conversationResumeTimeoutMs,
   conversationResumeRetryDelay,
   attendanceIrregularityDataFactory = createAttendanceIrregularityData,
   authTimeoutMs,
@@ -1454,6 +1454,8 @@ export function createAppController({
     }
   }
   let starting = false;
+  let initialConversationRevision = null;
+  let appInForeground = true;
   let sessionRevision = 0;
   let operationProgress = null;
   let foregroundProgress = null;
@@ -2530,6 +2532,7 @@ export function createAppController({
   }
 
   function handleBackground() {
+    appInForeground = false;
     view.suspendCameras?.();
     cameraStatusNotifications.suspend();
     sefazSyncSession?.suspend();
@@ -2570,14 +2573,16 @@ export function createAppController({
   }
 
   async function handleForeground() {
+    appInForeground = true;
     view.resumeCameras?.();
-    cameraStatusNotifications.resume();
-    void refreshSwileReminder();
-    resumeDdaSync();
-    resumeSefazSync();
     armFlowReminder();
     if (attachmentReminderDetails()) scheduleAttachmentReminder();
     else cancelAttachmentReminder();
+    if (initialConversationRevision === sessionRevision) return true;
+    if (!cameraStatusNotifications.resume()) startCameraStatusNotificationsIfEnabled();
+    void refreshSwileReminder();
+    resumeDdaSync();
+    resumeSefazSync();
     await refreshPendingProvisionSnapshot().then(refreshPendingConstructionDiaries);
     void ddaAutoReminder.refresh();
     refreshDdaMenuAlert();
@@ -6021,6 +6026,7 @@ export function createAppController({
   }
 
   async function continueConversation({ dismissUnavailableAttachments = false, checkDiaryEvidence = true } = {}) {
+    const followupTimeoutMs = conversationResumeTimeoutMs ?? 30_000;
     if (!account || stopped || flowBusy({ allowUncertainRecovery: true })) return false;
     disposeGeneralSummaryReport();
     cancelResponseTransition();
@@ -6062,7 +6068,7 @@ export function createAppController({
           result = preparePresenceResult(await withTimeout(client.sendText({
             replyId: blankPaymentFormOption.replyId,
             omitText: true,
-          }, genericProgress?.options), conversationResumeTimeoutMs, 'A VM ainda não confirmou o avanço da provisão. Retome a conversa para conferir a etapa atual.'));
+          }, genericProgress?.options), followupTimeoutMs, 'A VM ainda não confirmou o avanço da provisão. Retome a conversa para conferir a etapa atual.'));
         } catch (error) {
           paymentProvisionAutoReplyError = error;
           result = paymentProvisionSyncNotice(result);
@@ -6079,7 +6085,7 @@ export function createAppController({
           text: pendingAutomaticExit.label,
           replyId: pendingAutomaticExit.replyId,
           ...(pendingAutomaticExit.homeTransferReceipt ? { homeTransferReceipt: pendingAutomaticExit.homeTransferReceipt } : {}),
-        }, genericProgress?.options), conversationResumeTimeoutMs, 'A VM ainda não confirmou o retorno ao menu. Retome a conversa para conferir a etapa atual.'));
+        }, genericProgress?.options), followupTimeoutMs, 'A VM ainda não confirmou o retorno ao menu. Retome a conversa para conferir a etapa atual.'));
         if (!currentConversation()) return false;
         if (!isMenuResult(result)) throw new Error("A VM não confirmou o retorno ao menu principal. Tente novamente.");
         pendingAutomaticExit = null;
@@ -6158,7 +6164,7 @@ export function createAppController({
       if (!menuResult && typeof client.getAttachments === "function") {
         try {
           const snapshotRequest = client.getAttachments({ signal: genericProgress.abort.signal });
-          const attachments = await withTimeout(snapshotRequest, conversationResumeTimeoutMs, "A consulta de anexos demorou demais.");
+          const attachments = await withTimeout(snapshotRequest, followupTimeoutMs, "A consulta de anexos demorou demais.");
           if (currentConversation()) {
             attachmentRevision += 1;
             store.syncAttachments(attachments);
@@ -11687,10 +11693,6 @@ export function createAppController({
       lastPresenceValidationDate = "";
       legacyDocumentLineFinalizeOption = null;
       sessionStatus = "authenticated";
-      startCameraStatusNotificationsIfEnabled();
-      refreshDdaMenuAlert();
-      resumeDdaSync();
-      resumeSefazSync();
       pendingProvisionLastAutoShownAt = null;
       pendingNotesSessionDismissed = false;
       pendingConstructionDiarySnapshot = null;
@@ -11703,7 +11705,7 @@ export function createAppController({
       pendingProvisionSharePointAuthorization = null;
       openRecovery();
       render();
-      await continueConversation();
+      if (!(await restoreSessionConversation())) return false;
       await refreshPendingProvisionSnapshot();
       await refreshPendingConstructionDiaries();
       await refreshPendingNotesSnapshot();
@@ -11753,8 +11755,26 @@ export function createAppController({
 
   function startCameraStatusNotificationsIfEnabled() {
     const key = cameraPreviewAccountKey();
-    if (!account || stopped || !key || !cameraStatusAlertsEnabled(key)) return false;
+    if (!account || stopped || sessionStatus !== "authenticated" || !key || !cameraStatusAlertsEnabled(key)) return false;
     return cameraStatusNotifications.start(key);
+  }
+
+  async function restoreSessionConversation(options) {
+    const revision = sessionRevision;
+    initialConversationRevision = revision;
+    try {
+      await continueConversation(options);
+    } finally {
+      if (initialConversationRevision === revision) initialConversationRevision = null;
+    }
+    if (stopped || sessionRevision !== revision) return false;
+    if (appInForeground && !globalThis.document?.hidden) {
+      startCameraStatusNotificationsIfEnabled();
+      refreshDdaMenuAlert();
+      resumeDdaSync();
+      resumeSefazSync();
+    }
+    return true;
   }
 
   function openCameras() {
@@ -13305,10 +13325,6 @@ export function createAppController({
     }
 
     sessionStatus = account ? "authenticated" : "signed-out";
-    if (account) startCameraStatusNotificationsIfEnabled();
-    refreshDdaMenuAlert();
-    resumeDdaSync();
-    resumeSefazSync();
     pendingProvisionLastAutoShownAt = null;
     pendingNotesSessionDismissed = false;
     pendingConstructionDiarySnapshot = null;
@@ -13323,7 +13339,10 @@ export function createAppController({
     render();
     const sharedFileIdsPromise = importSharedFiles();
     if (account) {
-      await continueConversation({ checkDiaryEvidence: startupNeedsDiaryEvidenceCheck() });
+      if (!(await restoreSessionConversation({ checkDiaryEvidence: startupNeedsDiaryEvidenceCheck() }))) {
+        starting = false;
+        return;
+      }
       await refreshPendingProvisionSnapshot();
       await refreshPendingConstructionDiaries();
       await refreshPendingNotesSnapshot();

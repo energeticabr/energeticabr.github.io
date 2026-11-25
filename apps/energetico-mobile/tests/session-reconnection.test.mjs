@@ -22,7 +22,8 @@ function harness(t, { client, timeoutMs = 20, native = {} } = {}) {
     view: { render: state => renders.push(state), on: (name, fn) => { commands.set(name, fn); return () => commands.delete(name); }, destroy() {} },
     auth: { initialize: async () => ({ homeAccountId: 'reconnection-test', name: 'Teste' }), getToken: async () => 'synthetic', signOut: async () => {} },
     native: { importSharedItems: async () => [], ...native },
-    conversationResumeTimeoutMs: timeoutMs, conversationResumeRetryDelay: async () => {},
+    ...(timeoutMs == null ? {} : { conversationResumeTimeoutMs: timeoutMs }),
+    conversationResumeRetryDelay: async () => {},
     pendingProvisionAttachmentsDataFactory: async () => ({ loadUpcomingPayments: async () => [], listAttachments: async () => [] }),
     pendingConstructionDiaryDataFactory: async () => ({ loadPending: async () => [] }),
     diaryFieldVisitDataFactory: async () => ({ load: async () => [] }),
@@ -39,6 +40,51 @@ test('ordinary main-menu startup skips the diary evidence preflight', async t =>
   } });
   await h.controller.start();
   assert.deepEqual(calls, ['input_continue']);
+});
+
+test('startup accepts the current menu when the VM responds after 34 seconds', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const sent = [];
+  const backgroundReads = [];
+  let finish;
+  const h = harness(t, { timeoutMs: null, client: {
+    sendText: body => {
+      sent.push(body);
+      return new Promise(resolve => { finish = resolve; });
+    },
+    getDdaRefreshPending: async () => {
+      backgroundReads.push('DDA');
+      return { status: 'pending', requests: [] };
+    },
+    acknowledgeDdaRefresh() {},
+    refreshSefaz() {},
+    getSefazRefreshStatus() {},
+    getSefazRefreshPending: async () => {
+      backgroundReads.push('SEFAZ');
+      return { status: 'pending', requests: [] };
+    },
+    acknowledgeSefazRefresh() {},
+  } });
+  const startup = h.controller.start();
+  await turn();
+  h.emit('draft-changed', { value: 'rascunho local' });
+  h.controller.handleBackground();
+  await h.controller.handleForeground();
+  t.mock.timers.tick(34_300);
+  await turn();
+  assert.equal(h.state().resuming, true);
+  assert.equal(h.state().error, null);
+  assert.deepEqual(backgroundReads, []);
+  h.controller.handleBackground();
+  finish(menu());
+  await startup;
+  assert.equal(h.state().resuming, false);
+  assert.equal(h.state().error, null);
+  assert.equal(h.store.getState().draft, 'rascunho local');
+  assert.deepEqual(sent, [{ text: '', replyId: 'input_continue' }]);
+  assert.deepEqual(backgroundReads, []);
+  await h.controller.handleForeground();
+  assert.deepEqual(backgroundReads.sort(), ['DDA', 'SEFAZ']);
 });
 
 test('a shared receipt that clears the send error still exposes Retomar and uploads once after synchronization', async t => {

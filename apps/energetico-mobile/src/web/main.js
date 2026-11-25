@@ -110,10 +110,8 @@ async function start() {
       controller.flushRecovery();
       controller.handleBackground();
     },
-    onRestore: () => {
-      controller.handleForeground();
-      return controller.refreshAttachments({ silent: true });
-    },
+    onForeground: () => controller.handleForeground(),
+    onRestore: () => controller.refreshAttachments({ silent: true }),
     onClose: () => {
       controller.stop();
       stopAttachmentSync();

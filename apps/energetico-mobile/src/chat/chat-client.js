@@ -326,7 +326,7 @@ export function createChatClient({
       const abort = new AbortController();
       const cancel = () => abort.abort();
       signal?.addEventListener('abort', cancel, { once: true });
-      const timeout = setTimeout(cancel, 8000);
+      const timeout = setTimeout(cancel, 30_000);
       let result;
       try {
         const token = await cancellableToken(tokenProvider, abort.signal);
