@@ -38,7 +38,7 @@ PREVIEW_REPLACEMENT_GRACE_SECONDS = 5
 IDLE_SECONDS = 12
 SINGLE_REOPEN_SECONDS = 45
 PREVIEW_IDLE_SECONDS = 24
-STATUS_CHANNEL_PROBE_TIMEOUT_SECONDS = START_TIMEOUT_SECONDS
+STATUS_CHANNEL_PROBE_TIMEOUT_SECONDS = 45
 STATUS_PROBE_VIEWER = "__camera-status-probe__"
 
 
@@ -309,6 +309,8 @@ class Gateway:
     def _icsee_live_channel_status_locked(self, channel):
         existing = [stream for stream in self.streams.values()
                     if stream.channel == channel and stream.mode == "live"]
+        if not existing:
+            return None
         return "online" if any(stream.ready_to_play() for stream in existing) else "unknown"
 
     def icsee_live_channel_status(self, entry):
@@ -327,7 +329,7 @@ class Gateway:
         with self.lock:
             self.expire()
             live_state = self._icsee_live_channel_status_locked(channel)
-            if live_state == "online":
+            if live_state is not None:
                 return live_state
             if self.query_active or len(self.streams) >= MAX_STREAMS - 1:
                 return "unknown"
@@ -354,9 +356,9 @@ class Gateway:
                     if stream.ready_to_play():
                         return "online"
                     if now >= deadline:
-                        # A stalled relay or media startup is not proof that
-                        # this individual channel is offline.
-                        return "unknown"
+                        # A single stalled relay/startup is inconclusive. The
+                        # monitor requires another independent two-hour check.
+                        return "no_video"
                 time.sleep(0.5)
         except (OSError, ValueError, subprocess.SubprocessError):
             return "unknown"

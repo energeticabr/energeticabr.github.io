@@ -16,8 +16,8 @@
 - Preservar o último estado confirmado através de leituras `unknown`; o próximo `online`/`offline` pode gerar a transição correta.
 - Produzir eventos por canal e incluir o rótulo do canal, sem agregar estados de uma câmera multi-canal.
 - Reutilizar SQLite, bearer token, validação de conta e plugin já instalado; não adicionar serviço ou tarifa.
-- Consultar o status iCSee a cada 2 horas por CloudId e, se o gravador estiver on-line, sondar cada canal com uma prévia sequencial de 384 px/6 fps, encerrada no primeiro segmento e limitada a 75 s. Timeout sem vídeo não é confirmação de queda.
-- No Yoosee, reutilizar o fluxo ativo; só considerar o observador saudável após receber vídeo ou `STATE_PLAY`; não criar uma segunda sessão de vídeo só para status.
+- Consultar o status iCSee a cada 2 horas por CloudId e, se o gravador estiver on-line, sondar cada canal com uma prévia sequencial de 384 px/6 fps, encerrada no primeiro segmento e limitada a 45 s. Dois resultados sem vídeo consecutivos, em rodadas distintas, confirmam off-line.
+- No Yoosee, reutilizar o fluxo ativo; na inicialização só confiar após receber vídeo ou `STATE_PLAY`; login/execução falhos não podem reaproveitar a confiança do processo anterior.
 - Consultar eventos a cada 60 segundos durante a sessão ativa e recuperar os pendentes ao voltar ao app.
 - Sem push remoto configurado, o app pode ser suspenso em segundo plano; eventos chegam após retomar o primeiro plano ou abrir novamente.
 - Não expor credenciais nem alterar os blocos de gestos de assinatura.
@@ -25,7 +25,7 @@
 ## Review Focus
 
 - Uma falha de API/IPC resulta em `unknown` e não cria evento de desconexão; uma leitura iCSee em cache não pode sobrescrever uma atualização de vídeo mais recente.
-- Timeout de prévia sem evidência específica do canal resulta em `unknown`; falha do observador Yoosee não pode ser confundida com câmera offline.
+- Timeout de prévia isolado resulta em `unknown`; duas rodadas sem vídeo para um canal iCSee confirmam off-line. Falha do observador Yoosee não pode ser confundida com câmera offline.
 - As sondagens iCSee devem rodar em thread própria para não atrasar o ciclo Yoosee de 30 segundos.
 - Canais diferentes da mesma câmera geram avisos com os próprios nomes; o estado de outro canal não mascara a queda.
 - Um cursor ausente estabelece a linha de base; cursor parcial avança somente após tentativa de notificação e lote incompleto continua sendo consultado.
@@ -51,7 +51,7 @@
 - [x] Acrescentar tabela append-only de eventos, transação de estado e gravação de apenas `online`↔`offline`.
 - [x] Preservar estado confirmado através de `unknown`; gravar eventos pelo ID público do próprio canal.
 - [x] Validar cursor/lote e adicionar a ação HTTP sob `gateway.authorize`.
-- [x] Consultar status CloudId por gravador a cada 2 horas e verificar canais individualmente com prévia limitada em tamanho, taxa e duração, sem classificar timeout inconclusivo como offline.
+- [x] Consultar status CloudId por gravador a cada 2 horas e verificar canais individualmente com prévia limitada em tamanho, taxa e duração; exigir dois timeouts independentes antes de marcar off-line.
 - [x] Atualizar README quanto à fila, cadência, sondagem Yoosee e limite sem push remoto.
 - [ ] Validar sintaxe Python e execução/saúde do serviço no servidor após publicação.
 

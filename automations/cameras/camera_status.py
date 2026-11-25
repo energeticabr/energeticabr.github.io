@@ -18,6 +18,7 @@ import uuid
 ICSEE_STATUS_INTERVAL_SECONDS = 2 * 60 * 60
 YOOSEE_STATUS_POLL_SECONDS = 30
 ICSEE_STATUS_TIMEOUT_SECONDS = 30
+ICSEE_CHANNEL_MISSES_FOR_OFFLINE = 2
 VALID_STATES = {"online", "offline", "unknown"}
 
 
@@ -129,7 +130,8 @@ class CameraStatusStore:
             CREATE TABLE IF NOT EXISTS camera_status_checks (
                 source_key TEXT PRIMARY KEY,
                 checked_at TEXT NOT NULL,
-                state TEXT NOT NULL DEFAULT 'unknown' CHECK (state IN ('online', 'offline', 'unknown'))
+                state TEXT NOT NULL DEFAULT 'unknown' CHECK (state IN ('online', 'offline', 'unknown')),
+                consecutive_misses INTEGER NOT NULL DEFAULT 0 CHECK (consecutive_misses >= 0)
             )
         """)
         check_columns = {row[1] for row in self._connection.execute("PRAGMA table_info(camera_status_checks)")}
@@ -137,6 +139,11 @@ class CameraStatusStore:
             self._connection.execute("""
                 ALTER TABLE camera_status_checks ADD COLUMN state TEXT NOT NULL DEFAULT 'unknown'
                 CHECK (state IN ('online', 'offline', 'unknown'))
+            """)
+        if "consecutive_misses" not in check_columns:
+            self._connection.execute("""
+                ALTER TABLE camera_status_checks ADD COLUMN consecutive_misses INTEGER NOT NULL DEFAULT 0
+                CHECK (consecutive_misses >= 0)
             """)
         self._connection.execute(
             "INSERT OR IGNORE INTO camera_status_meta(key, value) VALUES ('event_generation', ?)",
@@ -225,20 +232,30 @@ class CameraStatusStore:
     def source_check(self, source_key):
         with self._lock:
             row = self._connection.execute(
-                "SELECT checked_at, state FROM camera_status_checks WHERE source_key = ?", (source_key,)
+                "SELECT checked_at, state, consecutive_misses FROM camera_status_checks WHERE source_key = ?",
+                (source_key,),
             ).fetchone()
-        return {"checkedAt": row[0], "status": row[1]} if row else None
+        return {"checkedAt": row[0], "status": row[1], "consecutiveMisses": int(row[2])} if row else None
 
-    def mark_source_checked(self, source_key, checked_at, status="unknown"):
+    def mark_source_checked(self, source_key, checked_at, status="unknown", *, no_video=False):
         if status not in VALID_STATES:
             raise ValueError("Invalid camera status")
         checked = utc_text(_parse_time(checked_at))
         with self._lock:
+            row = self._connection.execute(
+                "SELECT consecutive_misses FROM camera_status_checks WHERE source_key = ?", (source_key,)
+            ).fetchone()
+            misses = (int(row[0]) if row else 0) + 1 if no_video else 0
             self._connection.execute("""
-                INSERT INTO camera_status_checks(source_key, checked_at, state) VALUES (?, ?, ?)
-                ON CONFLICT(source_key) DO UPDATE SET checked_at = excluded.checked_at, state = excluded.state
-            """, (source_key, checked, status))
+                INSERT INTO camera_status_checks(source_key, checked_at, state, consecutive_misses)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(source_key) DO UPDATE SET
+                    checked_at = excluded.checked_at,
+                    state = excluded.state,
+                    consecutive_misses = excluded.consecutive_misses
+            """, (source_key, checked, status, misses))
             self._connection.commit()
+        return misses
 
     def events_after(self, cursor, *, limit=100):
         cursor = max(0, int(cursor))
@@ -405,6 +422,8 @@ class CameraStatusMonitor:
                         live_state = "unknown"
                     if live_state == "online":
                         self.store.update(entry["id"], "online", checked_at=utc_text(self.clock()))
+                    elif live_state == "unknown":
+                        self.store.update(entry["id"], "unknown", checked_at=provider_checked_at)
                     else:
                         self.store.update(entry["id"], provider_state, checked_at=provider_checked_at)
                 continue
@@ -426,10 +445,31 @@ class CameraStatusMonitor:
                     state = self.icsee_channel_query(entry)
                 except Exception:
                     state = "unknown"
-                if state not in VALID_STATES:
-                    state = "unknown"
+                channel_finished_at = utc_text(self.clock())
+                if state == "no_video":
+                    try:
+                        live_state = self.icsee_live_query(entry)
+                    except Exception:
+                        live_state = "unknown"
+                    if live_state == "online":
+                        state = "online"
+                        self.store.mark_source_checked(channel_key, channel_finished_at, state)
+                        self.store.update(entry["id"], state, checked_at=channel_finished_at)
+                        continue
+                    if live_state == "unknown":
+                        state = "unknown"
+                        self.store.mark_source_checked(channel_key, channel_finished_at, state)
+                        self.store.update(entry["id"], state, checked_at=channel_started_at)
+                        continue
+                    misses = self.store.mark_source_checked(
+                        channel_key, channel_finished_at, "unknown", no_video=True,
+                    )
+                    state = "offline" if misses >= ICSEE_CHANNEL_MISSES_FOR_OFFLINE else "unknown"
+                else:
+                    if state not in VALID_STATES:
+                        state = "unknown"
+                    self.store.mark_source_checked(channel_key, channel_finished_at, state)
                 self.store.update(entry["id"], state, checked_at=channel_started_at)
-                self.store.mark_source_checked(channel_key, utc_text(self.clock()), state)
 
     def poll_once(self):
         groups = self._groups()
