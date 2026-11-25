@@ -1,0 +1,10 @@
+[Unit]
+Description=Verificar atualizações de pedidos Swile na fila local
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=1s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
