@@ -28,3 +28,26 @@ test('voltar do cache do Safari preserva chat e apenas atualiza anexos', async (
   windowRef.dispatchEvent(pageEvent('pageshow', true));
   assert.equal(restored, 1);
 });
+
+test('tab visibility and Safari cache both resume the app once per foreground transition', async () => {
+  const { bindPageLifecycle } = await import('../src/web/page-lifecycle.js');
+  const windowRef = new EventTarget(), documentRef = new EventTarget(), events = [];
+  documentRef.visibilityState = 'visible';
+  bindPageLifecycle({
+    windowRef, documentRef, onClose() {},
+    onSave: () => events.push('save'),
+    onForeground: () => events.push('foreground'),
+    onRestore: () => events.push('restore'),
+  });
+  const visibility = state => {
+    documentRef.visibilityState = state;
+    documentRef.dispatchEvent(new Event('visibilitychange'));
+  };
+  const pageEvent = name => windowRef.dispatchEvent(Object.assign(new Event(name), { persisted: true }));
+  visibility('hidden');
+  visibility('visible');
+  pageEvent('pagehide');
+  visibility('visible');
+  pageEvent('pageshow');
+  assert.deepEqual(events, ['save', 'foreground', 'save', 'foreground', 'restore']);
+});

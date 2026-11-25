@@ -2575,14 +2575,14 @@ export function createAppController({
   async function handleForeground() {
     appInForeground = true;
     view.resumeCameras?.();
+    armFlowReminder();
+    if (attachmentReminderDetails()) scheduleAttachmentReminder();
+    else cancelAttachmentReminder();
     if (initialConversationRevision === sessionRevision) return true;
     if (!cameraStatusNotifications.resume()) startCameraStatusNotificationsIfEnabled();
     void refreshSwileReminder();
     resumeDdaSync();
     resumeSefazSync();
-    armFlowReminder();
-    if (attachmentReminderDetails()) scheduleAttachmentReminder();
-    else cancelAttachmentReminder();
     await refreshPendingProvisionSnapshot().then(refreshPendingConstructionDiaries);
     void ddaAutoReminder.refresh();
     refreshDdaMenuAlert();
