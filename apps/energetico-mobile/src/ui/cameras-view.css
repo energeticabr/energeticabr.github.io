@@ -460,7 +460,6 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cameras-player__stage[data-focused="true"] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); overflow: hidden; }
 .cameras-player__tile[hidden] { display: none !important; }
 .cameras-player__video--focusable { touch-action: manipulation; cursor: zoom-in; }
 .cameras-player__stage[data-focused="true"] .cameras-player__video--focusable { cursor: zoom-out; }

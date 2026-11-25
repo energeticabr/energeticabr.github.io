@@ -904,6 +904,7 @@ export function createCamerasView(documentRef) {
       function toggleCameraFocus(channel) {
         focusedCameraId = focusedCameraId === String(channel.id) ? null : String(channel.id);
         stage.dataset.focused = String(Boolean(focusedCameraId));
+        stage.dataset.count = String(focusedCameraId ? 1 : chosen.length);
         for (const { tile, channel: tileChannel } of tileItems) {
           tile.hidden = Boolean(focusedCameraId && String(tileChannel.id) !== focusedCameraId);
         }

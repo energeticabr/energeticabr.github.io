@@ -74,6 +74,20 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
       const minimumTileHeight = height < 400 ? 40 : 100;
       assert.ok(layout.tiles.every(tile => tile.width > 100 && tile.height > minimumTileHeight
         && tile.left >= 0 && tile.right <= width && tile.top >= 0 && tile.bottom <= height));
+      if (mode === 'player') {
+        for (const view of ['focused', 'individual']) {
+          const { stage, videos } = layout[view];
+          assert.equal(videos.length, 1);
+          const [video] = videos;
+          assert.ok(Math.abs(video.left - stage.left) < 2 && Math.abs(video.top - stage.top) < 2
+            && Math.abs(video.width - stage.width) < 2 && Math.abs(video.height - stage.height) < 2,
+          `The camera must fill the stage in ${view} mode at ${width}x${height}: ${JSON.stringify(layout[view])}`);
+        }
+        assert.equal(layout.restored.videos.length, 8);
+        assert.ok(layout.restored.videos.every((video, index) =>
+          video.left === layout.tiles[index].left && video.top === layout.tiles[index].top
+          && video.width === layout.tiles[index].width && Math.abs(video.height - layout.tiles[index].height) < 2));
+      }
       if (mode === 'pair') {
         const [first, second] = layout.tiles;
         if (height > width) {
