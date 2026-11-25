@@ -146,25 +146,30 @@
   padding: 0 14px;
   font-size: 15px;
 }
-.camera-card__heading strong { flex: 1; overflow-wrap: anywhere; }
-.camera-card__heading input { width: 22px; height: 22px; accent-color: #3279e8; }
+.camera-card__heading strong { min-width: 0; overflow-wrap: anywhere; }
+.camera-card__heading input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-inline-start: auto;
+  accent-color: #3279e8;
+}
 .camera-card__wifi { color: #31b8a5; font-size: 18px; }
 .camera-card__rename {
   display: grid;
-  flex: 0 0 38px;
+  flex: none;
   place-items: center;
-  width: 38px;
-  min-width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: transparent;
-  color: #687078;
+  background: #edf3fc;
+  color: #2674e8;
   cursor: pointer;
 }
 .camera-card__rename svg { width: 18px; height: 18px; fill: currentColor; }
-.camera-card__rename:hover { background: #edf3fc; color: #2674e8; }
+.camera-card__rename:hover { background: #dceafe; }
 .camera-card__rename:focus-visible { outline: 2px solid #2674e8; outline-offset: 2px; }
 .camera-card__preview {
   position: relative;

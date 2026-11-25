@@ -24,6 +24,20 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
     if (mode === 'list') {
       assert.equal(layout.cards.length,9);
       assert.ok(layout.cards.every(card => card.left >= 0 && card.right <= width));
+      assert.equal(layout.listHeadings.length, 9);
+      assert.equal(layout.selectionHeadings.length, 9);
+      for (const [{ titleText, pencil }] of [layout.listHeadings, layout.selectionHeadings]) {
+        assert.ok(pencil.left - titleText.right >= 0 && pencil.left - titleText.right <= 12,
+          `Pencil must sit directly after a short camera name at ${width}x${height}`);
+      }
+      for (const { heading, title, pencil, checkbox } of [...layout.listHeadings, ...layout.selectionHeadings]) {
+        const context = `${width}x${height} ${checkbox ? 'selection' : 'list'}`;
+        assert.ok(pencil.left - title.right >= 0 && pencil.left - title.right <= 12,
+          `Pencil must sit directly after the camera name at ${context}`);
+        assert.ok(pencil.width >= 44 && pencil.height >= 44 && pencil.right <= heading.right,
+          `Pencil must be fully visible with a touch target of at least 44px at ${context}`);
+        if (checkbox) assert.ok(checkbox.left > pencil.right && checkbox.right <= heading.right);
+      }
     } else if (mode === 'visuals') {
       assert.equal(layout.visualCards.length,1);
       assert.ok(layout.tabs.left >= 0 && layout.tabs.right <= width);
