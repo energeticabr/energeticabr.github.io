@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; }
+  main { position: fixed; inset: 0; }
+</style>
+<main></main>
+<script type="module">
+  import '../../src/ui/report-landscape.css';
+  import '../../src/ui/management-report.css';
+  import { bindReportLandscape } from '../../src/ui/report-landscape.js';
+  import { createManagementExpenseTypeDashboardView } from '../../src/ui/management-expense-type-dashboard-view.js';
+
+  const root = document.querySelector('main');
+  bindReportLandscape(root);
+  const paid = [0, 974, 1200, 547, 133, 46900, 63400, 34500, 25200, 31700, 52500, 102400];
+  const months = paid.map((value, index) => {
+    const forecast = index === 11 ? 34800 : 0;
+    return { period: index === 0 ? '2025-12' : `2026-${String(index).padStart(2, '0')}`,
+      paid: value, forecast, total: value + forecast };
+  });
+  const rank = [{ name: 'CONCRETO USINADO', total: 97500, percentage: 24.7 }];
+  createManagementExpenseTypeDashboardView({ root }).open({
+    expenseType: 'MATERIAL', branch: '004 - EDIFÍCIO XAVANTE', months,
+    total: months.reduce((sum, month) => sum + month.total, 0),
+    products: rank, suppliers: rank, stages: rank,
+  });
+
+  const waitForLayout = async () => {
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+  };
+  await waitForLayout();
+  const svg = root.querySelector('svg');
+  const card = svg.closest('section');
+  const points = svg.querySelectorAll('.gm-expense-dashboard-series.is-total circle');
+  const labels = [...svg.querySelectorAll('.gm-dashboard-value-label:not([hidden])')];
+  const monthsLabels = [...svg.querySelectorAll('.gm-dashboard-month-label')];
+  const first = points[0].getBoundingClientRect();
+  const last = points[11].getBoundingClientRect();
+  const sideways = root.dataset.reportPortrait === 'true';
+  const drawnWidth = sideways ? last.y - first.y : last.x - first.x;
+  const labelSize = label => {
+    const rect = label.getBoundingClientRect();
+    return sideways ? rect.width : rect.height;
+  };
+  const cardWidth = card.clientWidth;
+  const boxes = [...labels, ...monthsLabels].map(label => label.getBBox());
+  const noOverlap = boxes.every((box, index) => boxes.slice(index + 1).every(next =>
+    box.x + box.width <= next.x || next.x + next.width <= box.x ||
+    box.y + box.height <= next.y || next.y + next.height <= box.y));
+  const rankSize = parseFloat(getComputedStyle(root.querySelector('.gm-dashboard-rank-value')).fontSize);
+  const valueHeight = Math.min(...labels.map(labelSize));
+  const monthHeight = Math.min(...monthsLabels.map(labelSize));
+  const lastLabel = labels.find(label => label.textContent.includes('137,2'))?.textContent;
+  svg.dispatchEvent(new PointerEvent('pointermove', {
+    clientX: last.x + last.width / 2, clientY: last.y + last.height / 2,
+  }));
+  const detail = root.querySelector('.gm-expense-dashboard-month-detail');
+  const detailBounds = detail.getBoundingClientRect();
+  const scrollBounds = root.querySelector('.gm-expense-dashboard-scroll').getBoundingClientRect();
+  const detailVisible = detailBounds.width > 0 && detailBounds.height > 0 &&
+    detailBounds.left >= scrollBounds.left && detailBounds.right <= scrollBounds.right &&
+    detailBounds.top >= scrollBounds.top && detailBounds.bottom <= scrollBounds.bottom;
+
+  card.style.maxWidth = `${cardWidth - 100}px`;
+  await waitForLayout();
+  const resized = sideways ? points[11].getBoundingClientRect().y - points[0].getBoundingClientRect().y
+    : points[11].getBoundingClientRect().x - points[0].getBoundingClientRect().x;
+  card.style.removeProperty('max-width');
+  svg.dispatchEvent(new PointerEvent('pointerleave'));
+  await waitForLayout();
+
+  document.documentElement.dataset.layout = JSON.stringify({
+    coverage: drawnWidth / cardWidth, valueHeight, monthHeight, noOverlap, rankSize,
+    lastLabel, detail: detail.textContent, detailVisible, resized: drawnWidth - resized, months: monthsLabels.length,
+  });
+</script>
