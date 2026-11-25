@@ -96,12 +96,12 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(self.request("GET", base + "index.m3u8?ready=1")[0], 404)
         self.assertEqual(self.request("GET", base + "../another.mp4")[0], 404)
 
-    def test_single_live_compatibility_produces_a_first_segment_after_one_second(self):
+    def test_live_compatibility_uses_one_second_segments_with_the_same_retention_window(self):
         entry = self.gateway.entries["ch-1"]
         for preview, direct, operation, duration, keyframe_interval in (
             (False, False, "live", "1", "10"),
             (False, True, "live", "2", None),
-            (True, False, "live", "2", "12"),
+            (True, False, "live", "1", "6"),
             (False, False, "playback", "2", "20"),
         ):
             with self.subTest(preview=preview, direct=direct, operation=operation):
@@ -113,8 +113,26 @@ class CameraGatewayTest(unittest.TestCase):
                         stream.launch()
                     command = spawn.call_args.args[0]
                     self.assertEqual(command[command.index("-hls_time") + 1], duration)
+                    self.assertNotIn("-hls_init_time", command)
+                    if preview:
+                        self.assertEqual(command[command.index("-hls_list_size") + 1], "24")
+                        self.assertEqual(command[command.index("-hls_delete_threshold") + 1], "32")
                     interval = command[command.index("-g") + 1] if "-g" in command else None
                     self.assertEqual(interval, keyframe_interval)
+
+    def test_raw_live_input_uses_a_shorter_probe_than_recordings_or_transport_streams(self):
+        entry = self.gateway.entries["ch-1"]
+        for codec, mode, expected in (
+            ("h264", "live", "500000"),
+            ("hevc", "live", "500000"),
+            ("mpegts", "live", "1500000"),
+            ("hevc", "playback", "1500000"),
+        ):
+            with self.subTest(codec=codec, mode=mode), patch("gateway.subprocess.Popen") as spawn:
+                stream = Stream({**entry, "format": codec, "input": {"operation": mode}}, "/unused", "owner")
+                self.addCleanup(stream.close)
+                command = spawn.call_args.args[0]
+                self.assertEqual(command[command.index("-analyzeduration") + 1], expected)
 
     def test_compatible_preview_does_not_displace_direct_playback_for_the_same_viewer(self):
         channel = "ch-1"

@@ -86,10 +86,12 @@ class Stream:
         self.startup_deadline = now + START_TIMEOUT_SECONDS
         self.expires = now + 20 * 60
         width, fps = (384, 6) if preview else (640, 10)
-        segment_seconds = 1 if self.mode == "live" and not preview and not self.direct else 2
+        segment_seconds = 1 if self.mode == "live" and not self.direct else 2
+        probe_duration = ("500000" if self.mode == "live" and entry["format"] in {"h264", "hevc"}
+                          else "1500000")
         bitrate = ["-crf", "28", "-maxrate", "320k", "-bufsize", "320k"] if preview else []
-        playlist_size = "12" if preview else str(8 // segment_seconds)
-        retained_segments = "16" if preview else str(2 // segment_seconds)
+        playlist_size = str((24 if preview else 8) // segment_seconds)
+        retained_segments = str((32 if preview else 2) // segment_seconds)
         if self.direct:
             # Preserve timing the demuxer knows and fill missing Annex B timestamps.
             video = ["-map", "0:v:0", "-c:v", "copy", "-bsf:v",
@@ -115,7 +117,7 @@ class Stream:
             self.encoder = subprocess.Popen(
                 [ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error",
                  "-threads", "1", "-filter_threads", "1",
-                 "-fflags", "+genpts", "-analyzeduration", "1500000", "-probesize", "65536",
+                 "-fflags", "+genpts", "-analyzeduration", probe_duration, "-probesize", "65536",
                  "-f", entry["format"], "-i", "pipe:0",
                  "-an", *video, "-f", "hls", *container,
                  "-hls_time", str(segment_seconds), "-hls_list_size", playlist_size,
