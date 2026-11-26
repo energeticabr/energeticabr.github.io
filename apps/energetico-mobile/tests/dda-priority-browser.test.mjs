@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { createIsolatedViteServer } from './helpers/isolated-vite-server.mjs';
 import { runBrowserLayout } from './helpers/browser-layout-runner.mjs';
+import { withAttachmentBrowser } from './helpers/attachment-browser-driver.mjs';
 
 test('DDA priority dialog and full-row highlight fit on mobile and Windows', { timeout: 90000 }, async t => {
   const browser = [process.env.CHROME_BIN, 'C:/Program Files/Google/Chrome/Application/chrome.exe',
@@ -42,6 +43,20 @@ test('DDA priority dialog and full-row highlight fit on mobile and Windows', { t
         dom.window.close();
       }
     }
+    await withAttachmentBrowser(browser, { width: 1365, height: 900 }, async ({ navigate, wait, evaluate, command }) => {
+      await navigate(`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/dda-report.html?standalone&report&layout&priority=dialog`);
+      await wait('document.documentElement.dataset.priority');
+      const tab = async (modifiers = 0) => {
+        for (const type of ['keyDown', 'keyUp']) {
+          await command('Input.dispatchKeyEvent', { type, key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers });
+        }
+        return evaluate('document.activeElement.type');
+      };
+      assert.equal(await tab(), 'date', 'Tab advances between the date segments');
+      assert.equal(await tab(8), 'date', 'Shift+Tab returns to the first segment');
+      assert.equal(await tab(8), 'submit', 'Shift+Tab wraps to Save after the first segment');
+      assert.equal(await tab(), 'date', 'Tab from Save wraps to the date');
+    });
   } finally {
     await server.close();
   }

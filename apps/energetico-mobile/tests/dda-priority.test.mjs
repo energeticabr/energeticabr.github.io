@@ -57,6 +57,25 @@ test('priority saves only the date, checks the item version, and reconciles retr
   assert.equal(live.fields.VENCIMENTO, '2027-01-04');
 });
 
+test('priority cannot be newly assigned after settlement or refusal on the server', async () => {
+  const { createDdaPriority } = await import('../src/chat/dda-priority.js');
+  for (const statusFields of [{ SITUACAO: 'Pago' }, { DDA_RECUSADO: true },
+    { PGTO_CONFIRMADO: true }, { DDA_CICLO_AGENDAMENTO: 'PAGO_AGENDADO' }]) {
+    const live = { ...row(2, '2027-01-04'), eTag: '"3"' };
+    Object.assign(live.fields, statusFields);
+    const save = createDdaPriority({ repository: {
+      resolveList: async () => ({ status: 'resolved', id: 'dda' }),
+      getItem: async (_site, _list, _item, _query, { restrictedFields }) => ({
+        ...live,
+        fields: Object.fromEntries(restrictedFields.map(field => [field, live.fields[field]])),
+      }),
+      updateItem: async () => assert.fail('A closed DDA cannot receive a new priority'),
+    } });
+    await assert.rejects(save({ row: { id: '2', key: 'dda-2', priorityDate: '' },
+      priorityDate: '2026-11-24' }), /Atualize o relatório/);
+  }
+});
+
 test('priority dialog requires a date and saves, reloads and edits the priority below the bank status', async t => {
   const source = [row(1, '2026-11-25'), row(2, '2027-01-04')];
   const dom = new JSDOM('<body><main id="app"></main></body>');

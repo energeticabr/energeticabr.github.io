@@ -1,8 +1,12 @@
-import { DDA_PRIORITY_FIELD } from './dda-bank-status.js';
+import { DDA_PRIORITY_FIELD, DDA_REFUSED_FIELD, canPrioritizeDda } from './dda-bank-status.js';
+import { normalizeDdaReportRows } from './dda-report-model.js';
 import { registrationDateKey } from './registration-gallery-data.js';
 
-const fields = ['ID', 'CHAVE_DDA', DDA_PRIORITY_FIELD];
+const fields = ['ID', 'CHAVE_DDA', DDA_PRIORITY_FIELD, 'SITUACAO', DDA_REFUSED_FIELD,
+  'PGTO_CONFIRMADO', 'PGTO_CONFIRMADO_EM', 'PGTO_CONFIRMADO_POR', 'DDA_CICLO_AGENDAMENTO',
+  'STATUS_DDA', 'STATUS_CONSULTADO_EM', 'ULTIMA_CONSULTA'];
 const priorityOf = item => registrationDateKey(item.fields[DDA_PRIORITY_FIELD]);
+const changedMessage = 'O DDA mudou no SharePoint. Atualize o relatório antes de tentar novamente.';
 
 export function createDdaPriority({ repository, siteKey = 'personal', assertSession = () => {} }) {
   const checkSession = signal => { signal?.throwIfAborted(); assertSession(); };
@@ -22,7 +26,7 @@ export function createDdaPriority({ repository, siteKey = 'personal', assertSess
 
     function checkIdentity(item) {
       if (String(item?.id) !== id || String(item?.fields?.CHAVE_DDA ?? '').trim() !== key) {
-        throw new Error('O DDA mudou no SharePoint. Atualize o relatório antes de tentar novamente.');
+        throw new Error(changedMessage);
       }
     }
 
@@ -34,8 +38,10 @@ export function createDdaPriority({ repository, siteKey = 'personal', assertSess
     const currentDate = priorityOf(current);
     const receipt = { id, priorityDate };
     if (currentDate === priorityDate) return receipt;
-    if (currentDate !== (row.priorityDate || '') || !current.eTag || current.eTag === '*') {
-      throw new Error('O DDA mudou no SharePoint. Atualize o relatório antes de tentar novamente.');
+    const [liveRow] = normalizeDdaReportRows({ rows: [current] });
+    if (!canPrioritizeDda(liveRow.status) || currentDate !== (row.priorityDate || '') ||
+        !current.eTag || current.eTag === '*') {
+      throw new Error(changedMessage);
     }
 
     const saved = await repository.updateItem(siteKey, list.id, id, {

@@ -1,5 +1,5 @@
 import {normalizeDdaReportRows,buildDdaReport,ddaSettlementPending,readSettledDdaIds,canReviewDdaUnlinked} from '../chat/dda-report-model.js';
-import {DDA_REFUSED_STATUS,isDdaOpenStatus} from '../chat/dda-bank-status.js';
+import {DDA_REFUSED_STATUS,canPrioritizeDda} from '../chat/dda-bank-status.js';
 import {ddaDueTone,ddaTodayKey} from './dda-card.js';
 import {bindReportLandscape} from './report-landscape.js';
 import {addReportCloseControl} from './report-close-control.js';
@@ -203,7 +203,13 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   const feedback=make('p','dda-payment-feedback');feedback.setAttribute('role','status');
   const form=make('form'),actions=make('div','gallery-record-dialog-buttons'),no=button(cancelLabel),yes=button(submitLabel);
   yes.type='submit';yes.className='dda-payment-yes';actions.append(no,yes);
-  if(input)form.append(input);
+  const first=input||no;
+  if(input){
+   // Let Tab move through the native date segments before wrapping the dialog.
+   const start=make('span','sr-only');start.tabIndex=0;start.setAttribute('aria-hidden','true');
+   start.addEventListener('focus',()=>(yes.disabled?dialog:yes).focus({preventScroll:true}));
+   form.append(start,input);
+  }
   form.append(feedback,actions);
   dialog.append(make('h2','',question),make('p','dda-payment-summary',row.supplier+' · DDA '+row.id),form);
   overlay.append(dialog);
@@ -230,14 +236,12 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   overlay.addEventListener('keydown',event=>{
    if(event.key==='Escape'){
     event.preventDefault();event.stopPropagation();if(!no.disabled)closeDecisionDialog();
-   }else if(event.key==='Tab'){
+   }else if(event.key==='Tab'&&(!input||no.disabled||(!event.shiftKey&&doc.activeElement===yes))){
     event.preventDefault();event.stopPropagation();
-    const controls=[...(input?[input]:[]),no,yes],index=controls.indexOf(doc.activeElement);
-    const next=(index+(event.shiftKey?-1:1)+controls.length)%controls.length;
-    (no.disabled?dialog:controls[next]).focus();
+    (no.disabled?dialog:doc.activeElement===yes?first:yes).focus();
    }
   });
-  panel.inert=true;root.append(overlay);(input||no).focus();
+  panel.inert=true;root.append(overlay);first.focus();
  }
  function askSettlement(row,trigger){
   if(root.hidden||destroyed||root.getAttribute('aria-busy')==='true'||nestedViewOpen()||settlementOpening
@@ -367,7 +371,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
     priority.append(make('strong','','DATA PRIOR'),day);
     status.append(priority);
    }
-   if(!printAll&&row.key&&(isDdaOpenStatus(row.status)||row.status==='Vencido')&&typeof data.prioritizeDda==='function'){
+   if(!printAll&&row.key&&canPrioritizeDda(row.status)&&typeof data.prioritizeDda==='function'){
     const prioritize=button('Priorizar DDA '+row.id,'PRIORIZAR');
     prioritize.className='ddr-prioritize';prioritize.dataset.ddaPrioritize=row.id;
     prioritize.addEventListener('click',()=>askPriority(row,prioritize));

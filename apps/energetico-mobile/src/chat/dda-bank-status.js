@@ -28,6 +28,10 @@ export function isDdaOpenStatus(value) {
   return status === 'Em aberto' || status === 'Agendado';
 }
 
+export function canPrioritizeDda(status) {
+  return isDdaOpenStatus(status) || ddaSearchKey(status) === 'vencido';
+}
+
 const scheduleLabels = {
   scheduled: 'AGENDADO',
   unscheduled: 'NÃO AGENDADO',
