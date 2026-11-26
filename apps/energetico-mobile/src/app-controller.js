@@ -463,6 +463,7 @@ const PENDING_PAYROLL_LINKS_ACTION = 'open-pending-payroll-links';
 const HOLERITE_REPORT_ACTION = 'open-holerite-report';
 const STAGE_PROGRESS_ID = 'action_stage_progress';
 const STAGE_GANTT_ACTION = 'open-stage-gantt';
+const STAGE_DEMONSTRATIVE_FLOW = 'construction_stage_demonstrative_create';
 const STAGE_PROGRESS_SCOPES = Object.freeze(['Sites.Read.All']);
 const SUPPLIER_PAYROLL_REPORT_ID = 'action_supplier_payroll_report';
 const SUPPLIER_PAYROLL_REPORT_SCOPES = Object.freeze(['Sites.Read.All']);
@@ -8680,7 +8681,12 @@ export function createAppController({
               finalizeActivity: data.finalizeActivity, finalizeStage: data.finalizeStage,
               loadAssignments: (selection, options) => runStageAction('loadGanttAssignments', [selection], options),
               loadCostSnapshot: options => runStageAction('loadCostSnapshot', [], { ...options, reportNumber: 9 }),
-            }, document }), STAGE_GANTT_ACTION)
+            }, document, onCreateDemonstrative: (id, { isCurrent }) => sendText(
+              'Cadastrar demonstrativo de etapa', `gantt_create_demonstrative:${id}`, {
+                isCurrent: () => isCurrent() && stageProgressSession === session && account === reportsAccount
+                  && sessionRevision === reportsRevision && !stopped && !flowBusy() && !store.getState().activeFlow,
+              },
+            ) }), STAGE_GANTT_ACTION)
             : decorateControllerReport(await stageProgressFactory({ data, document }), 'open-stage-progress');
           try { assertSession(); }
           catch (error) { panel?.destroy?.(); throw error; }
@@ -10983,6 +10989,9 @@ export function createAppController({
       let resumeEpiFinalize = false;
       if (confirmed) {
         const active = store.getState().activeFlow;
+        if (previousState.activeFlow?.id === STAGE_DEMONSTRATIVE_FLOW && hasCompletedSubmission(effectiveResult)) {
+          invalidateGalleryReportSources();
+        }
         reconcileGalleryCreationReturn(previousState.activeFlow, active, replyId, previousPoll, effectiveResult);
         if (hasPostedDocumentContinuation(effectiveResult, previousState.activeFlow, replyId || operation.text)) {
           // The VM verified this row and started the next one. Retire only

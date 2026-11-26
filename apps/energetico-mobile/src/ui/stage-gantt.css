@@ -108,7 +108,7 @@ button.gantt-toggle {
 }
 .gantt-cluster--description[data-tone="finished"] { background: var(--gantt-finished); }
 .gantt-name { font-size: .9rem; font-weight: 800; white-space: normal; overflow-wrap: anywhere; }
-:is(.gantt-visibility-button, .gantt-start-button, .gantt-finish-button) {
+:is(.gantt-visibility-button, .gantt-start-button, .gantt-finish-button, .gantt-create-demonstrative-button) {
   display: block;
   width: max-content;
   max-width: 100%;
@@ -125,24 +125,32 @@ button.gantt-toggle {
   touch-action: manipulation;
 }
 .gantt-row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
-.gantt-row-actions > :is(.gantt-visibility-button, .gantt-start-button, .gantt-finish-button) {
+.gantt-stage-finish-actions { display: flex; gap: 4px; }
+:is(.gantt-row-actions, .gantt-stage-finish-actions) > :is(.gantt-visibility-button, .gantt-start-button, .gantt-finish-button) {
   margin: 0;
   min-width: 44px;
   border-color: #bfd7e1;
   background: #eaf3f6;
   color: #0d4d61;
 }
-.gantt-row-actions > button:not(:only-child) { padding-inline: 6px; }
+:is(.gantt-row-actions, .gantt-stage-finish-actions) > button:not(:only-child),
+.gantt-row-actions:has(.gantt-stage-finish-actions) > button { padding-inline: 6px; }
+.gantt-stage-finish-actions > .gantt-create-demonstrative-button {
+  min-width: 44px;
+  background: var(--gantt-finished);
+  font-size: 1.25rem;
+  line-height: 1;
+}
 .gantt-row-actions > .gantt-suppress-button:not(:disabled, [aria-disabled="true"]) {
   background: var(--gantt-ongoing); border-color: #8a202e; color: #fff;
 }
 .gantt-row-actions > .gantt-start-button:not(:disabled, [aria-disabled="true"]) {
   background: #e68524; border-color: #a4510c; color: #241606;
 }
-.gantt-row-actions > .gantt-finish-button:not(:disabled, [aria-disabled="true"]) {
+.gantt-row-actions .gantt-finish-button:not(:disabled, [aria-disabled="true"]) {
   background: var(--gantt-finished); border-color: #1e6732; color: #fff;
 }
-.gantt-row-actions > :is(:disabled, [aria-disabled="true"]) {
+.gantt-row-actions button:is(:disabled, [aria-disabled="true"]) {
   background:#dbe2e8; border-color:#a7b3bc; color:#465763; cursor:default;
 }
 :is(.gantt-finish-overlay, .gantt-visibility-confirm) { position:absolute; inset:0; z-index:25; display:grid; place-items:center; padding:12px; box-sizing:border-box; background:#05202e88; }

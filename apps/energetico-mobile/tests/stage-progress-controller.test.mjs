@@ -57,6 +57,43 @@ async function open(h) {
   return h.panels.at(-1).data;
 }
 
+test('GANTT entrega o ID da etapa ao fluxo e atualiza o relatório após o cadastro', async t => {
+  const panels = [], replies = [];
+  let loads = 0;
+  const flow = { id: 'construction_stage_demonstrative_create', title: 'Cadastrar demonstrativo', contextId: 'new-demonstrative' };
+  const h = harness(t, {
+    ganttFactory: async ({ data, onCreateDemonstrative }) => {
+      const panel = { data, onCreateDemonstrative, open() {}, destroy() { this.closed = true; } };
+      panels.push(panel);
+      return panel;
+    },
+    stageProgressDataFactory: async () => ({ async loadSnapshot() { loads++; return snapshot; } }),
+    client: { async sendText({ replyId }) {
+      replies.push(replyId);
+      if (replyId === 'gantt_create_demonstrative:41') {
+        return { messages: [], activeFlow: flow };
+      }
+      if (replyId === 'confirm_yes') {
+        return { messages: [], activeFlow: null, results: [{ status: 'completed' }] };
+      }
+      return { messages: [], activeFlow: null };
+    } },
+  });
+  await h.controller.start();
+  replies.length = 0;
+  assert.equal(await h.view.emit('open-stage-gantt'), true);
+  await panels[0].data.loadSnapshot();
+  assert.equal(await panels[0].onCreateDemonstrative('40', { isCurrent: () => false }), false);
+  assert.equal(await panels[0].onCreateDemonstrative('41', { isCurrent: () => true }), true);
+  assert.equal(panels[0].closed, true);
+  assert.equal(h.store.getState().activeFlow?.id, flow.id);
+  assert.deepEqual(replies, ['gantt_create_demonstrative:41']);
+  assert.equal(await h.controller.sendText('Sim', 'confirm_yes'), true);
+  assert.equal(await h.view.emit('open-stage-gantt'), true);
+  await panels[1].data.loadSnapshot();
+  assert.equal(loads, 2);
+});
+
 test('HOME and reply open one local stage report, with an independent read-only data source', async t => {
   let sourceCreates = 0, receivedOptions;
   const requestedScopes = [];
