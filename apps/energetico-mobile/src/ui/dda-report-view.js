@@ -50,12 +50,14 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
  let settlementDialog=null,decisionDialog=null;
  const provisionPicker=createDdaProvisionPicker({document:doc,host:root,service:data.provisionLink,onClose:resumeDeferredRefresh,resolveReturnFocus:replacementControl,onLinked:receipt=>{
   if(destroyed||root.hidden||!rows)return;
-  rows=rows.map(row=>row.id===receipt.ddaId?Object.freeze({...row,provisionId:receipt.provisionId}):row);
+  const linkSnapshot=Object.freeze({provisionId:receipt.provisionId??'',orderId:receipt.orderId??''});
+  const change={id:receipt.ddaId,...linkSnapshot,linkSnapshot};
+  rows=rows.map(row=>row.id===change.id?Object.freeze({...row,...change}):row);
   settlementVerified=false;
   settledDdaIds.delete(receipt.ddaId);
   renderKeepingPosition();void recheckSettlement();
   if(receipt.dueAdjustmentNotice)showNotice(receipt.dueAdjustmentNotice);
-  onRowsChange(rows,{id:receipt.ddaId,provisionId:receipt.provisionId});
+  onRowsChange(rows,change);
  }});
  const selected=()=>Object.fromEntries(Object.entries(controls).map(([key,node])=>[key,node.value]));
  const option=(label,value)=>Object.assign(make('option','',label),{value});
@@ -101,7 +103,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   settledDdaIds=settled;settlementRenderPending=true;renderSettlement();
  }
  function canStartSettlement(row){
-  return settlementVerified&&row.status!==DDA_REFUSED_STATUS&&row.provisionId&&!settledDdaIds.has(row.id)
+  return settlementVerified&&row.status!==DDA_REFUSED_STATUS&&row.provisionId&&!row.orderId&&!settledDdaIds.has(row.id)
    &&Number.isSafeInteger(Number(row.id))&&Number(row.id)>0
    &&typeof onStartSettlement==='function'&&typeof data.loadItem==='function';
  }
@@ -124,7 +126,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const item=await readSettlementItem(row.id,signal);
    if(!current()||(!fromCheck&&nestedViewOpen()))return false;
    const live=item&&normalizeDdaReportRows({rows:[item]})[0];
-   if(live?.id!==row.id||live.status===DDA_REFUSED_STATUS||live.provisionId!==row.provisionId||live.due!==row.due||live.key!==row.key||(!fromCheck&&live.status!=='Pago')){
+   if(live?.id!==row.id||live.status===DDA_REFUSED_STATUS||live.provisionId!==row.provisionId||live.orderId||live.due!==row.due||live.key!==row.key||(!fromCheck&&live.status!=='Pago')){
     onError('O DDA ou seu vínculo mudou no SharePoint. Atualize o relatório antes de dar baixa.');
     return false;
    }
@@ -378,18 +380,24 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
     status.append(prioritize);
    }
    const link=make('td','ddr-link');
-   const linkState=row.provisionId?'linked':row.linkReviewed?'regularized':'missing';
+   const linked=row.provisionId||row.orderId;
+   const linkConflict=row.provisionId&&row.orderId;
+   const linkState=linked?'linked':row.linkReviewed?'regularized':'missing';
    const canReview=!printAll&&canReviewDdaUnlinked(row)&&typeof data.unlinkedReview?.save==='function';
-   const linkCluster=make(canReview?'button':'span','ddr-link-cluster',row.provisionId?`ID ${row.provisionId}`:row.linkReviewed?'SEM VINCULAÇÃO':'N/A');
+   const linkLabel=linkConflict?`Descritivo ID ${row.provisionId} · Pedido ID ${row.orderId}`
+    :row.provisionId?`ID ${row.provisionId}`:row.orderId?`Pedido ID ${row.orderId}`:row.linkReviewed?'SEM VINCULAÇÃO':'N/A';
+   const linkCluster=make(canReview?'button':'span','ddr-link-cluster',linkLabel);
    linkCluster.dataset.linkState=linkState;
-   linkCluster.title=row.provisionId?`Descritivo provisão vinculado: ID ${row.provisionId}`:row.linkReviewed?'Ausência de vinculação regularizada':'Nenhum descritivo provisão vinculado';
+   linkCluster.title=linkConflict?'Confirme qual vínculo deve ficar antes de dar baixa.'
+    :row.provisionId?`Descritivo provisão vinculado: ID ${row.provisionId}`
+    :row.orderId?`Pedido vinculado: ID ${row.orderId}`:row.linkReviewed?'Ausência de vinculação regularizada':'Nenhum vínculo registrado';
    if(canReview){
     linkCluster.type='button';linkCluster.dataset.ddaUnlinkedReview=row.id;
     linkCluster.addEventListener('click',()=>askUnlinkedReview(row,linkCluster));
    }
    link.append(linkCluster);
-   const pencil=button('Vincular DDA '+row.id+' a descritivo provisão','✎');pencil.className='ddr-provision-pencil';pencil.dataset.ddaProvisionPencil=row.id;
-   pencil.dataset.linkState=row.provisionId?'linked':'missing';
+   const pencil=button('Vincular DDA '+row.id,'✎');pencil.className='ddr-provision-pencil';pencil.dataset.ddaProvisionPencil=row.id;
+   pencil.dataset.linkState=linked?'linked':'missing';
    pencil.disabled=printAll||refused||!data.provisionLink||!Number.isSafeInteger(Number(row.id))||Number(row.id)<=0;
    pencil.addEventListener('click',()=>{if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true')return;void provisionPicker.show(row,pencil);});
    link.append(pencil);
@@ -402,10 +410,13 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    bankCluster.append(make('small','','Banco emissor'),make('strong','',row.bank||'—'));
    documentCluster.append(make('small','','Nº boleto'),make('strong','',row.document||'—'));
    bankCluster.append(documentCluster);bankDocument.append(bankCluster);
-   const files=make('td'),actions=make('div','ddr-row-actions'),check=button(row.provisionId?'Iniciar baixa da provisão '+row.provisionId+' do DDA '+row.id:'Vincule um descritivo de pagamento ao DDA '+row.id+' para iniciar a baixa','✓');
+   const checkLabel=linkConflict?'Confirme qual vínculo deve ficar antes de dar baixa'
+    :row.provisionId?`Iniciar baixa da provisão ${row.provisionId} do DDA ${row.id}`
+    :row.orderId?`DDA vinculado diretamente ao pedido ${row.orderId}`:`Vincule um descritivo de pagamento ao DDA ${row.id} para iniciar a baixa`;
+   const files=make('td'),actions=make('div','ddr-row-actions'),check=button(checkLabel,'✓');
    check.className='ddr-provision-check';check.dataset.ddaProvisionCheck=row.id;
    check.disabled=printAll||!canStartSettlement(row);
-   check.title=settledDdaIds.has(row.id)?'Sem baixa pendente para este boleto':row.provisionId&&!settlementVerified
+   check.title=linkConflict?checkLabel:settledDdaIds.has(row.id)?'Sem baixa pendente para este boleto':row.provisionId&&!settlementVerified
     ?'A baixa fica disponível após a conferência da provisão no SharePoint.':check.getAttribute('aria-label');
    check.addEventListener('click',()=>askSettlement(row,check));
    actions.append(check);files.append(actions);
@@ -414,7 +425,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
     refuse.className='ddr-refuse';refuse.dataset.ddaRefuse=row.id;refuse.title='Recusar boleto';
     refuse.addEventListener('click',()=>askRefusal(row,refuse));actions.append(refuse);
    }
-   if(!printAll&&pendingSettlement&&row.provisionId&&typeof onStartSettlement==='function'&&typeof data.loadItem==='function'){
+   if(!printAll&&pendingSettlement&&row.provisionId&&!row.orderId&&typeof onStartSettlement==='function'&&typeof data.loadItem==='function'){
     const settle=button(`Dar baixa na provisão ${row.provisionId} do DDA ${row.id}`,'Dar baixa');
     settle.className='ddr-settle-provision';settle.dataset.ddaSettleProvision=row.id;
     settle.disabled=!settlementVerified;

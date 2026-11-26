@@ -135,8 +135,8 @@ test('DDA uses authenticated SharePoint REST with read-only scope for private li
     const query=new URL(String(url)).searchParams;
     assert.equal(query.has('$expand'),false);
     const fields=query.get('$select').split(',');
-    for(const name of ['CHAVE_DDA','SITUACAO','PGTO_CONFIRMADO','DESCRITIVOPROVIS_x00c3_O'])assert.ok(fields.includes(name));
-    return Response.json({Id:7,...sample.fields,SITUACAO:'Pago',DESCRITIVOPROVIS_x00c3_O:'56'});
+    for(const name of ['CHAVE_DDA','SITUACAO','PGTO_CONFIRMADO','DESCRITIVOPROVIS_x00c3_O','IDPEDIDO'])assert.ok(fields.includes(name));
+    return Response.json({Id:7,...sample.fields,SITUACAO:'Pago',IDPEDIDO:'56'});
    }
    else if(String(url).includes('/_api/web/lists?')) value=[{Id:'11111111-2222-3333-4444-555555555555',Title:'DDAS SICOOB',BaseTemplate:100,Hidden:false}];
    else throw new Error('Unexpected test request '+url);
@@ -150,7 +150,46 @@ test('DDA uses authenticated SharePoint REST with read-only scope for private li
  const current=await data.loadItem('7');
  assert.equal(current.id,'7');
  assert.equal(current.fields.SITUACAO,'Pago');
- assert.equal(current.fields.DESCRITIVOPROVIS_x00c3_O,'56');
+ assert.equal(current.fields.IDPEDIDO,'56');
  assert.ok(calls.every(url=>url.startsWith('https://tenant.sharepoint.com/sites/test/_api/')));
  assert.ok(scopes.every(scope=>scope==='https://tenant.sharepoint.com/AllSites.Read'));
+});
+
+test('DDA reads NOTASPENDENTES and writes only the confirmed link using its SharePoint REST ETag',async()=>{
+ const ddaList='11111111-2222-3333-4444-555555555555',orderList='11111111-2222-3333-4444-666666666666';
+ const version='"v1"',requests=[];
+ const dda={ID:7,'odata.etag':version,DESCRITIVOPROVIS_x00c3_O:'56',IDPEDIDO:null};
+ const order={ID:56,FORNECEDOR:'Fornecedor fictício',FILIAL:'Matriz',VALORTOTAL:'123,45',DATAPEDIDO:'2026-11-04'};
+ const data=createRegistrationGalleryData({kind:'dda',siteConfig:{personal:{host:'tenant.sharepoint.com',path:'/sites/test'}},
+  tokenProvider:async()=> 'fictitious-token',
+  fetchImpl:async(rawUrl,options)=>{
+   const url=new URL(rawUrl),path=decodeURIComponent(url.pathname);
+   assert.equal(url.origin,'https://tenant.sharepoint.com');
+   if(path.endsWith('/_api/web/lists'))return Response.json({value:[
+    {Id:ddaList,Title:'DDAS SICOOB',BaseTemplate:100,Hidden:false},
+    {Id:orderList,Title:'NOTASPENDENTES',BaseTemplate:100,Hidden:false},
+   ]});
+   assert.equal(url.searchParams.has('$expand'),false);
+   if(path.endsWith(`lists(guid'${orderList}')/items`)){
+    assert.equal(url.searchParams.get('$select'),'ID,FORNECEDOR,VALORTOTAL,FILIAL,DATAPEDIDO');
+    return Response.json({value:[order]});
+   }
+   if(path.endsWith(`lists(guid'${orderList}')/items(56)`))return Response.json({ID:56,FORNECEDOR:order.FORNECEDOR});
+   assert.ok(path.endsWith(`lists(guid'${ddaList}')/items(7)`),path);
+   if(options.method==='GET')return Response.json(dda);
+   assert.equal(options.method,'POST');
+   assert.equal(options.headers['X-HTTP-Method'],'MERGE');
+   assert.equal(options.headers['IF-MATCH'],version);
+   const payload=JSON.parse(options.body);
+   requests.push(payload);
+   Object.assign(dda,payload);
+   return new Response(null,{status:204});
+  },
+ });
+ const [option]=await data.provisionLink.loadOrderOptions();
+ assert.equal(option.label,'#56 · Fornecedor fictício · Matriz');
+ assert.equal(option.date,'2026-11-04');
+ assert.deepEqual(await data.provisionLink.saveOrder({ddaId:'7',orderId:option.id,
+  expectedLink:{provisionId:'56',orderId:''}}),{ddaId:'7',orderId:'56'});
+ assert.deepEqual(requests,[{DESCRITIVOPROVIS_x00c3_O:null,IDPEDIDO:'56'}]);
 });

@@ -340,7 +340,19 @@ button.ddr-link-cluster:focus-visible { outline:2px solid #105367; outline-offse
   min-width: 0;
   box-sizing: border-box;
 }
-.dda-provision-status {
+.dda-provision-filters--source {
+  display: flex;
+  flex-wrap: wrap;
+}
+.dda-provision-filters--source .dda-provision-search {
+  flex: 1 1 11rem;
+}
+.dda-provision-filters--source select {
+  flex: 1 1 auto;
+  max-width: 100%;
+}
+.dda-provision-status,
+.dda-provision-source {
   min-height: 42px;
   border: 1px solid #9eb9c8;
   border-radius: 8px;
