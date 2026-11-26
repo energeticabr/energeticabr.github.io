@@ -4,11 +4,11 @@ import {REGISTRATION_GALLERY_MODELS,registrationRawField,registrationDateKey,reg
 import {ddaTodayKey} from '../ui/dda-card.js';
 import {ddaPaidManually} from './dda-payment-confirmation.js';
 import {resolveDdaPaymentLine} from './dda-payment-line.js';
-import {DDA_PRIORITY_FIELD,DDA_REFUSED_STATUS,DDA_UNLINKED_REVIEW_FIELD,ddaBankSchedule,isDdaOpenStatus,normalizeDdaStatus} from './dda-bank-status.js';
+import {DDA_ORDER_FIELD,DDA_PRIORITY_FIELD,DDA_REFUSED_STATUS,DDA_UNLINKED_REVIEW_FIELD,ddaBankSchedule,isDdaOpenStatus,normalizeDdaStatus} from './dda-bank-status.js';
 const Money=Decimal.clone({precision:40});
 export {ddaSearchKey} from './dda-bank-status.js';
 const text=value=>typeof value==='string'||typeof value==='number'?String(value).trim():'';
-const provisionId=value=>{const id=text(value);return /^[1-9]\d*$/.test(id)&&Number.isSafeInteger(Number(id))?id:'';};
+const linkId=value=>{const id=text(value);return /^[1-9]\d*$/.test(id)&&Number.isSafeInteger(Number(id))?id:'';};
 const auditTime=value=>/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)?Date.parse(value):NaN;
 
 function ddaWasScheduledAt(row,confirmedAt){
@@ -18,7 +18,7 @@ function ddaWasScheduledAt(row,confirmedAt){
 
 export function ddaSettlementPending(row,settledDdaIds){
  return Boolean(settledDdaIds&&row.status==='Pago'
-  &&(row.provisionId||row.paidBySchedule)&&!settledDdaIds.has(row.id));
+  &&(row.provisionId||(!row.orderId&&row.paidBySchedule))&&!settledDdaIds.has(row.id));
 }
 
 export async function readSettledDdaIds(rows,provisionLink,signal,{includeUnpaid=false}={}){
@@ -56,19 +56,19 @@ export function normalizeDdaReportRows(snapshot){
   const paidBySchedule=scheduleLifecycle==='PAGO_AGENDADO'||Boolean(audited&&ddaWasScheduledAt({scheduledAt},confirmedAt));
   const status=normalizeDdaStatus(value('SITUACAO'));
   const priorityDate=registrationDateKey(value(DDA_PRIORITY_FIELD));
-  return {id,paymentLine,key:text(value('CHAVE_DDA')),paidManually,confirmedAt,paidBySchedule,scheduledAt,supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),priorityDate,issued:registrationDateKey(value('EMISSAO')),amount,status:paidBySchedule&&status!==DDA_REFUSED_STATUS?'Pago':status,schedule,document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt,provisionId:provisionId(value('DESCRITIVOPROVIS_x00c3_O')),linkReviewed:value(DDA_UNLINKED_REVIEW_FIELD)===true};
+  return {id,paymentLine,key:text(value('CHAVE_DDA')),paidManually,confirmedAt,paidBySchedule,scheduledAt,supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),priorityDate,issued:registrationDateKey(value('EMISSAO')),amount,status:paidBySchedule&&status!==DDA_REFUSED_STATUS?'Pago':status,schedule,document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt,provisionId:linkId(value('DESCRITIVOPROVIS_x00c3_O')),orderId:linkId(value(DDA_ORDER_FIELD)),linkReviewed:value(DDA_UNLINKED_REVIEW_FIELD)===true};
  });
  const counts=new Map();
  for(const row of normalized)if(row.supplierCnpj)counts.set(row.supplierCnpj,(counts.get(row.supplierCnpj)||0)+1);
  return Object.freeze(normalized.map(row=>Object.freeze({...row,supplierDdaCount:row.supplierCnpj?counts.get(row.supplierCnpj):null})));
 }
 export function canReviewDdaUnlinked(row){
- return !row.provisionId&&!row.paidManually&&isDdaOpenStatus(row.status);
+ return !row.provisionId&&!row.orderId&&!row.paidManually&&isDdaOpenStatus(row.status);
 }
 export function hasDdaMenuAlert(rows,now=new Date()){
  const today=ddaTodayKey(now);
  return rows.some(row=>row.due&&!row.paidManually&&isDdaOpenStatus(row.status)&&
-  (row.due<=today||(!row.provisionId&&!row.linkReviewed)));
+  (row.due<=today||(!row.provisionId&&!row.orderId&&!row.linkReviewed)));
 }
 export function buildDdaReport(rows,{status='Em aberto',bank='',search='',settledDdaIds}={},now=new Date()){
  const query=normalizeSearchText(search),today=ddaTodayKey(now);

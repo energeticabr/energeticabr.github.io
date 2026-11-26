@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {createDdaProvisionLink,rankDdaProvisionOptions,DDA_PROVISION_FIELD} from '../src/chat/dda-provision-link.js';
 import {createDdaReportView} from '../src/ui/dda-report-view.js';
+import {createDdaProvisionPicker} from '../src/ui/dda-provision-picker.js';
 import {provisionDateKey as localProvisionDate} from '../src/chat/pending-provision-dates.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const provision=(id,supplier,amount,date)=>({id:String(id),fields:{FORNECEDOR:supplier,VALORTOTAL:amount,...(date?{DATAPGTOEFETUADO:date}:{})}});
@@ -16,6 +17,64 @@ function repository(){
   updateItem:async(_site,list,id,fields,options)=>{state.writes.push({list,id,fields,options});state.linked=fields[DDA_PROVISION_FIELD];return {fields:{[DDA_PROVISION_FIELD]:state.linked}};},
  };return {state,api};
 }
+
+test('switches the picker to orders, drops the provision selection and confirms the order ID',async t=>{
+ const dom=new JSDOM('<body><main></main></body>'),doc=dom.window.document;
+ const submissions=[];
+ const picker=createDdaProvisionPicker({document:doc,host:doc.querySelector('main'),service:{
+  loadOptions:async()=>[{id:'2',supplier:'FORNECEDOR DA PROVISÃO',amount:10}],
+  loadOrderOptions:async()=>[{id:'2',supplier:'FORNECEDOR DO PEDIDO',amount:20,date:'2026-11-11'}],
+  save:async()=>assert.fail('Pedido must use its own save'),
+  saveOrder:async request=>{submissions.push(request);return {ddaId:'31',orderId:'2'};},
+  prepareDueAdjustment:async()=>assert.fail('Pedido must not adjust a provision date'),
+ }});
+ t.after(()=>{picker.destroy();dom.window.close();});
+ await picker.show({id:'31',supplier:'FORNECEDOR DO PEDIDO',amount:20,provisionId:'2'});
+ const source=doc.querySelector('.dda-provision-source'),status=doc.querySelector('.dda-provision-status');
+ assert.equal(source.value,'provision');
+ assert.equal(source.nextElementSibling,status);
+ doc.querySelector('input[value="2"]').click();
+ source.value='order';
+ source.dispatchEvent(new dom.window.Event('change'));
+ await tick();
+ assert.equal(status.hidden,true);
+ assert.match(doc.querySelector('.dda-provision-options').textContent,/FORNECEDOR DO PEDIDO.*11\/11\/2026/);
+ assert.equal(doc.querySelector('input[value="2"]').checked,false);
+ assert.equal(doc.querySelector('.dda-provision-save').disabled,true);
+ doc.querySelector('input[value="2"]').click();
+ doc.querySelector('.dda-provision-save').click();await tick();
+ assert.match(doc.querySelector('[data-edit-review]').textContent,/Descritivo provisão · ID 2/);
+ assert.equal(submissions.length,0);
+ doc.querySelector('[data-edit-review-submit]').click();await tick();
+ assert.equal(submissions[0].orderId,'2');
+ assert.deepEqual(submissions[0].expectedLink,{provisionId:'2',orderId:''});
+ assert.equal(picker.isOpen,false);
+});
+
+test('replaces provision and order links on the same versioned DDA without creating any payment',async()=>{
+ const {state,api}=repository();
+ const order={id:'2',fields:{FORNECEDOR:'FORNECEDOR DO PEDIDO'}};
+ const dda={id:'31',eTag:'"version-1"',fields:{[DDA_PROVISION_FIELD]:'2',IDPEDIDO:null}};
+ const resolve=api.resolveList,getItem=api.getItem;
+ api.resolveList=async(site,names)=>names[0]==='NOTASPENDENTES'?{status:'resolved',id:'order'}:resolve(site,names);
+ api.getItem=async(site,list,id)=>list==='dda'?dda:list==='order'?order:getItem(site,list,id);
+ api.updateItem=async(_site,list,id,fields,options)=>{
+  state.writes.push({list,id,fields,options});
+  Object.assign(dda.fields,fields);
+  return dda;
+ };
+ const service=createDdaProvisionLink({repository:api});
+ const original={provisionId:'2',orderId:''};
+ assert.deepEqual(await service.saveOrder({ddaId:'31',orderId:'2',expectedLink:original}),{ddaId:'31',orderId:'2'});
+ assert.deepEqual(state.writes.map(write=>[write.list,write.id,write.fields,write.options.eTag]),[
+  ['dda','31',{[DDA_PROVISION_FIELD]:null,IDPEDIDO:'2'},'"version-1"'],
+ ]);
+ await service.saveOrder({ddaId:'31',orderId:'2',expectedLink:original});
+ assert.equal(state.writes.length,1);
+ await assert.rejects(()=>service.save({ddaId:'31',provisionId:'2',expectedLink:original}),/mudou/);
+ await service.save({ddaId:'31',provisionId:'2',expectedLink:{provisionId:'',orderId:'2'}});
+ assert.deepEqual(state.writes[1].fields,{[DDA_PROVISION_FIELD]:'2',IDPEDIDO:null});
+});
 
 function dueAdjustmentFixture({lines=1,planned='2026-11-28',bankDue='2026-11-23'}={}){
  const dueField='DATAPREVISTOPGTO';
@@ -400,10 +459,16 @@ test('report pencil opens picker above report, stars likely option, links select
 test('saved and invalid provision identifiers render in their own column after reopening',async t=>{
  const dom=new JSDOM('<body><main id="app"></main></body>'),doc=dom.window.document;
  const row=(id,link)=>({id:String(id),fields:{Title:'FORNECEDOR FICTÍCIO',SITUACAO:'Em aberto',VALOR:10,VENCIMENTO:'2026-10-29',DESCRITIVOPROVIS_x00c3_O:link}});
- const view=createDdaReportView({document:doc,data:{loadSnapshot:async()=>({rows:[row(1,'46'),row(2,'inválido')]})}});
+ const paid=row(3,'');
+ Object.assign(paid.fields,{IDPEDIDO:'46',SITUACAO:'Agendado',DDA_CICLO_AGENDAMENTO:'PAGO_AGENDADO'});
+ const view=createDdaReportView({document:doc,data:{loadSnapshot:async()=>({rows:[row(1,'46'),row(2,'inválido'),paid]})}});
  t.after(()=>{view.destroy();dom.window.close();});await view.open();
  assert.equal(doc.querySelector('[data-dda-id="1"] .ddr-link-cluster').textContent,'ID 46');
  assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-link-cluster').textContent,'N/A');
+ assert.equal(doc.querySelector('[data-dda-id="3"]'),null,'a paid order link has no pending provision settlement');
+ const filter=doc.querySelector('select[aria-label="Situação"]');
+ filter.value='Pago';filter.dispatchEvent(new dom.window.Event('change'));
+ assert.equal(doc.querySelector('[data-dda-id="3"] .ddr-link-cluster').textContent,'Pedido ID 46');
 });
 
 test('a link on a DDA outside the report requires Yes and No only closes the duplicate confirmation',async t=>{

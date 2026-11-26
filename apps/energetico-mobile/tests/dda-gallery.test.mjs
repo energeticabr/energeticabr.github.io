@@ -135,8 +135,8 @@ test('DDA uses authenticated SharePoint REST with read-only scope for private li
     const query=new URL(String(url)).searchParams;
     assert.equal(query.has('$expand'),false);
     const fields=query.get('$select').split(',');
-    for(const name of ['CHAVE_DDA','SITUACAO','PGTO_CONFIRMADO','DESCRITIVOPROVIS_x00c3_O'])assert.ok(fields.includes(name));
-    return Response.json({Id:7,...sample.fields,SITUACAO:'Pago',DESCRITIVOPROVIS_x00c3_O:'56'});
+    for(const name of ['CHAVE_DDA','SITUACAO','PGTO_CONFIRMADO','DESCRITIVOPROVIS_x00c3_O','IDPEDIDO'])assert.ok(fields.includes(name));
+    return Response.json({Id:7,...sample.fields,SITUACAO:'Pago',IDPEDIDO:'56'});
    }
    else if(String(url).includes('/_api/web/lists?')) value=[{Id:'11111111-2222-3333-4444-555555555555',Title:'DDAS SICOOB',BaseTemplate:100,Hidden:false}];
    else throw new Error('Unexpected test request '+url);
@@ -150,7 +150,7 @@ test('DDA uses authenticated SharePoint REST with read-only scope for private li
  const current=await data.loadItem('7');
  assert.equal(current.id,'7');
  assert.equal(current.fields.SITUACAO,'Pago');
- assert.equal(current.fields.DESCRITIVOPROVIS_x00c3_O,'56');
+ assert.equal(current.fields.IDPEDIDO,'56');
  assert.ok(calls.every(url=>url.startsWith('https://tenant.sharepoint.com/sites/test/_api/')));
  assert.ok(scopes.every(scope=>scope==='https://tenant.sharepoint.com/AllSites.Read'));
 });

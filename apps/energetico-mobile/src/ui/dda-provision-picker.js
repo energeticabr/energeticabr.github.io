@@ -22,6 +22,20 @@ const DDA_STATUS_FILTER = {
  options:(items,row,status)=>rankDdaProvisionOptions(items.filter(item=>(item.paymentStatus??'pending')===status),row),
 };
 
+const DDA_ORDER_COPY = {
+ ...DDA_COPY,
+ title:'A qual PEDIDO DESEJA VINCULAR?',
+ dialogLabel:'Vincular DDA a pedido',
+ targetLabel:'Pedido',
+ searchLabel:'Buscar pedido',
+ listLabel:'Pedidos disponíveis',
+ loading:'Carregando pedidos…',
+ options:count=>`${count} pedido(s). Escolha um para vincular.`,
+ empty:'Nenhum pedido encontrado para a busca.',
+ loadError:'Não foi possível carregar os pedidos. Tente novamente.',
+ reviewDetails:true,
+};
+
 export function createReportLinkComparison(doc,value,matches,label,reference){
  const chip=doc.createElement('span');
  chip.className='report-link-comparison';
@@ -41,13 +55,30 @@ function appendDdaComparisons(node,amount,totalMatch,{due,dueMatch}){
 }
 
 export function createDdaProvisionPicker({service, ...options}){
+ const expectedLink=row=>({provisionId:row.provisionId||'',orderId:row.orderId||''});
+ const orderEnabled=typeof service?.loadOrderOptions==='function'&&typeof service?.saveOrder==='function';
  return createReportLinkPicker({
   ...options, copy:DDA_COPY,
   loadOptions:service && ((_row,signal)=>service.loadOptions({signal})),
   optionFilter:DDA_STATUS_FILTER,
-  saveLink:(row,id,signal,sharedLinkETag)=>service.save({ddaId:row.id,provisionId:id,signal,sharedLinkETag}),
+  saveLink:(row,id,signal,sharedLinkETag)=>service.save({ddaId:row.id,provisionId:id,signal,sharedLinkETag,
+   ...(orderEnabled&&{expectedLink:expectedLink(row)})}),
   sharedLinkQuestion:'Tem certeza que deseja atribuir dois DDAS ao mesmo descritivo provisão?',
-  currentLink:row=>row.provisionId,
+  currentLink:row=>row.provisionId||row.orderId,
+  alternateSource:orderEnabled?{
+   primary:['provision','DESCRITIVO PROVISÃO'],
+   choice:['order','PEDIDO'],
+   isCurrent:row=>Boolean(row.orderId&&!row.provisionId),
+   copy:DDA_ORDER_COPY,
+   loadOptions:async (row,signal)=>rankDdaProvisionOptions(await service.loadOrderOptions({signal}),row),
+   saveLink:(row,id,signal)=>service.saveOrder({ddaId:row.id,orderId:id,expectedLink:expectedLink(row),signal}),
+   renderOptionLabel(node,item,amount){
+    node.className='report-link-option-text';
+    node.textContent=item.label||`#${item.id} · ${item.supplier}`;
+    node.append(' · ',createReportLinkComparison(node.ownerDocument,amount,item.totalMatch,'Valor','o valor do DDA'));
+    if(item.date)node.append(` · Data do pedido ${displayDate(item.date)}`);
+   },
+  }:null,
   rowAmount:row=>row.amount,
   afterLink:service?.prepareDueAdjustment&& (async (receipt,{form,signal,run,feedback,choices})=>{
    if(choices[0].paymentStatus==='paid')return receipt;
@@ -79,7 +110,7 @@ export function createDdaProvisionPicker({service, ...options}){
  });
 }
 
-export function createReportLinkPicker({document:doc,host,copy,loadOptions,optionFilter,saveLink,currentLink,rowAmount,amountInCents,renderOptionLabel,afterLink,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,selectCurrent=false,multiple=false,timeoutMs=35000}){
+export function createReportLinkPicker({document:doc,host,copy,loadOptions,optionFilter,saveLink,currentLink,rowAmount,amountInCents,renderOptionLabel,afterLink,onLinked,onClose,resolveReturnFocus,sharedLinkQuestion,alternateSource,selectCurrent=false,multiple=false,timeoutMs=35000}){
  let current=null;ensureEditReviewStyles(doc);
  const el=(tag,cls='',value)=>{const node=doc.createElement(tag);node.className=cls;if(value!==undefined)node.textContent=String(value);return node;};
  const money=value=>{let text=String(value??'').trim().replace(/R\$|\s/g,'');if(text.includes(','))text=text.replace(/\./g,'').replace(',','.');const number=/^-?\d+(?:\.\d+)?$/.test(text)?Number(text):NaN;return Number.isFinite(number)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(number):'Valor não informado';};
@@ -96,6 +127,9 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,optio
   const linked=currentLink(row);
   const linkedIds=multiple?linked:linked?[String(linked)]:[];
   const linkedId=linkedIds[0];
+  const primarySource={copy,loadOptions,optionFilter,saveLink,renderOptionLabel,afterLink,sharedLinkQuestion};
+  const originalSource=alternateSource?.isCurrent(row)?alternateSource:primarySource;
+  let activeSource=originalSource;
   const overlay=el('div','gallery-record-overlay dda-provision-overlay'),dialog=el('section','gallery-record-dialog dda-provision-dialog');
   dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label',copy.dialogLabel);dialog.tabIndex=-1;
   const title=el('h2','',copy.title);
@@ -111,15 +145,27 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,optio
   const referenceAmount=rowAmount(row);
   const summary=el('p','dda-provision-summary',`${row.supplier} · ${copy.sourceLabel} #${row.id} · ${money(referenceAmount)}${selectCurrent&&!multiple&&linkedId?` · Pedido atual ID ${linkedId}`:''}`);
   const search=el('input','dda-provision-search');search.type='search';search.placeholder='Buscar fornecedor ou ID';search.setAttribute('aria-label',copy.searchLabel);
-  let filters=search,status;
-  if(optionFilter){
+  let filters=search,status,source;
+  if(optionFilter||alternateSource){
    filters=el('div','dda-provision-filters');
-   status=el('select','dda-provision-status');status.setAttribute('aria-label',optionFilter.label);
-   for(const [value,label] of optionFilter.choices){
-    const option=el('option','',label);option.value=value;status.append(option);
+   filters.append(search);
+   if(alternateSource){
+    filters.classList.add('dda-provision-filters--source');
+    source=el('select','dda-provision-source');
+    source.setAttribute('aria-label','Tipo de vínculo');
+    for(const [value,label] of [alternateSource.primary,alternateSource.choice]){
+     const option=el('option','',label);option.value=value;source.append(option);
+    }
+    source.value=(originalSource===alternateSource?alternateSource.choice:alternateSource.primary)[0];
+    filters.append(source);
    }
-   search.disabled=status.disabled=true;
-   filters.append(search,status);
+   if(optionFilter){
+    status=el('select','dda-provision-status');status.setAttribute('aria-label',optionFilter.label);
+    for(const [value,label] of optionFilter.choices){
+     const option=el('option','',label);option.value=value;status.append(option);
+    }
+    filters.append(status);
+   }
   }
   const feedback=el('p','dda-provision-feedback',copy.loading);feedback.setAttribute('role','status');
   const list=el('div','dda-provision-options');list.setAttribute('role',multiple?'group':'radiogroup');list.setAttribute('aria-label',copy.listLabel);
@@ -136,16 +182,17 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,optio
   overlay.addEventListener('keydown',event=>{if(event.key==='Escape'&&!entry.busy){event.preventDefault();event.stopPropagation();close();}if(event.key==='Tab'){const nodes=[...dialog.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled)')];const index=nodes.indexOf(doc.activeElement);if(nodes.length){event.preventDefault();event.stopPropagation();nodes[(index+(event.shiftKey?-1:1)+nodes.length)%nodes.length].focus();}}});
   function optionLabel(item){
    const text=el('span'),amount=money(item.amount);
-   if(renderOptionLabel)renderOptionLabel(text,item,amount);
+   if(activeSource.renderOptionLabel)activeSource.renderOptionLabel(text,item,amount);
    else text.textContent=`${item.label || `#${item.id} · ${item.supplier}`} · ${amount}`;
    return text;
   }
-  const selectionChanged=()=>entry.selected.size!==linkedIds.length||linkedIds.some(id=>!entry.selected.has(id));
+  const selectionChanged=()=>activeSource!==originalSource||entry.selected.size!==linkedIds.length||linkedIds.some(id=>!entry.selected.has(id));
   const canSave=()=>entry.selected.size>0&&(!selectCurrent||selectionChanged());
   function updateFeedback(){
    const count=list.childElementCount;
    feedback.setAttribute('role','status');
-   feedback.textContent=(status?count:entry.options.length)?copy.options(count,entry.selected.size):copy.empty;
+   const activeCopy=activeSource.copy;
+   feedback.textContent=(activeSource.optionFilter?count:entry.options.length)?activeCopy.options(count,entry.selected.size):activeCopy.empty;
   }
   function updateSelection(){
    let matches=false;
@@ -169,12 +216,12 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,optio
    for(const option of list.children){
     const input=option.querySelector('input');
     option.toggleAttribute('data-selection-amount-match',input.checked&&matches);
-    option.toggleAttribute('data-edit-changed',input.checked&&!matches&&!linkedIds.includes(input.value));
+    option.toggleAttribute('data-edit-changed',input.checked&&!matches&&(activeSource!==originalSource||!linkedIds.includes(input.value)));
    }
   }
   function render(){
    if(current!==entry)return;list.replaceChildren();const term=normalizeSearchText(search.value);const visible=entry.options.filter(item=>includesSearchText(normalizeSearchText(`${item.id} ${item.supplier} ${item.label||''}`),term));
-   for(const item of visible){const label=el('label','dda-provision-option');if(item.recommended)label.append(el('strong','dda-provision-star',copy.recommendation || '★ MAIS PROVÁVEL'));
+   for(const item of visible){const label=el('label','dda-provision-option');if(item.recommended)label.append(el('strong','dda-provision-star',activeSource.copy.recommendation || '★ MAIS PROVÁVEL'));
     const choice=el('input');choice.type=multiple?'checkbox':'radio';choice.name='dda-provision-choice';choice.value=item.id;choice.checked=entry.selected.has(item.id);
     choice.addEventListener('change',()=>{
      if(!multiple)entry.selected.clear();
@@ -185,7 +232,7 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,optio
      if(multiple)updateFeedback();
     });
     const text=optionLabel(item);
-    if(!renderOptionLabel&&item.due)text.append(` · Previsto ${String(item.due).slice(0,10).split('-').reverse().join('/')}`);
+    if(!activeSource.renderOptionLabel&&item.due)text.append(` · Previsto ${String(item.due).slice(0,10).split('-').reverse().join('/')}`);
     label.append(choice,text);
     if(item.matchedProvision){
      const line=item.matchedProvision,match=el('span','dda-provision-line-match',`Provisão #${line.id}`);
@@ -202,15 +249,24 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,optio
   }
   search.addEventListener('input',render);
   let allOptions=[];
-  function applyStatus(){
-   entry.options=optionFilter.options(allOptions,row,status.value);
+  function applyFilters(){
+   entry.options=activeSource.optionFilter?activeSource.optionFilter.options(allOptions,row,status.value):allOptions;
    render();
   }
   status?.addEventListener('change',()=>{
    if(entry.busy||entry.reviewing)return;
    entry.selected.clear();
    save.disabled=true;
-   applyStatus();
+   applyFilters();
+  });
+  source?.addEventListener('change',()=>{
+   if(entry.busy||entry.reviewing)return;
+   const next=source.value===alternateSource.choice[0]?alternateSource:primarySource;
+   if(next===activeSource)return;
+   activeSource=next;
+   entry.selected.clear();
+   save.disabled=true;
+   void loadSource();
   });
   save.addEventListener('click',async()=>{
    if(current!==entry||entry.busy||entry.reviewing||!canSave())return;
@@ -219,13 +275,17 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,optio
    if(choices.some(choice=>!choice))return;
    entry.reviewing=true;
    const formatIds=ids=>ids.map(id=>`ID ${id}`).join(', ');
-   const after=copy.reviewDetails ? choices.map(choice=>optionLabel(choice).textContent).join('\n') : formatIds(selected);
-   const changes=selectionChanged()?[{label:copy.targetLabel,before:formatIds(linkedIds)||'—',after}]:[];
+   const activeCopy=activeSource.copy;
+   const after=activeCopy.reviewDetails ? choices.map(choice=>optionLabel(choice).textContent).join('\n') : formatIds(selected);
+   const before=linkedIds.length&&activeSource!==originalSource
+    ?`${originalSource.copy.targetLabel} · ${formatIds(linkedIds)}`:formatIds(linkedIds)||'—';
+   const changes=selectionChanged()?[{label:activeCopy.targetLabel,before,after}]:[];
    const accepted=await confirmEditChanges({form:dialog,signal:entry.controller.signal,dismissOnBackdrop:true,title:'Confirme as alterações',changes});
    entry.reviewing=false;
    if(!accepted||current!==entry||host.hidden)return;
    entry.busy=true;save.disabled=cancel.disabled=back.disabled=search.disabled=true;feedback.setAttribute('role','status');feedback.textContent='Gravando vínculo no SharePoint…';
    if(status)status.disabled=true;
+   if(source)source.disabled=true;
    if(propose)propose.disabled=true;
    for(const choice of list.querySelectorAll('input'))choice.disabled=true;
    async function run(operation){
@@ -244,13 +304,13 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,optio
      entry.controller.signal.removeEventListener('abort',cancelWrite);
     }
    }
-   const writeSelection=sharedLinkETag=>run(signal=>saveLink(row,multiple?selected:selected[0],signal,sharedLinkETag));
+   const writeSelection=sharedLinkETag=>run(signal=>activeSource.saveLink(row,multiple?selected:selected[0],signal,sharedLinkETag));
    try{
     let receipt=await writeSelection();
     if(current!==entry||host.hidden)return;
-    if(receipt?.requiresSharedConfirmation&&sharedLinkQuestion){
+    if(receipt?.requiresSharedConfirmation&&activeSource.sharedLinkQuestion){
      const confirmed=await confirmEditChanges({
-      form:dialog,signal:entry.controller.signal,dismissOnBackdrop:true,title:sharedLinkQuestion,cancelLabel:'Não',confirmLabel:'Sim',
+      form:dialog,signal:entry.controller.signal,dismissOnBackdrop:true,title:activeSource.sharedLinkQuestion,cancelLabel:'Não',confirmLabel:'Sim',
      });
      if(current!==entry||host.hidden)return;
      if(!confirmed){
@@ -260,8 +320,8 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,optio
      receipt=await writeSelection(receipt.eTag);
      if(current!==entry||host.hidden)return;
     }
-    if(afterLink){
-     receipt=await afterLink(receipt,{form:dialog,signal:entry.controller.signal,run,feedback,choices});
+    if(activeSource.afterLink){
+     receipt=await activeSource.afterLink(receipt,{form:dialog,signal:entry.controller.signal,run,feedback,choices});
      if(current!==entry||host.hidden)return;
     }
     onLinked?.(receipt);
@@ -276,25 +336,45 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,optio
     if(current===entry){
      save.disabled=!canSave();
      cancel.disabled=back.disabled=search.disabled=false;
-     if(status)status.disabled=false;
+     if(status)status.disabled=status.hidden;
+     if(source)source.disabled=false;
      if(propose)propose.disabled=false;
      for(const choice of list.querySelectorAll('input'))choice.disabled=false;
      save.focus();
     }
    }
   });
-  try{
-   allOptions=await loadOptions(row,entry.controller.signal);
-   if(current!==entry||host.hidden)return;
+  let loadGeneration=0;
+  async function loadSource(){
+   const generation=++loadGeneration;
+   const activeCopy=activeSource.copy;
+   const isCurrent=()=>current===entry&&!host.hidden&&generation===loadGeneration;
+   title.textContent=activeCopy.title;
+   dialog.setAttribute('aria-label',activeCopy.dialogLabel);
+   search.setAttribute('aria-label',activeCopy.searchLabel);
+   list.setAttribute('aria-label',activeCopy.listLabel);
    if(status){
-    search.disabled=status.disabled=false;
-    applyStatus();
-   }else{
-    entry.options=allOptions;
-    render();
+    status.hidden=!activeSource.optionFilter;
+    status.disabled=search.disabled=true;
+   }
+   entry.options=[];
+   list.replaceChildren();
+   feedback.textContent=activeCopy.loading;
+   feedback.setAttribute('role','status');
+   try{
+    const items=await activeSource.loadOptions(row,entry.controller.signal);
+    if(!isCurrent())return;
+    allOptions=items;
+    if(status){search.disabled=false;status.disabled=status.hidden;}
+    applyFilters();
+   }catch{
+    if(isCurrent()){
+     feedback.textContent=activeCopy.loadError;
+     feedback.setAttribute('role','alert');
+    }
    }
   }
-  catch{if(current===entry){feedback.textContent=copy.loadError;feedback.setAttribute('role','alert');}}
+  await loadSource();
  }
  return {show,close,destroy:close,get isOpen(){return current!==null;}};
 }

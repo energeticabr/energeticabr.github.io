@@ -4,6 +4,7 @@ export const DDA_UNLINKED_REVIEW_FIELD = 'DDA_x0020_sem_x0020_vincula_x00e';
 export const DDA_REFUSED_FIELD = 'DDA_RECUSADO';
 export const DDA_REFUSED_STATUS = 'Recusado';
 export const DDA_PRIORITY_FIELD = 'DATA_PRIOR';
+export const DDA_ORDER_FIELD = 'IDPEDIDO';
 
 const statusLabels = new Map([
   ['em aberto', 'Em aberto'],
