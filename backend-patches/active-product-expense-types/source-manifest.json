@@ -1,0 +1,10 @@
+{
+  "worker/financial_catalog_registration.py": {
+    "before": "44b45fe98cf6233574bc40074d24dbf477dffcf3bc2271aaf81a59f4df8b2645",
+    "after": "5dc3be30b3f1ec1005982204b0f7ba4bd52c5474371b12f7f3db05bad6af7def"
+  },
+  "worker/workflow.py": {
+    "before": "6c3714be08db697760d99d7d76fc3042df684ba16e192defbbc9d74e87dbe4af",
+    "after": "3ba6083ef18fa927892c0a43e283a182975ffb83a26abd6525f838a023739ed9"
+  }
+}

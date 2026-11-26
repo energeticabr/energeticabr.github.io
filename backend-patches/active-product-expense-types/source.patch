@@ -1,0 +1,79 @@
+--- a/worker/financial_catalog_registration.py
++++ b/worker/financial_catalog_registration.py
+@@ -11,0 +12 @@
++ACTIVE_EXPENSE_TYPE = {'field': 'STATUS', 'equals': 'ATIVO'}
+@@ -62,0 +64,9 @@
++        if displayed['source']['list'] == 'CADASTROPRODUTO':
++            displayed['source'] = {
++                'type': 'sharepoint_list', 'list': 'CADASTROTIPOMATERIAL',
++                'id_field': 'Id', 'label_field': 'TIPO', 'value_field': 'TIPO',
++                'distinct': True, 'sort_field': 'Id', 'sort_direction': 'asc',
++            }
++        filters = displayed['source'].setdefault('filters', [])
++        if ACTIVE_EXPENSE_TYPE not in filters:
++            filters.append(dict(ACTIVE_EXPENSE_TYPE))
+@@ -73,0 +84,36 @@
++
++
++def guard_product_expense_type(engine, state, etag, flow, token):
++    if state.get('flow') != 'supply_product_registration':
++        return None, None
++    index, step = next(
++        (index, step) for index, step in enumerate(flow['steps'])
++        if step.get('key') == 'tipo_despesa_produto_cadastro'
++    )
++    step_for_lookup = step_with_create(engine, state, step)
++    options = engine.sharepoint.get_options(step_for_lookup, engine._context(state))
++    active_types = {option['value'] for option in options if option.get('value')}
++    if state['fields'].get('TIPODESPESA') in active_types:
++        return None, None
++
++    # A previous attempt may already have written this same product. Read it
++    # by the submission token before asking the user to edit the draft.
++    target = flow['target_list']
++    existing = engine.sharepoint._find_item(token, target, flow.get('idempotency_field', 'Title'))
++    if existing:
++        saved = engine.sharepoint.get_item_fields(existing['Id'], ['TIPODESPESA'], target)
++        expense_type = saved.get('TIPODESPESA')
++        if not expense_type:
++            raise RuntimeError('O produto já gravado não tem tipo de despesa para conciliar.')
++        state['fields']['TIPODESPESA'] = expense_type
++        state['display_values']['TIPODESPESA'] = expense_type
++        # Skip the create path even if the recorded type was blocked since submission.
++        return existing['Id'], None
++
++    engine._clear_step_value(state, step)
++    state['step_index'] = index
++    state['edit_step_indices'] = [index]
++    state['options'] = []
++    state.pop('option_pagination', None)
++    engine._send_text(state, 'O TIPO DE DESPESA SELECIONADO NÃO ESTÁ ATIVO. SELECIONE UM TIPO ATIVO.')
++    return None, engine._prompt_next_or_summary(state, etag)
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -22441 +22441 @@
+-            state["options"] = self._include_terminal_option(step, state.get("options", []))
++            state["options"] = self._selection_options(state, step)
+@@ -33723 +33722,0 @@
+-            related_item = self._ensure_related_item(state, flow)
+@@ -33726,0 +33726,6 @@
++            recorded_product_id, expense_type_review = financial_catalog.guard_product_expense_type(
++                self, state, etag, flow, token
++            )
++            if expense_type_review is not None:
++                return expense_type_review
++            related_item = self._ensure_related_item(state, flow)
+@@ -33762,0 +33768,2 @@
++            elif recorded_product_id is not None:
++                item_id = recorded_product_id
+@@ -37926,0 +37934 @@
++            had_active_filter = financial_catalog.ACTIVE_EXPENSE_TYPE in step["source"].get("filters", [])
+@@ -37927,0 +37936,8 @@
++            if not had_active_filter:
++                state["options"] = self._selection_options(state, step)
++                allowed_ids = {str(option["id"]) for option in state["options"]}
++                pagination["options"] = [
++                    option for option in pagination.get("options", [])
++                    if str(option["id"]) in allowed_ids
++                ]
++                pagination["offset"] = 0
