@@ -157,7 +157,9 @@ test('DDA uses authenticated SharePoint REST with read-only scope for private li
 
 test('DDA reads NOTASPENDENTES and writes only the confirmed link using its SharePoint REST ETag',async()=>{
  const ddaList='11111111-2222-3333-4444-555555555555',orderList='11111111-2222-3333-4444-666666666666';
+ const launchList='11111111-2222-3333-4444-777777777777';
  const version='"v1"',requests=[];
+ let launchUnavailable=false;
  const dda={ID:7,'odata.etag':version,DESCRITIVOPROVIS_x00c3_O:'56',IDPEDIDO:null};
  const order={ID:56,FORNECEDOR:'Fornecedor fictício',FILIAL:'Matriz',VALORTOTAL:'123,45',DATAPEDIDO:'2026-11-04'};
  const data=createRegistrationGalleryData({kind:'dda',siteConfig:{personal:{host:'tenant.sharepoint.com',path:'/sites/test'}},
@@ -168,11 +170,23 @@ test('DDA reads NOTASPENDENTES and writes only the confirmed link using its Shar
    if(path.endsWith('/_api/web/lists'))return Response.json({value:[
     {Id:ddaList,Title:'DDAS SICOOB',BaseTemplate:100,Hidden:false},
     {Id:orderList,Title:'NOTASPENDENTES',BaseTemplate:100,Hidden:false},
+    {Id:launchList,Title:'LANCAMENTOS',BaseTemplate:100,Hidden:false},
    ]});
    assert.equal(url.searchParams.has('$expand'),false);
    if(path.endsWith(`lists(guid'${orderList}')/items`)){
     assert.equal(url.searchParams.get('$select'),'ID,FORNECEDOR,VALORTOTAL,FILIAL,DATAPEDIDO');
-    return Response.json({value:[order]});
+    return Response.json({value:[order,{...order,ID:57,VALORTOTAL:'123,46'}]});
+   }
+   if(path.endsWith(`lists(guid'${launchList}')/fields`))return Response.json({value:[]});
+   if(path.endsWith(`lists(guid'${launchList}')/items`)){
+    assert.equal(url.searchParams.get('$filter'),"AGRUPAR eq '56'");
+    assert.ok(url.searchParams.get('$select').split(',').includes('field_3'));
+    if(launchUnavailable)return new Response(null,{status:403});
+    return Response.json({value:[
+     {ID:100,AGRUPAR:'56',field_2:'2026-11-05',field_3:'2026-11-02',field_4:'2026-11-05'},
+     {ID:101,AGRUPAR:'56',field_2:'2026-11-05',field_3:'2026-11-06',field_4:'2026-11-05'},
+     {ID:102,AGRUPAR:'56',field_3:'2026-11-02'},
+    ]});
    }
    if(path.endsWith(`lists(guid'${orderList}')/items(56)`))return Response.json({ID:56,FORNECEDOR:order.FORNECEDOR});
    assert.ok(path.endsWith(`lists(guid'${ddaList}')/items(7)`),path);
@@ -186,9 +200,16 @@ test('DDA reads NOTASPENDENTES and writes only the confirmed link using its Shar
    return new Response(null,{status:204});
   },
  });
- const [option]=await data.provisionLink.loadOrderOptions();
+ const [option,other]=await data.provisionLink.loadOrderOptions({amount:'123.45',due:'2026-11-05'});
  assert.equal(option.label,'#56 · Fornecedor fictício · Matriz');
  assert.equal(option.date,'2026-11-04');
+ assert.deepEqual(option.dueDates,['2026-11-02','2026-11-06']);
+ assert.equal(other.dueDates,undefined);
+ launchUnavailable=true;
+ const fallback=await data.provisionLink.loadOrderOptions({amount:'123.45',due:'2026-11-05'});
+ assert.deepEqual(fallback.map(({id})=>id),['56','57']);
+ assert.equal(fallback[0].dueLookupIncomplete,true);
+ assert.equal(fallback[0].dueDates,undefined);
  assert.deepEqual(await data.provisionLink.saveOrder({ddaId:'7',orderId:option.id,
   expectedLink:{provisionId:'56',orderId:''}}),{ddaId:'7',orderId:'56'});
  assert.deepEqual(requests,[{DESCRITIVOPROVIS_x00c3_O:null,IDPEDIDO:'56'}]);

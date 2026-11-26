@@ -24,7 +24,7 @@ test('switches the picker to orders, drops the provision selection and confirms 
  const submissions=[];
  const picker=createDdaProvisionPicker({document:doc,host:doc.querySelector('main'),service:{
   loadOptions:async()=>[{id:'2',supplier:'FORNECEDOR DA PROVISÃO',amount:10}],
-  loadOrderOptions:async()=>[{id:'2',supplier:'FORNECEDOR DO PEDIDO',amount:20,date:'2026-11-11'}],
+  loadOrderOptions:async()=>[{id:'2',supplier:'FORNECEDOR DO PEDIDO',amount:20,date:'2026-11-11',dueLookupIncomplete:true}],
   save:async()=>assert.fail('Pedido must use its own save'),
   saveOrder:async request=>{submissions.push(request);return {ddaId:'31',orderId:'2'};},
   prepareDueAdjustment:async()=>assert.fail('Pedido must not adjust a provision date'),
@@ -39,6 +39,8 @@ test('switches the picker to orders, drops the provision selection and confirms 
  source.dispatchEvent(new dom.window.Event('change'));
  await tick();
  assert.equal(status.hidden,true);
+ assert.match(doc.querySelector('.dda-provision-feedback').textContent,/Vencimentos indisponíveis/);
+ assert.equal(doc.querySelector('.dda-provision-star'),null);
  assert.match(doc.querySelector('.dda-provision-options').textContent,/FORNECEDOR DO PEDIDO.*11\/11\/2026/);
  assert.equal(doc.querySelector('input[value="2"]').checked,false);
  assert.equal(doc.querySelector('.dda-provision-save').disabled,true);

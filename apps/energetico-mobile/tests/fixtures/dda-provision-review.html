@@ -15,9 +15,14 @@ if(new URLSearchParams(location.search).has('wideControls')){
 }
 const frame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const view=createDdaReportView({document,data:{
- loadSnapshot:async()=>({rows:[{id:'28',fields:{Title:'FORNECEDOR FICTÍCIO',VALOR:360,SITUACAO:'Em aberto',VENCIMENTO:'2026-11-04'}}]}),
+ loadSnapshot:async()=>({rows:[{id:'28',fields:{Title:'FORNECEDOR FICTÍCIO',VALOR:360,SITUACAO:'Em aberto',VENCIMENTO:'2026-11-04',DATA_PRIOR:'2026-11-02'}}]}),
  provisionLink:{loadOptions:async()=>[{id:'44',supplier:nameFallback?'FICTÍCIO':'FORNECEDOR FICTÍCIO',label:'#44 · FORNECEDOR FICTÍCIO',amount:720,provisions:[{id:'101',amount:nameFallback?180:360,due:'2026-11-04'},...(alignDue?[]:[{id:'102',amount:nameFallback?540:360,due:'2026-12-04'}])]}],save:async({sharedLinkETag})=>{if(duplicate&&!sharedLinkETag)return {requiresSharedConfirmation:true,eTag:'fixture'};writes++;return {ddaId:'28',provisionId:'44'};},
-  loadOrderOptions:async()=>[{id:'44',supplier:'PEDIDO FICTÍCIO',amount:360,date:'2026-11-10'}],
+  loadOrderOptions:async()=>[
+   {id:'44',supplier:'FORNECEDOR FICTÍCIO',amount:360,date:'2026-11-04',dueDates:['2026-11-02']},
+   {id:'45',supplier:'PEDIDO FICTÍCIO',amount:'360,00',date:'2026-11-10',dueDates:['2026-10-04','2026-11-05']},
+   {id:'46',supplier:'PEDIDO FICTÍCIO',amount:360,date:'2026-11-04',dueDates:['2026-02-30']},
+   {id:'47',supplier:'FORNECEDOR FICTÍCIO',amount:359.99,dueDates:['2026-11-04']},
+  ],
   saveOrder:async()=>({ddaId:'28',orderId:'44'}),
   ...(alignDue?{prepareDueAdjustment:async()=>({provisionId:'44',childId:'101',childDue:'2026-11-05',parentDue:'2026-11-05',due:'2026-11-04'}),adjustDue:async()=>{dateWrites++;}}:{}),
  }
@@ -51,6 +56,15 @@ const pickerFiltersFit=Boolean(source&&searchFits&&source.offsetTop===status.off
  &&status.offsetLeft+status.offsetWidth<=status.offsetParent.clientWidth+1
  &&filterWidths.source+1>=filterWidths.sourceLabel&&filterWidths.status+1>=filterWidths.statusLabel);
 source.value='order';source.dispatchEvent(new Event('change'));await frame();
+const orderList=document.querySelector('.dda-provision-options');
+const orderRows=[...orderList.children];
+const orderRanking={
+ ids:orderRows.map(label=>label.querySelector('input').value),
+ stars:orderRows.filter(label=>label.querySelector('.dda-provision-star')).map(label=>label.querySelector('input').value),
+ displaysDue:orderRows[0].textContent.includes('Vencimento 05/11/2026'),
+ selected:orderList.querySelector('input:checked')?.value??null,
+ fits:orderList.scrollWidth<=orderList.clientWidth+1,
+};
 const orderFiltersFit=source.value==='order'&&status.getClientRects().length===0
  &&source.offsetLeft+source.offsetWidth<=source.offsetParent.clientWidth+1
  &&document.querySelector('.dda-provision-options').textContent.includes('PEDIDO FICTÍCIO');
@@ -127,5 +141,5 @@ document.querySelector('[data-dda-provision-pencil]').click();await frame();
 document.querySelector('input[type=radio]').click();
 const capturedReview=await review();
 if(duplicate){capturedReview.querySelector('[data-edit-review-submit]').click();await frame();}
-document.documentElement.dataset.layout=JSON.stringify({pickerMatch,pickerFits,pickerOverflows,pickerFiltersFit,orderFiltersFit,pickerSubmitReachable,filterWidths,pickerGeometry,chipColors,fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed,beforePencil,afterPencil,duplicateFits,duplicateNo,duplicateTransform,dueReview});
+document.documentElement.dataset.layout=JSON.stringify({pickerMatch,pickerFits,pickerOverflows,pickerFiltersFit,orderFiltersFit,orderRanking,pickerSubmitReachable,filterWidths,pickerGeometry,chipColors,fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed,beforePencil,afterPencil,duplicateFits,duplicateNo,duplicateTransform,dueReview});
 </script></body></html>

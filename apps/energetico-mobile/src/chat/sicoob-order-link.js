@@ -60,6 +60,32 @@ export function rankSicoobOrderOptions(options, { supplier, amount, date } = {})
   }).sort((a, b) => b.priority - a.priority || b.similarity - a.similarity || Number(b.id) - Number(a.id));
 }
 
+export function rankDdaOrderOptions(options, { supplier, amount, due } = {}) {
+  const wanted = sicoobAmountCents(amount);
+  const originalDue = Date.parse(provisionDateKey(due));
+  const ranked = options.map(option => {
+    const totalMatch = wanted > 0 && sicoobAmountCents(option.amount) === wanted;
+    let closestDue = '';
+    let distance = Infinity;
+    for (const value of option.dueDates ?? []) {
+      const day = provisionDateKey(value);
+      const difference = Math.abs(Date.parse(day) - originalDue);
+      if (difference < distance || (difference === distance && day < closestDue)) {
+        closestDue = day;
+        distance = difference;
+      }
+    }
+    return { ...option, totalMatch, closestDue, distance,
+      similarity: fiscalSupplierSimilarity(supplier, option.supplier) };
+  });
+  return ranked.sort((a, b) => Number(b.totalMatch) - Number(a.totalMatch)
+    || (a.totalMatch ? a.distance - b.distance : 0)
+    || b.similarity - a.similarity || Number(a.id) - Number(b.id))
+    .map((option, index) => ({ ...option,
+      recommended: index === 0 && option.totalMatch && Boolean(option.closestDue),
+    }));
+}
+
 const ORDER_LIST = 'NOTASPENDENTES';
 const MOVEMENT_LIST = 'MOVIMENTACOESFINANCEIRAS';
 const fieldObject = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -107,7 +133,9 @@ function orderSupplier(order) {
   return name && !placeholders.has(name) ? supplier.trim() : '';
 }
 
-export function createSicoobOrderLink({ repository, orderRepository = repository, siteKey = 'personal', assertSession = () => {} }) {
+export function createSicoobOrderLink({
+  repository, orderRepository = repository, siteKey = 'personal', assertSession = () => {}, loadLaunchGroup,
+}) {
   function active(signal) {
     assertSession();
     signal?.throwIfAborted();
@@ -121,13 +149,13 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
     return list.id;
   }
 
-  async function loadOptions({ signal } = {}) {
+  async function loadOptions({ signal, amount, due } = {}) {
     const list = await resolve(orderRepository, ORDER_LIST, signal);
     const items = await orderRepository.getItems(siteKey, list, '$top=100&$expand=fields($select=FORNECEDOR,VALORTOTAL,FILIAL,DATAPEDIDO)', { signal });
     active(signal);
     if (!Array.isArray(items)) throw new Error('Consulta de pedidos incompleta.');
     const ids = new Set();
-    return items.map(item => {
+    const options = items.map(item => {
       const id = sicoobOrderId(item?.id);
       const fields = item?.fields;
       if (!id || ids.has(id) || !fieldObject(fields) || ![fields.FORNECEDOR, fields.VALORTOTAL, fields.FILIAL].every(scalar)) {
@@ -140,6 +168,30 @@ export function createSicoobOrderLink({ repository, orderRepository = repository
       const details = branch ? `${supplier} · ${branch}` : supplier;
       return { id, supplier, amount:fields.VALORTOTAL ?? null, date, details, label:`#${id} · ${details}` };
     });
+    const wanted = sicoobAmountCents(amount);
+    if (!loadLaunchGroup || !(wanted > 0) || !provisionDateKey(due)) return options;
+
+    const matches = options.filter(option => sicoobAmountCents(option.amount) === wanted);
+    const dueDatesByOrder = new Map();
+    try {
+      for (let start = 0; start < matches.length; start += ORDER_LOOKUP_BATCH_SIZE) {
+        const batch = matches.slice(start, start + ORDER_LOOKUP_BATCH_SIZE);
+        await Promise.all(batch.map(async ({ id }) => {
+          const launches = await loadLaunchGroup(id, { signal });
+          const days = launches.map(({ fields }) => provisionDateKey(fields['DATA PGTO PREVISTO'])).filter(Boolean);
+          dueDatesByOrder.set(id, [...new Set(days)].sort());
+        }));
+        active(signal);
+      }
+    } catch (error) {
+      active(signal);
+      if (error?.name === 'AbortError') throw error;
+      // An incomplete date comparison cannot establish the closest order.
+      return options.map(option => ({ ...option, dueLookupIncomplete: true }));
+    }
+    return options.map(option => dueDatesByOrder.has(option.id)
+      ? { ...option, dueDates: dueDatesByOrder.get(option.id) }
+      : option);
   }
 
   async function loadSuppliers(orderIds, { signal } = {}) {

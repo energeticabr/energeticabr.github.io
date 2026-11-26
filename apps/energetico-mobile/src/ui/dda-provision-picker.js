@@ -2,6 +2,7 @@ import { includesSearchText, normalizeSearchText } from '../../../../portal/core
 import {confirmEditChanges,ensureEditReviewStyles} from '../../../../portal/ui/edit-review.js';
 import {bindBackdropDismiss} from '../../../../portal/ui/backdrop-dismiss.js';
 import {rankDdaProvisionOptions} from '../chat/dda-provision-link.js';
+import {rankDdaOrderOptions} from '../chat/sicoob-order-link.js';
 
 const DDA_COPY = {
  title:'A qual DESCRITIVO PROVISÃO DESEJA VINCULAR?',
@@ -30,7 +31,8 @@ const DDA_ORDER_COPY = {
  searchLabel:'Buscar pedido',
  listLabel:'Pedidos disponíveis',
  loading:'Carregando pedidos…',
- options:count=>`${count} pedido(s). Escolha um para vincular.`,
+ options:(count,_selected,items)=>`${count} pedido(s). Escolha um para vincular.${
+  items.some(item=>item.dueLookupIncomplete)?' Vencimentos indisponíveis para comparação.':''}`,
  empty:'Nenhum pedido encontrado para a busca.',
  loadError:'Não foi possível carregar os pedidos. Tente novamente.',
  reviewDetails:true,
@@ -70,12 +72,13 @@ export function createDdaProvisionPicker({service, ...options}){
    choice:['order','PEDIDO'],
    isCurrent:row=>Boolean(row.orderId&&!row.provisionId),
    copy:DDA_ORDER_COPY,
-   loadOptions:async (row,signal)=>rankDdaProvisionOptions(await service.loadOrderOptions({signal}),row),
+   loadOptions:async (row,signal)=>rankDdaOrderOptions(await service.loadOrderOptions({signal,amount:row.amount,due:row.due}),row),
    saveLink:(row,id,signal)=>service.saveOrder({ddaId:row.id,orderId:id,expectedLink:expectedLink(row),signal}),
    renderOptionLabel(node,item,amount){
     node.className='report-link-option-text';
     node.textContent=item.label||`#${item.id} · ${item.supplier}`;
     node.append(' · ',createReportLinkComparison(node.ownerDocument,amount,item.totalMatch,'Valor','o valor do DDA'));
+    if(item.closestDue)node.append(` · Vencimento ${displayDate(item.closestDue)}`);
     if(item.date)node.append(` · Data do pedido ${displayDate(item.date)}`);
    },
   }:null,
@@ -192,7 +195,8 @@ export function createReportLinkPicker({document:doc,host,copy,loadOptions,optio
    const count=list.childElementCount;
    feedback.setAttribute('role','status');
    const activeCopy=activeSource.copy;
-   feedback.textContent=(activeSource.optionFilter?count:entry.options.length)?activeCopy.options(count,entry.selected.size):activeCopy.empty;
+   feedback.textContent=(activeSource.optionFilter?count:entry.options.length)
+    ?activeCopy.options(count,entry.selected.size,entry.options):activeCopy.empty;
   }
   function updateSelection(){
    let matches=false;

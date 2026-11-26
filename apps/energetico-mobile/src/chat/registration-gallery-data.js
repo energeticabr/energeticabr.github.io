@@ -1,4 +1,4 @@
-import { createOrdersGalleryData, normalizeGalleryItem, loadDescriptionGroupWithProgress } from "./orders-gallery-data.js";
+import { createLaunchClusterData, createOrdersGalleryData, normalizeGalleryItem, loadDescriptionGroupWithProgress } from "./orders-gallery-data.js";
 import { SHAREPOINT_SITES } from "../../../../portal/config.js";
 import { createGraphClient } from "../../../../portal/data/graph-client.js";
 import { createSharePointRepository } from "../../../../portal/data/sharepoint-repository.js";
@@ -586,10 +586,11 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
     } };
     const writeOptions = { repository: galleryRepository({ ...options, siteConfig }), siteKey, assertSession: options.assertSession };
     const linkOptions = { ...writeOptions, repository: galleryRepository({ ...options, siteConfig: linkSiteConfig }) };
+    const launchGroups = createLaunchClusterData(writeOptions);
     return {
       provisionLink: createDdaProvisionLink({
         ...linkOptions, directRepository: writeOptions.repository,
-        loadOrderOptions: createSicoobOrderLink(writeOptions).loadOptions,
+        loadOrderOptions: createSicoobOrderLink({ ...writeOptions, loadLaunchGroup: launchGroups.loadGroup }).loadOptions,
       }),
       unlinkedReview: createDdaUnlinkedReview(writeOptions),
       rejectDda: createDdaRefusal(writeOptions),
