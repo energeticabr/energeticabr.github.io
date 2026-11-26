@@ -19,6 +19,72 @@ test('unknown status and missing amounts never become open or zero; malformed an
  const report=buildDdaReport(rows,undefined,now());assert.deepEqual(report.rows.map(r=>r.id),['3','2']);assert.equal(report.total,null);assert.equal(report.missingAmounts,1);assert.equal(report.today,1);
  for(const snapshot of [{},{rows:[],hasMore:true},{rows:[row(1),row(1)]},{rows:[{id:1}]}])assert.throws(()=>normalizeDdaReportRows(snapshot));
 });
+test('new DDAs stay open until payment and a completed link, without entering payable totals',()=>{
+ const provision='DESCRITIVOPROVIS_x00c3_O';
+ const created='2026-11-26T19:00:00Z';
+ const item=(id,status,fields={},entered=created)=>{
+  const result=row(id,status,'2026-12-02',100);
+  Object.assign(result.fields,{Created:entered,...fields});
+  return result;
+ };
+ const rows=normalizeDdaReportRows({rows:[
+  item(1,'Pago',{},'2026-11-26T18:59:59Z'),
+  item(2,'Pago',{DDA_x0020_sem_x0020_vincula_x00e:true}),
+  item(3,'Pago',{IDPEDIDO:'22'}),
+  item(4,'Pago',{[provision]:'45'}),
+  item(5,'Pago',{[provision]:'46'}),
+  item(6,'Em aberto',{IDPEDIDO:'22'}),
+  item(7,'Pago',{[provision]:'46',IDPEDIDO:'22'}),
+  item(8,'Baixado'),
+  item(9,'Pago',{DDA_RECUSADO:true}),
+  item(10,'Não confirmado',{[provision]:'46'}),
+ ]});
+ const result=buildDdaReport(rows,{settledDdaIds:new Set(['3','5','7','10'])},now());
+ assert.deepEqual(result.rows.map(item=>item.id),['2','4','6','7','8','10']);
+ assert.equal(result.total,'100.00');
+ assert.equal(result.visibleOutsideStatus,5);
+ assert.deepEqual(buildDdaReport(rows,{status:'Pago'},now()).rows.map(item=>item.id),['1','2','3','4','5','7']);
+ assert.ok(buildDdaReport(rows,{},now()).rows.some(item=>item.id==='5'),'without proof a provision remains pending');
+ assert.ok(buildDdaReport(rows,{},now()).rows.some(item=>item.id==='3'),'without proof the order posting remains pending');
+ assert.equal(hasDdaMenuAlert([rows[1]],now()),true,'a paid new DDA with no link remains visible to the alert');
+});
+
+test('a paid new DDA is removed from Em aberto after the order link is confirmed',async()=>{
+ const supplied=row(17,'Pago','2026-12-02',100);
+ supplied.fields.Created='2026-11-26T19:04:00Z';
+ const writes=[];
+ let posted=false;
+ const {dom,view,doc}=setup({
+  loadSnapshot:async()=>({rows:[supplied]}),
+  provisionLink:{
+   loadOptions:async()=>[],
+   loadOrderOptions:async()=>[{id:'37',supplier:'Fornecedor 17',amount:100}],
+   loadSettledDdaIds:async rows=>new Set(rows.filter(item=>item.orderId==='37'&&posted).map(item=>item.id)),
+   saveOrder:async request=>{writes.push(request.orderId);supplied.fields.IDPEDIDO=request.orderId;return {ddaId:'17',orderId:request.orderId};},
+  },
+ });
+ try{
+  await view.open();
+  const line=()=>doc.querySelector('[data-dda-id="17"]');
+  assert.match(line().querySelector('.ddr-status-cluster').textContent,/Pago.*Vinculação pendente/);
+  assert.ok(!line().querySelector('[data-dda-unlinked-review]'));
+  line().querySelector('[data-dda-provision-pencil]').click();await settle();
+  const source=doc.querySelector('.dda-provision-source');
+  source.value='order';source.dispatchEvent(new dom.window.Event('change'));await settle();
+  doc.querySelector('input[value="37"]').click();
+  doc.querySelector('.dda-provision-save').click();await settle();
+  assert.deepEqual(writes,[]);
+  doc.querySelector('[data-edit-review-submit]').click();await settle();
+  assert.deepEqual(writes,['37']);
+  assert.match(line().querySelector('.ddr-status-cluster').textContent,/Pago.*Lançamento pendente/);
+  posted=true;
+  doc.querySelector('[aria-label="Atualizar DDAs"]').click();await settle();
+  assert.equal(line(),null);
+  const filter=doc.querySelector('[name=status]');
+  filter.value='Pago';filter.dispatchEvent(new dom.window.Event('change'));
+  assert.match(line().querySelector('.ddr-link').textContent,/Pedido ID 37/);
+ }finally{view.destroy();dom.window.close();}
+});
 test('complete authenticated DDA source requests the bank status, includes later pages and has no mutations',async()=>{
  assert.ok(REGISTRATION_GALLERY_MODELS.dda.restReadFields.includes('STATUS_DDA'));
  let calls=0;const data=createRegistrationGalleryData({kind:'dda',repository:{resolveList:async()=>({status:'resolved',id:'dda'}),getColumns:async()=>[],getItemsPage:async()=>++calls===1?{items:[row(1)],hasMore:true,nextLink:'page2'}:{items:[row(2)],hasMore:false}}});

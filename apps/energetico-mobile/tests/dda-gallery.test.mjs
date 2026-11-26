@@ -126,10 +126,11 @@ test('DDA uses authenticated SharePoint REST with read-only scope for private li
     if(query.has('$expand')) return new Response('{"error":{"code":"BadGateway"}}',{status:502,headers:{'Content-Type':'application/json'}});
     assert.ok(query.get('$select').split(',').includes('Title'));
     assert.ok(query.get('$select').split(',').includes('VENCIMENTO'));
+    assert.ok(query.get('$select').split(',').includes('Created'));
     assert.ok(query.get('$select').split(',').includes('STATUS_DDA'));
     assert.ok(query.get('$select').split(',').includes('STATUS_CONSULTADO_EM'));
     assert.equal(query.get('$select').includes('*'),false);
-    value=[{Id:7,...sample.fields,STATUS_DDA:'Agendado',STATUS_CONSULTADO_EM:'2026-10-27T16:00:00Z'}];
+    value=[{Id:7,...sample.fields,STATUS_DDA:'Agendado',STATUS_CONSULTADO_EM:'2026-10-27T16:00:00Z',Created:'2026-11-27T12:00:00Z'}];
    }
    else if(String(url).includes('/items(7)?')) {
     const query=new URL(String(url)).searchParams;
@@ -146,6 +147,7 @@ test('DDA uses authenticated SharePoint REST with read-only scope for private li
  const [row]=(await data.loadSnapshot()).rows;
  assert.equal(row.id,'7');
  assert.equal(row.fields.STATUS_DDA,'Agendado');
+ assert.equal(row.fields.Created,'2026-11-27T12:00:00Z');
  assert.equal(row.fields.STATUS_CONSULTADO_EM,'2026-10-27T16:00:00Z');
  const current=await data.loadItem('7');
  assert.equal(current.id,'7');
@@ -160,6 +162,7 @@ test('DDA reads NOTASPENDENTES and writes only the confirmed link using its Shar
  const launchList='11111111-2222-3333-4444-777777777777';
  const version='"v1"',requests=[];
  let launchUnavailable=false;
+ let orderPostingComplete=false;
  const dda={ID:7,'odata.etag':version,DESCRITIVOPROVIS_x00c3_O:'56',IDPEDIDO:null};
  const order={ID:56,FORNECEDOR:'Fornecedor fictício',FILIAL:'Matriz',VALORTOTAL:'123,45',DATAPEDIDO:'2026-11-04'};
  const data=createRegistrationGalleryData({kind:'dda',siteConfig:{personal:{host:'tenant.sharepoint.com',path:'/sites/test'}},
@@ -181,11 +184,12 @@ test('DDA reads NOTASPENDENTES and writes only the confirmed link using its Shar
    if(path.endsWith(`lists(guid'${launchList}')/items`)){
     assert.equal(url.searchParams.get('$filter'),"AGRUPAR eq '56'");
     assert.ok(url.searchParams.get('$select').split(',').includes('field_3'));
+    assert.ok(url.searchParams.get('$select').split(',').includes('field_4'));
     if(launchUnavailable)return new Response(null,{status:403});
     return Response.json({value:[
      {ID:100,AGRUPAR:'56',field_2:'2026-11-05',field_3:'2026-11-02',field_4:'2026-11-05'},
      {ID:101,AGRUPAR:'56',field_2:'2026-11-05',field_3:'2026-11-06',field_4:'2026-11-05'},
-     {ID:102,AGRUPAR:'56',field_3:'2026-11-02'},
+     {ID:102,AGRUPAR:'56',field_3:'2026-11-02',field_4:orderPostingComplete?'2026-11-05':null},
     ]});
    }
    if(path.endsWith(`lists(guid'${orderList}')/items(56)`))return Response.json({ID:56,FORNECEDOR:order.FORNECEDOR});
@@ -210,6 +214,11 @@ test('DDA reads NOTASPENDENTES and writes only the confirmed link using its Shar
  assert.deepEqual(fallback.map(({id})=>id),['56','57']);
  assert.equal(fallback[0].dueLookupIncomplete,true);
  assert.equal(fallback[0].dueDates,undefined);
+ const newPaidDda={id:'7',orderId:'56',status:'Pago',requiresSettledLink:true};
+ launchUnavailable=false;
+ assert.deepEqual([...await data.provisionLink.loadSettledDdaIds([newPaidDda])],[]);
+ orderPostingComplete=true;
+ assert.deepEqual([...await data.provisionLink.loadSettledDdaIds([newPaidDda])],['7']);
  assert.deepEqual(await data.provisionLink.saveOrder({ddaId:'7',orderId:option.id,
   expectedLink:{provisionId:'56',orderId:''}}),{ddaId:'7',orderId:'56'});
  assert.deepEqual(requests,[{DESCRITIVOPROVIS_x00c3_O:null,IDPEDIDO:'56'}]);

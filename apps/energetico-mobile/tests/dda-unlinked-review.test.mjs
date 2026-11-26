@@ -32,7 +32,10 @@ test('writes only the review flag on the verified SharePoint version and rejects
  let current=row(5,{[flag]:false});const writes=[];
  const review=createDdaUnlinkedReview({repository:{
   resolveList:async()=>({id:'dda-list',status:'resolved'}),
-  getItem:async()=>current,
+  getItem:async(_site,_list,_id,_query,{restrictedFields})=>{
+   assert.ok(restrictedFields.includes('Created'));
+   return current;
+  },
   updateItem:async(site,list,id,fields,{eTag})=>{
    writes.push({site,list,id,fields,eTag});
    current={...current,fields:{...current.fields,...fields}};
@@ -42,7 +45,7 @@ test('writes only the review flag on the verified SharePoint version and rejects
  const change=(reviewed)=>review.save({row:normalizeDdaReportRows(snapshot(row(5,{[flag]:!reviewed})))[0],reviewed});
  await change(true);await change(false);
  assert.deepEqual(writes.map(({fields,eTag})=>[fields,eTag]),[[{[flag]:true},'"7"'],[{[flag]:false},'"7"']]);
- for(const fields of [{SITUACAO:'Pago'},{DDA_RECUSADO:true},{[link]:'58'},{CHAVE_DDA:'outro'},{[flag]:true}]){
+ for(const fields of [{SITUACAO:'Pago'},{DDA_RECUSADO:true},{[link]:'58'},{CHAVE_DDA:'outro'},{[flag]:true},{Created:'2026-11-26T19:00:00Z'}]){
   current=row(5,{[flag]:false,...fields});await assert.rejects(change(true));
  }
  assert.equal(writes.length,2);

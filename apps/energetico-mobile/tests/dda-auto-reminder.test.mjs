@@ -76,6 +76,23 @@ test('reviewed unlinked DDAs never trigger automatically, including overdue and 
  }
 });
 
+test('a new paid DDA still reminds until its order has a recorded payment',async()=>{
+ let posted=false;
+ const h=setup({now:()=>Date.parse('2026-11-27T19:00:00Z'),
+  loadSettledDdaIds:async rows=>new Set(rows.filter(item=>posted&&item.orderId==='37').map(item=>item.id))});
+ const paid=row(51,'Pago','2026-12-04');
+ Object.assign(paid.fields,{Created:'2026-11-27T14:00:00Z',DDA_x0020_sem_x0020_vincula_x00e:true});
+ h.setRows([paid]);
+ assert.equal(await h.reminder.refresh(),true);
+ h.reminder.dismiss();
+ paid.fields.IDPEDIDO='37';
+ assert.equal(await h.reminder.refresh(),true);
+ h.reminder.dismiss();
+ posted=true;
+ assert.equal(await h.reminder.refresh(),false);
+ assert.equal(h.opened.length,2);
+});
+
 test('regularizing a deferred unlinked DDA cancels its queued automatic report',async()=>{
  const h=setup({now:()=>Date.parse('2026-11-18T19:18:00Z')});
  const unlinked=row(49,'Em aberto','2026-11-18');

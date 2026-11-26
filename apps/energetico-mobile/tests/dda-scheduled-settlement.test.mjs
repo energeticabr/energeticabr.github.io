@@ -250,6 +250,27 @@ test('each paid DDA leaves the open report only when its own due day has no pend
  assert.deepEqual(ids(),['9','12','10','13','11']);
 });
 
+test('new DDAs require a real payment date for the linked installment and an existing description',async()=>{
+ let childDate='',parentExists=true;
+ const service=createDdaProvisionLink({repository:{
+  async resolveList(_site,[name]){return {status:'resolved',id:name};},
+  async getColumns(){return [{name:'DESCRITIVOPROVISAO',text:{}}];},
+  async getItems(){return [
+   {id:'1',fields:{DESCRITIVOPROVISAO:'40',DATAPREVISTOPGTO:'2026-12-02',
+    STATUS:'PAGAMENTO EFETUADO',DATAPGTOEFETUADO:childDate}},
+   {id:'2',fields:{DESCRITIVOPROVISAO:'40',DATAPREVISTOPGTO:'2026-12-10',STATUS:'PAGAMENTO PREVISTO'}},
+  ];},
+  async getItem(){return parentExists?{id:'40',fields:{STATUS:'PAGAMENTO PREVISTO'}}:null;},
+ }});
+ const dda=(id,due)=>({id,provisionId:'40',status:'Pago',due,requiresSettledLink:true});
+ const candidates=[dda('30','2026-12-02'),dda('31','2026-12-04')];
+ assert.deepEqual([...await service.loadSettledDdaIds(candidates)],[]);
+ childDate='2026-12-02';
+ assert.deepEqual([...await service.loadSettledDdaIds(candidates)],['30']);
+ parentExists=false;
+ assert.deepEqual([...await service.loadSettledDdaIds(candidates)],[]);
+});
+
 test('the pending payment badge and settlement button fit on phones and desktop',{timeout:60000},async t=>{
  const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome','/usr/bin/chromium'].find(path=>path&&existsSync(path));
  if(!browser)return t.skip('Chrome unavailable');
@@ -268,6 +289,7 @@ test('the pending payment badge and settlement button fit on phones and desktop'
     assert.deepEqual(layout,{
      label:'PAGO POR AGENDAMENTO',pending:'Baixa pendente',fits:true,aligned:true,actionFits:true,selected:'56',
      paidBackgrounds:['rgb(224, 242, 230)'],openBackground:'rgb(255, 255, 255)',
+     pendingLink:'Vinculação pendente',pendingLinkFits:true,
     },JSON.stringify({width,layout}));
    }finally{dom.window.close();}
   }

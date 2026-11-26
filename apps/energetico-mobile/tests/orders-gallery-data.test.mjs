@@ -769,8 +769,8 @@ test("filtra LANCAMENTOS por AGRUPAR no SharePoint e pagina somente as linhas co
   assert.deepEqual(rows.map(row => row.id), ["3451", "3449"]);
   assert.deepEqual(calls, [
     ["resolveList", "personal", ["LANCAMENTOS"], { signal }],
-    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields($select=AGRUPAR,UN,field_2,field_3,field_5,field_7,field_8,field_9,field_10,field_14,field_19)&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 1, maxPages: 100, headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, signal }],
-    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields($select=AGRUPAR,UN,field_2,field_3,field_5,field_7,field_8,field_9,field_10,field_14,field_19)&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 2, maxPages: 100, cursor: "launch-next", headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, signal }],
+    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields($select=AGRUPAR,UN,field_2,field_3,field_4,field_5,field_7,field_8,field_9,field_10,field_14,field_19)&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 1, maxPages: 100, headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, signal }],
+    ["getItemsPage", "personal", "list-lancamentos", "$select=id&$expand=fields($select=AGRUPAR,UN,field_2,field_3,field_4,field_5,field_7,field_8,field_9,field_10,field_14,field_19)&$filter=fields/AGRUPAR eq '338'&$top=100", { pageNumber: 2, maxPages: 100, cursor: "launch-next", headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" }, signal }],
   ]);
 });
 
