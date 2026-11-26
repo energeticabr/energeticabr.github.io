@@ -33,6 +33,12 @@ test('Gantt alinha SUPRIMIR à esquerda de INICIAR e abre os formulários no cel
         assert.deepEqual(result.confirmationLayout, { fits: true, touch: true, focus: true }, JSON.stringify({ width, result }));
         assert.deepEqual(result.colors, { suppress: 'rgb(170, 40, 57)', suppressDisabled: 'rgb(219, 226, 232)',
           restore: 'rgb(234, 243, 246)', start: 'rgb(230, 133, 36)', finish: 'rgb(36, 114, 58)', disabled: 'rgb(219, 226, 232)' });
+        const { before, after, expanded, notice, focused } = result.submission;
+        assert.equal(notice, 'Atividade finalizada.');
+        assert.equal(expanded, 'true');
+        assert.equal(focused, true);
+        assert.ok(before.top > 0 && before.left > 0, JSON.stringify({ width, before }));
+        assert.deepEqual(after, before, `A posição do Gantt mudou após submeter em ${width}×${height}`);
       } finally { dom.window.close(); }
     }
   } finally { await server.close(); }

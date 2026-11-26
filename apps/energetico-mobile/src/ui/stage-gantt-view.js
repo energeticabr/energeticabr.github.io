@@ -64,12 +64,15 @@ export function createStageGanttView({ document: doc = globalThis.document, data
   addReportCloseControl({ root, toolbar: tools, onClose: close });
   const detail = createStageGanttDetailView({ root, background: dialog, data });
   const finish = createStageGanttFinishView({ root, background: dialog, data, onSaved(saved, { stage, starting }) {
+    const { scrollTop, scrollLeft } = scroll;
     const collection = stage ? 'launches' : 'activities';
     snapshot = { ...snapshot, [collection]: snapshot[collection].map(row => String(row.id) === String(saved.id) ? saved : row) };
     stages = buildStageGantt(snapshot, today);
     render();
     announce(`${stage ? 'Etapa' : 'Atividade'} ${starting ? 'iniciada' : 'finalizada'}.`);
     scroll.focus({ preventScroll: true });
+    scroll.scrollTop = scrollTop;
+    scroll.scrollLeft = scrollLeft;
   } });
 
   const confirmation = make('div', 'gantt-visibility-confirm');

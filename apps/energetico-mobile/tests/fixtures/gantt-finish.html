@@ -3,19 +3,22 @@ import '../../src/styles.css';
 import '../../src/ui/stage-gantt.css';
 import { createStageGanttView } from '../../src/ui/stage-gantt-view.js';
 const branch='004 - EDIFÍCIO XAVANTE';
+let includeScrollRows=false;
 const view=createStageGanttView({document,now:()=>new Date(2026,10,18),data:{
  async loadSnapshot(){return {complete:true,launches:[
-  {id:'7',branch,stage:'ALVENARIA E ESTRUTURAS',type:'ATIVIDADE COMUM',status:'INICIADO',startDate:'2026-08-10',endDate:''},
+  {id:'7',branch,stage:'ALVENARIA E ESTRUTURAS',type:'ATIVIDADE COMUM',status:'INICIADO',startDate:includeScrollRows?'2024-08-10':'2026-08-10',endDate:''},
   {id:'8',branch,stage:'EXECUÇÃO CONTRAPISO',type:'ATIVIDADE COMUM',status:'FINALIZADO',startDate:'',endDate:''},
   {id:'9',branch,stage:'PREPARAÇÃO E EXECUÇÃO LAJE',type:'ATIVIDADE COMUM',status:'NÃO INICIADO',startDate:'',endDate:''},
   {id:'10',branch,stage:'PROJETO ELÉTRICO',type:'ATIVIDADE COMUM',status:'NÃO INICIADO',visibility:'NÃO EXIBIR'},
+  ...(includeScrollRows?Array.from({length:18},(_,index)=>({id:String(200+index),branch,stage:`Etapa ${index+1}`,type:'ATIVIDADE COMUM',status:'FINALIZADO'})):[]),
  ],activities:[
   {id:'129',branch,stage:'ALVENARIA E ESTRUTURAS',activity:'ESCORAMENTO E ARMAÇÃO FERRAGEM SEGUNDA LAJE',property:'',supplier:'JOÃO',status:'ATIVIDADE INICIADA',executionDate:'2026-10-25',plannedDate:''},
   {id:'130',branch,stage:'ALVENARIA E ESTRUTURAS',activity:'CONCRETAGEM FINALIZADA',property:'',supplier:'JOÃO',status:'ATIVIDADE FINALIZADA',executionDate:'2026-10-20',plannedDate:'2026-10-24'},
   {id:'131',branch,stage:'PREPARAÇÃO E EXECUÇÃO LAJE',activity:'MONTAGEM',property:'',supplier:'JOÃO',status:'ATIVIDADE NÃO INICIADA',executionDate:'',plannedDate:''},
  ]};},
  async loadAssignments(){return {complete:true,rows:[{id:'1',date:'2026-11-17',supplier:'JOÃO',profession:'ARMADOR'}]};},
- async finalizeActivity(){throw new Error('fixture does not write');}, async finalizeStage(){throw new Error('fixture does not write');},
+ async finalizeActivity(id,date,{expectedActivity}){return {...expectedActivity,id,plannedDate:date,status:'ATIVIDADE FINALIZADA'};},
+ async finalizeStage(){throw new Error('fixture does not write');},
  async startStage(){throw new Error('fixture does not write');},
  async setStageVisibility(){throw new Error('fixture does not write');},
 }});
@@ -83,5 +86,21 @@ root.querySelector('.gantt-finish-cancel').click();
 filter.value='NÃO EXIBIR';
 filter.dispatchEvent(new Event('change'));
 colors.restore=getComputedStyle(root.querySelector('.gantt-visibility-button')).backgroundColor;
-document.documentElement.dataset.layout=JSON.stringify({rows,completed,...finishDialog,startDialog,visibility,confirmationLayout,colors});
+includeScrollRows=true;
+view.close();
+await view.open();
+root.querySelector('.gantt-toggle').click();
+const scroll=root.querySelector('.gantt-scroll');
+const activityFinish=root.querySelector('.gantt-row--activity .gantt-finish-button');
+scroll.scrollTop=activityFinish.closest('.gantt-row').offsetTop-48;
+scroll.scrollLeft=180;
+const scrollPosition=()=>({top:scroll.scrollTop,left:scroll.scrollLeft});
+const before=scrollPosition();
+activityFinish.click();
+await new Promise(resolve=>setTimeout(resolve,0));
+form.querySelector('[type=submit]').click();
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+const submission={before,after:scrollPosition(),expanded:root.querySelector('.gantt-toggle').getAttribute('aria-expanded'),
+  notice:root.querySelector('.gantt-notice').textContent,focused:document.activeElement===scroll};
+document.documentElement.dataset.layout=JSON.stringify({rows,completed,...finishDialog,startDialog,visibility,confirmationLayout,colors,submission});
 </script></body></html>
