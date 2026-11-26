@@ -4,6 +4,7 @@ import { createNfeProductRegistration } from '../src/chat/nfe-product-registrati
 
 function fixture() {
   const rows = [], writes = [];
+  const expenses = [{id:'3',fields:{Title:'MATERIAL',STATUS:'ATIVO'}},{id:'4',fields:{Title:'BLOQUEADO',STATUS:'BLOQUEADO'}}];
   let loseResponse = false, authorizations = 0;
   const columns = ['Title','field_1','UNIDADE','TIPO','TIPODESPESA','GERADESEMBOLSO','SATUS'].map(name => ({name}));
   const repo = {
@@ -12,7 +13,7 @@ function fixture() {
     getItems:async (_site,list,query)=>{
       if(list==='CADASTROTIPOMATERIAL'){
         assert.match(query,/Title/);assert.doesNotMatch(query,/\bTIPO\b/);
-        return [{id:'3',fields:{Title:'MATERIAL',STATUS:'ATIVO'}},{id:'4',fields:{Title:'BLOQUEADO',STATUS:'BLOQUEADO'}}];
+        return expenses;
       }
       return list === 'CADASTROPRODUTO' ? rows : [
         {id:'1',fields:{field_1:'METAL',field_3:'MATERIAL',STATUS:'ATIVO'}},
@@ -28,7 +29,7 @@ function fixture() {
   };
   const service = createNfeProductRegistration({repository:repo,authorizeWrite:async()=>{authorizations++;}});
   const values={name:'PISO METÁLICO',subfamilyId:'1',unit:'PC',expenseType:'MATERIAL',disburses:'SIM'};
-  return {service,rows,writes,values,columns,lose:()=>{loseResponse=true;},get authorizations(){return authorizations;}};
+  return {service,rows,writes,values,columns,expenses,lose:()=>{loseResponse=true;},get authorizations(){return authorizations;}};
 }
 test('registers in the real product catalog with the subfamily classification',async()=>{
   const h=fixture(), context=await h.service.load();
@@ -44,6 +45,26 @@ test('rejects missing, forged and invalid fields without writing',async()=>{
   for(const values of [{...h.values,name:''},{...h.values,subfamilyId:'2'},{...h.values,expenseType:'forged'},{...h.values,disburses:'forged'},{...h.values,unit:''}])
     await assert.rejects(h.service.save(context,values));
   await assert.rejects(h.service.save({...context},h.values));
+  assert.equal(h.writes.length,0);
+});
+test('expense types come only from active catalog entries, even when legacy products and metadata contain blocked labels',async()=>{
+  const h=fixture();
+  h.expenses.push(
+    {id:'5',fields:{Title:'EPI / EPC',STATUS:'BLOQUEADO'}},
+    {id:'6',fields:{Title:'EPI/EPC',STATUS:'ATIVO'}},
+    {id:'7',fields:{Title:'SEM STATUS'}},
+  );
+  h.rows.push({id:'8',fields:{field_1:'BOTA PVC',TIPODESPESA:'EPI / EPC',SATUS:'ATIVO'}});
+  h.columns.find(column=>column.name==='TIPODESPESA').choice={choices:['MATERIAL','EPI/EPC','EPI / EPC']};
+  const context=await h.service.load();
+  assert.deepEqual(context.expenseTypes,['EPI/EPC','MATERIAL']);
+  await assert.rejects(h.service.save(context,{...h.values,expenseType:'EPI / EPC'}),/tipo de despesa/i);
+  assert.equal(h.writes.length,0);
+});
+test('a type blocked after opening the form cannot be written',async()=>{
+  const h=fixture(), context=await h.service.load();
+  h.expenses[0].fields.STATUS='BLOQUEADO';
+  await assert.rejects(h.service.save(context,h.values),/tipo de despesa/i);
   assert.equal(h.writes.length,0);
 });
 test('a lost create response is reconciled on retry without another POST',async()=>{

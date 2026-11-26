@@ -22,6 +22,10 @@ export function createNfeProductRegistration({ repository, authorizeWrite, asser
     if(!Array.isArray(result) || result.some(row=>!/^\d+$/.test(String(row?.id)) || !row.fields)) throw new Error('A consulta do cadastro está incompleta.');
     return result;
   }
+  async function activeExpenseTypes(id, signal) {
+    const expenses = await rows(id, ['Title','STATUS'], signal);
+    return unique(expenses.filter(row=>nfeProposalKey(row.fields.STATUS)==='ativo').map(row=>row.fields.Title));
+  }
   const productFields = ['Title','field_1','UNIDADE','TIPO','TIPODESPESA','GERADESEMBOLSO','SATUS'];
   async function load({signal} = {}) {
     active(signal);
@@ -30,20 +34,20 @@ export function createNfeProductRegistration({ repository, authorizeWrite, asser
       list(['CADASTROSUBFAMÍLIA','CADASTROSUBFAMILIA','CADASTRO SUBFAMÍLIA','CADASTRO SUBFAMILIA'],signal),
       list(['CADASTROTIPOMATERIAL'],signal),
     ]);
-    const [columns, subfamilies, expenseRows, productRows] = await Promise.all([
+    const [columns, subfamilies, expenseTypes] = await Promise.all([
       repository.getColumns('personal', products.id, {signal}),
       rows(families.id,['field_1','field_3','STATUS'],signal),
-      rows(expenses.id,['Title','STATUS'],signal), rows(products.id,productFields,signal),
+      activeExpenseTypes(expenses.id,signal),
     ]);
     active(signal);
     for(const name of productFields) if(!columns.some(column=>column.name===name && !column.readOnly))
       throw new Error(`O campo ${name} do cadastro de produtos está indisponível.`);
     const choices = name => columns.find(column=>column.name===name)?.choice?.choices || [];
     const context = {
-      listId:products.id,
+      listId:products.id, expenseListId:expenses.id,
       subfamilies:subfamilies.filter(row=>activeRow(row.fields) && nfeProposalKey(row.fields.field_3)!=='receita')
         .map(row=>({id:String(row.id),label:clean(row.fields.field_1)})).filter(row=>row.label),
-      expenseTypes:unique([...choices('TIPODESPESA'),...expenseRows.filter(row=>activeRow(row.fields)).map(row=>row.fields.Title),...productRows.filter(row=>activeRow(row.fields)).map(row=>row.fields.TIPODESPESA)]),
+      expenseTypes,
       disburses:choices('GERADESEMBOLSO').length ? choices('GERADESEMBOLSO') : ['SIM','NÃO'],
       status:choices('SATUS').find(value=>nfeProposalKey(value)==='ativo') || (choices('SATUS').length ? null : 'ATIVO'),
       choices:Object.fromEntries(productFields.map(name=>[name,choices(name)])),
@@ -69,6 +73,9 @@ export function createNfeProductRegistration({ repository, authorizeWrite, asser
       throw new Error('Já existe um produto cadastrado com esse nome. Confira o cadastro antes de continuar.');
     }
     await authorizeWrite?.({signal}); active(signal);
+    if(!(await activeExpenseTypes(context.expenseListId,signal)).includes(values.expenseType))
+      throw new Error('O tipo de despesa deixou de estar ativo. Reabra o cadastro e selecione um tipo ativo.');
+    active(signal);
     const saved=await repository.createItem('personal',context.listId,fields,{signal}); active(signal);
     if(!/^\d+$/.test(String(saved?.id))) throw new Error('Não foi possível confirmar o cadastro. Confira os dados e tente novamente.');
     return productOf({id:saved.id,fields});
