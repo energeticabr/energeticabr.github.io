@@ -128,6 +128,32 @@ test('retomada legada verifica a descrição de uma linha nova mesmo quando a re
   assert.equal(f.rows.FOLHAPGTO.length, 1);
 });
 
+test('retomada espera a linha legada de uma gravação incerta aparecer antes de fixar os IDs antigos', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo, voucherType:'transport' });
+  const { suppliers } = await data.loadOptions(), selected = draft(suppliers);
+  const progress = { operationId:'transport-legacy-delayed-launch' };
+  const create = f.repo.createItem;
+  f.repo.createItem = async (...args) => {
+    const row = await create(...args);
+    if (args[1] === 'LANCAMENTOS') {
+      delete row.fields.field_16;
+      throw new Error('resposta perdida');
+    }
+    return row;
+  };
+  await assert.rejects(data.post(selected, progress), /resposta perdida/);
+  delete progress.legacyLaunchIds;
+  f.repo.createItem = create;
+  const getItemsPage = f.repo.getItemsPage;
+  f.repo.getItemsPage = async (...args) => args[1] === 'LANCAMENTOS'
+    ? { items:[], hasMore:false } : getItemsPage(...args);
+  await assert.rejects(data.post(selected, progress), /pendente de confirmação/);
+  f.repo.getItemsPage = getItemsPage;
+  await data.post(selected, progress);
+  assert.deepEqual(f.rows.LANCAMENTOS.map(row => row.fields.field_16), [undefined, 'outubro']);
+  assert.equal(f.rows.FOLHAPGTO.length, 2);
+});
+
 test('vale transporte só oferece pedidos Trancid para novas inclusões e retoma o próprio pedido legado', async () => {
   const f = fixture(), data = createMealVoucherData({ repository:f.repo, voucherType:'transport' });
   const { suppliers } = await data.loadOptions();

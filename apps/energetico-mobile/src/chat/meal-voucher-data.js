@@ -189,8 +189,17 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     const reference = payrollLaunchReferenceColumn(launches.columns);
     const selected = new Map(draft.lines.map(line => [String(line.supplier.id), line]));
     const owned = (rows, tokenName, start) => rows.filter(row => scalar(row.fields?.[tokenName]).startsWith(start) && /^\d+$/.test(scalar(row.fields[tokenName]).slice(start.length)));
+    const ownedLaunches = owned(savedLaunches, launchToken, prefix);
+    if (legacyLaunchIds == null) {
+      const visibleTokens = new Set(ownedLaunches.map(row => scalar(row.fields[launchToken])));
+      for (const supplierId of selected.keys()) {
+        const token = `${prefix}${supplierId}`;
+        if (!visibleTokens.has(token) && pendingPayrollCreation(storage, payrollCreationKey(siteKey, launches.id, token)))
+          throw new Error('O envio anterior ainda está pendente de confirmação. Aguarde a reconciliação; não será criado outro registro.');
+      }
+    }
     const foundLegacyLaunchIds = [];
-    for (const row of owned(savedLaunches, launchToken, prefix)) {
+    for (const row of ownedLaunches) {
       const line = selected.get(scalar(row.fields[launchToken]).slice(prefix.length));
       const expected = line && launchFields(launches, draft, line, orderId, sheets[line.supplier.id]);
       const fields = expected && launchFieldsForRead(launches, expected, row, legacyLaunchIds);
@@ -643,6 +652,8 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       loading.done('order');
       const foundLegacyLaunchIds = await preflightLines(launches, payroll, draft, sheets, orderId, progress.operationId, tokenCache,
         transport ? progress.legacyLaunchIds : []);
+      // Persist the IDs already present before any further launch POST. A
+      // lost response from a newly created row cannot make it count as legacy.
       if (transport) progress.legacyLaunchIds ??= foundLegacyLaunchIds;
       if (draft.orderMode === 'new') confirmOrderTotal(orders,launches,await get(orders,orderId),draft,progress.operationId,tokenCache.get(launches.id));
       loading.done('preflight');
