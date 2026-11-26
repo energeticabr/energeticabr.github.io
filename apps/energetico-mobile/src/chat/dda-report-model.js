@@ -56,7 +56,11 @@ export function normalizeDdaReportRows(snapshot){
   const paidBySchedule=scheduleLifecycle==='PAGO_AGENDADO'||Boolean(audited&&ddaWasScheduledAt({scheduledAt},confirmedAt));
   const status=normalizeDdaStatus(value('SITUACAO'));
   const priorityDate=registrationDateKey(value(DDA_PRIORITY_FIELD));
-  return {id,paymentLine,key:text(value('CHAVE_DDA')),paidManually,confirmedAt,paidBySchedule,scheduledAt,supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),priorityDate,issued:registrationDateKey(value('EMISSAO')),amount,status:paidBySchedule&&status!==DDA_REFUSED_STATUS?'Pago':status,schedule,document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt,provisionId:linkId(value('DESCRITIVOPROVIS_x00c3_O')),orderId:linkId(value(DDA_ORDER_FIELD)),linkReviewed:value(DDA_UNLINKED_REVIEW_FIELD)===true};
+  // Preserve legacy text for the write precondition even when it is not a usable link ID.
+  const linkSnapshot=Object.freeze({
+   provisionId:text(value('DESCRITIVOPROVIS_x00c3_O')),orderId:text(value(DDA_ORDER_FIELD)),
+  });
+  return {id,paymentLine,key:text(value('CHAVE_DDA')),paidManually,confirmedAt,paidBySchedule,scheduledAt,supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),priorityDate,issued:registrationDateKey(value('EMISSAO')),amount,status:paidBySchedule&&status!==DDA_REFUSED_STATUS?'Pago':status,schedule,document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt,provisionId:linkId(linkSnapshot.provisionId),orderId:linkId(linkSnapshot.orderId),linkSnapshot,linkReviewed:value(DDA_UNLINKED_REVIEW_FIELD)===true};
  });
  const counts=new Map();
  for(const row of normalized)if(row.supplierCnpj)counts.set(row.supplierCnpj,(counts.get(row.supplierCnpj)||0)+1);

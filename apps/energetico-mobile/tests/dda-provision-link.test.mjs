@@ -4,6 +4,7 @@ import {JSDOM} from 'jsdom';
 import {createDdaProvisionLink,rankDdaProvisionOptions,DDA_PROVISION_FIELD} from '../src/chat/dda-provision-link.js';
 import {createDdaReportView} from '../src/ui/dda-report-view.js';
 import {createDdaProvisionPicker} from '../src/ui/dda-provision-picker.js';
+import {normalizeDdaReportRows} from '../src/chat/dda-report-model.js';
 import {provisionDateKey as localProvisionDate} from '../src/chat/pending-provision-dates.js';
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const provision=(id,supplier,amount,date)=>({id:String(id),fields:{FORNECEDOR:supplier,VALORTOTAL:amount,...(date?{DATAPGTOEFETUADO:date}:{})}});
@@ -74,6 +75,11 @@ test('replaces provision and order links on the same versioned DDA without creat
  await assert.rejects(()=>service.save({ddaId:'31',provisionId:'2',expectedLink:original}),/mudou/);
  await service.save({ddaId:'31',provisionId:'2',expectedLink:{provisionId:'',orderId:'2'}});
  assert.deepEqual(state.writes[1].fields,{[DDA_PROVISION_FIELD]:'2',IDPEDIDO:null});
+ dda.fields[DDA_PROVISION_FIELD]='vínculo antigo inválido';
+ const normalized=normalizeDdaReportRows({rows:[dda]})[0];
+ assert.equal(normalized.provisionId,'');
+ await service.saveOrder({ddaId:'31',orderId:'2',expectedLink:normalized.linkSnapshot});
+ assert.equal(state.writes[2].fields.IDPEDIDO,'2');
 });
 
 function dueAdjustmentFixture({lines=1,planned='2026-11-28',bankDue='2026-11-23'}={}){
@@ -461,11 +467,18 @@ test('saved and invalid provision identifiers render in their own column after r
  const row=(id,link)=>({id:String(id),fields:{Title:'FORNECEDOR FICTÍCIO',SITUACAO:'Em aberto',VALOR:10,VENCIMENTO:'2026-10-29',DESCRITIVOPROVIS_x00c3_O:link}});
  const paid=row(3,'');
  Object.assign(paid.fields,{IDPEDIDO:'46',SITUACAO:'Agendado',DDA_CICLO_AGENDAMENTO:'PAGO_AGENDADO'});
- const view=createDdaReportView({document:doc,data:{loadSnapshot:async()=>({rows:[row(1,'46'),row(2,'inválido'),paid]})}});
+ const conflict={id:'4',fields:{...paid.fields,[DDA_PROVISION_FIELD]:'22'}};
+ const view=createDdaReportView({document:doc,data:{
+  loadSnapshot:async()=>({rows:[row(1,'46'),row(2,'inválido'),paid,conflict]}),
+  provisionLink:{loadSettledDdaIds:async()=>new Set()},loadItem:async()=>conflict,
+ },onStartSettlement:()=>assert.fail('a DDA with two links must not start a provision settlement')});
  t.after(()=>{view.destroy();dom.window.close();});await view.open();
  assert.equal(doc.querySelector('[data-dda-id="1"] .ddr-link-cluster').textContent,'ID 46');
  assert.equal(doc.querySelector('[data-dda-id="2"] .ddr-link-cluster').textContent,'N/A');
  assert.equal(doc.querySelector('[data-dda-id="3"]'),null,'a paid order link has no pending provision settlement');
+ assert.equal(doc.querySelector('[data-dda-id="4"] .ddr-link-cluster').textContent,'Descritivo ID 22 · Pedido ID 46');
+ assert.equal(doc.querySelector('[data-dda-provision-check="4"]').disabled,true);
+ assert.equal(doc.querySelector('[data-dda-settle-provision="4"]'),null);
  const filter=doc.querySelector('select[aria-label="Situação"]');
  filter.value='Pago';filter.dispatchEvent(new dom.window.Event('change'));
  assert.equal(doc.querySelector('[data-dda-id="3"] .ddr-link-cluster').textContent,'Pedido ID 46');

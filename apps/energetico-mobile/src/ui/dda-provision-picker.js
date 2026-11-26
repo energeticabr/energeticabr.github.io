@@ -55,7 +55,7 @@ function appendDdaComparisons(node,amount,totalMatch,{due,dueMatch}){
 }
 
 export function createDdaProvisionPicker({service, ...options}){
- const expectedLink=row=>({provisionId:row.provisionId||'',orderId:row.orderId||''});
+ const expectedLink=row=>row.linkSnapshot??{provisionId:row.provisionId||'',orderId:row.orderId||''};
  const orderEnabled=typeof service?.loadOrderOptions==='function'&&typeof service?.saveOrder==='function';
  return createReportLinkPicker({
   ...options, copy:DDA_COPY,
@@ -64,7 +64,7 @@ export function createDdaProvisionPicker({service, ...options}){
   saveLink:(row,id,signal,sharedLinkETag)=>service.save({ddaId:row.id,provisionId:id,signal,sharedLinkETag,
    ...(orderEnabled&&{expectedLink:expectedLink(row)})}),
   sharedLinkQuestion:'Tem certeza que deseja atribuir dois DDAS ao mesmo descritivo provisão?',
-  currentLink:row=>row.provisionId||row.orderId,
+  currentLink:row=>row.provisionId&&row.orderId?'':row.provisionId||row.orderId,
   alternateSource:orderEnabled?{
    primary:['provision','DESCRITIVO PROVISÃO'],
    choice:['order','PEDIDO'],

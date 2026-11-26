@@ -582,12 +582,14 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
     const siteKey = options.siteKey || 'personal';
     const siteConfig = { ...options.siteConfig, [siteKey]: {
       ...options.siteConfig[siteKey], readTransport: 'rest', writeTransport: 'rest',
+      restReadFields: [], restExpandSystemFields: false,
     } };
     const writeOptions = { repository: galleryRepository({ ...options, siteConfig }), siteKey, assertSession: options.assertSession };
     const linkOptions = { ...writeOptions, repository: galleryRepository({ ...options, siteConfig: linkSiteConfig }) };
     return {
       provisionLink: createDdaProvisionLink({
-        ...linkOptions, loadOrderOptions: createSicoobOrderLink(linkOptions).loadOptions,
+        ...linkOptions, directRepository: writeOptions.repository,
+        loadOrderOptions: createSicoobOrderLink(writeOptions).loadOptions,
       }),
       unlinkedReview: createDdaUnlinkedReview(writeOptions),
       rejectDda: createDdaRefusal(writeOptions),

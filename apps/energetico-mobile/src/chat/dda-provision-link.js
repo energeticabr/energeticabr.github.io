@@ -103,12 +103,15 @@ export function rankDdaProvisionOptions(options,{supplier,amount,due}={}){
  }));
 }
 
-export function createDdaProvisionLink({repository,siteKey='personal',assertSession=()=>{},loadOrderOptions}){
+export function createDdaProvisionLink({repository,directRepository=repository,siteKey='personal',assertSession=()=>{},loadOrderOptions}){
  if(!repository)throw new TypeError('Repositório SharePoint obrigatório.');
  function active(signal){assertSession();signal?.throwIfAborted();}
  let listPromise;
  async function lists(signal){
-  listPromise??=Promise.all(['DDAS SICOOB','DESCRITIVOPROVISAO'].map(name=>repository.resolveList(siteKey,[name],{signal}))).then(([dda,provision])=>{
+  listPromise??=Promise.all([
+   directRepository.resolveList(siteKey,['DDAS SICOOB'],{signal}),
+   repository.resolveList(siteKey,['DESCRITIVOPROVISAO'],{signal}),
+  ]).then(([dda,provision])=>{
    if(dda?.status!=='resolved'||provision?.status!=='resolved')throw new Error('Listas DDA ou de provisão indisponíveis.');
    return {dda,provision};
   }).catch(error=>{listPromise=null;throw error;});
@@ -116,7 +119,7 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
  }
  async function loadOptions({signal}={}){
   assertSession();const {dda,provision}=await lists(signal);
-  const columns=await repository.getColumns(siteKey,dda.id,{signal});
+  const columns=await directRepository.getColumns(siteKey,dda.id,{signal});
   if(!columns.some(column=>column.name===DDA_PROVISION_FIELD&&!column.readOnly))throw new Error('Coluna de vínculo DDA indisponível.');
   const items=await repository.getItems(siteKey,provision.id,'?$expand=fields',{signal});assertSession();
   if(!Array.isArray(items))throw new Error('Consulta de provisões incompleta.');
@@ -220,7 +223,10 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   const target=await repository.getItem(siteKey,provision.id,provisionId,'?$expand=fields',{signal});
   if(target?.fields?.STATUS===PROVISION_FISCAL_DRAFT_STATUS)throw new Error('A proposta de provisão ainda está em gravação. Atualize as opções.');
   if(!target?.fields)throw new Error('O descritivo está indisponível. Atualize as opções.');
-  const current=await repository.getItem(siteKey,dda.id,ddaId,'?$expand=fields',{signal});
+  const useDirectTransport=directRepository!==repository;
+  const current=await directRepository.getItem(siteKey,dda.id,ddaId,'?$expand=fields',{
+   signal,...(useDirectTransport&&{includeVersion:true,restrictedFields:ddaLinkFields}),
+  });
   const eTag=itemVersion(current);
   if(!current?.fields||!eTag||eTag==='*')throw new Error('Não foi possível verificar a versão atual do DDA.');
   const previousOrder=linkValue(current.fields,DDA_ORDER_FIELD);
@@ -229,7 +235,7 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   verifyExpectedLink(current.fields,expectedLink);
   if(!sharedLinkETag){
    // Read all pages with only the link column, independently of the report filters.
-   const items=await repository.getItems(siteKey,dda.id,`?$select=id&$expand=fields($select=${DDA_PROVISION_FIELD})`,{signal});
+   const items=await directRepository.getItems(siteKey,dda.id,`?$select=id&$expand=fields($select=${DDA_PROVISION_FIELD})`,{signal});
    if(!Array.isArray(items)||items.some(item=>!hasItemIdentity(item)))throw new Error('Consulta de vínculos DDA incompleta.');
    const shared=items.some(item=>String(item.id)!==String(ddaId)
     &&String(item.fields[DDA_PROVISION_FIELD]??'').trim()===String(provisionId));
@@ -238,8 +244,8 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   assertSession();signal?.throwIfAborted();
   const updates={[DDA_PROVISION_FIELD]:String(provisionId)};
   if(previousOrder)updates[DDA_ORDER_FIELD]=null;
-  const saved=await repository.updateItem(siteKey,dda.id,ddaId,updates,
-   {eTag,signal,...(previousOrder&&{readbackFields:ddaLinkFields})});assertSession();
+  const saved=await directRepository.updateItem(siteKey,dda.id,ddaId,updates,
+   {eTag,signal,...((previousOrder||useDirectTransport)&&{readbackFields:ddaLinkFields})});assertSession();
   if(linkValue(saved?.fields,DDA_PROVISION_FIELD)!==String(provisionId)||linkValue(saved?.fields,DDA_ORDER_FIELD)){
    throw new Error('O vínculo não foi confirmado no SharePoint.');
   }
@@ -251,14 +257,14 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   const ddaId=String(rawDdaId),orderId=String(rawOrderId);
   active(signal);
   const [dda,orders]=await Promise.all([
-   repository.resolveList(siteKey,['DDAS SICOOB'],{signal}),
-   repository.resolveList(siteKey,['NOTASPENDENTES'],{signal}),
+   directRepository.resolveList(siteKey,['DDAS SICOOB'],{signal}),
+   directRepository.resolveList(siteKey,['NOTASPENDENTES'],{signal}),
   ]);
   active(signal);
   if([dda,orders].some(list=>list?.status!=='resolved'||!list.id))throw new Error('Listas DDA ou de pedidos indisponíveis.');
   const [target,current]=await Promise.all([
-   repository.getItem(siteKey,orders.id,orderId,'?$expand=fields($select=FORNECEDOR)',{signal}),
-   repository.getItem(siteKey,dda.id,ddaId,'?$expand=fields',{signal,includeVersion:true,restrictedFields:ddaLinkFields}),
+   directRepository.getItem(siteKey,orders.id,orderId,undefined,{signal,restrictedFields:['FORNECEDOR']}),
+   directRepository.getItem(siteKey,dda.id,ddaId,undefined,{signal,includeVersion:true,restrictedFields:ddaLinkFields}),
   ]);
   active(signal);
   if(!hasItemIdentity(target,orderId))throw new Error('O pedido está indisponível. Atualize as opções.');
@@ -267,7 +273,7 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
   const receipt={ddaId,orderId};
   if(linkValue(current.fields,DDA_ORDER_FIELD)===orderId&&!linkValue(current.fields,DDA_PROVISION_FIELD))return receipt;
   verifyExpectedLink(current.fields,expectedLink);
-  const saved=await repository.updateItem(siteKey,dda.id,ddaId,{
+  const saved=await directRepository.updateItem(siteKey,dda.id,ddaId,{
    [DDA_PROVISION_FIELD]:null,[DDA_ORDER_FIELD]:orderId,
   },{eTag,signal,readbackFields:ddaLinkFields});
   active(signal);
@@ -303,8 +309,13 @@ export function createDdaProvisionLink({repository,siteKey='personal',assertSess
  }
 
  async function readLinkedDda(list,{ddaId,provisionId},signal){
-  const dda=await readItem(list,ddaId,signal);
-  if(String(dda.fields[DDA_PROVISION_FIELD]??'').trim()!==provisionId)throw new Error('O vínculo do DDA mudou.');
+  active(signal);
+  const dda=await directRepository.getItem(siteKey,list,ddaId,undefined,{
+   signal,restrictedFields:[...ddaLinkFields,'VENCIMENTO'],
+  });
+  active(signal);
+  if(!hasItemIdentity(dda,ddaId))throw new Error('A identidade do DDA não foi confirmada.');
+  if(linkValue(dda.fields,DDA_PROVISION_FIELD)!==provisionId||linkValue(dda.fields,DDA_ORDER_FIELD))throw new Error('O vínculo do DDA mudou.');
   return paymentDateKey(dda.fields.VENCIMENTO);
  }
 
