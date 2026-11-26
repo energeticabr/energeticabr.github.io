@@ -33,21 +33,23 @@ function pencilLayout(){
 const beforePencil=pencilLayout();
 document.querySelector('[data-dda-provision-pencil]').click();await frame();
 const search=document.querySelector('.dda-provision-search'),status=document.querySelector('.dda-provision-status'),source=document.querySelector('.dda-provision-source');
-function selectedLabelFits(select){
+function selectedLabelWidth(select){
  const sample=select.cloneNode(false);
  sample.append(select.selectedOptions[0].cloneNode(true));
  Object.assign(sample.style,{position:'absolute',visibility:'hidden',width:'max-content'});
  select.parentElement.append(sample);
- const fits=select.offsetWidth>=sample.offsetWidth;
+ const width=sample.offsetWidth;
  sample.remove();
- return fits;
+ return width;
 }
 const searchFits=compact?search.offsetTop+search.offsetHeight<=source.offsetTop
  :search.offsetTop===status.offsetTop&&search.offsetLeft+search.offsetWidth<=source.offsetLeft;
+const filterWidths={search:search.offsetWidth,source:source.offsetWidth,sourceLabel:selectedLabelWidth(source),
+ status:status.offsetWidth,statusLabel:selectedLabelWidth(status),available:status.offsetParent.clientWidth};
 const pickerFiltersFit=Boolean(source&&searchFits&&source.offsetTop===status.offsetTop
  &&source.offsetLeft+source.offsetWidth<=status.offsetLeft
  &&status.offsetLeft+status.offsetWidth<=status.offsetParent.clientWidth+1
- &&selectedLabelFits(source)&&selectedLabelFits(status));
+ &&filterWidths.source+1>=filterWidths.sourceLabel&&filterWidths.status+1>=filterWidths.statusLabel);
 source.value='order';source.dispatchEvent(new Event('change'));await frame();
 const orderFiltersFit=source.value==='order'&&status.getClientRects().length===0
  &&source.offsetLeft+source.offsetWidth<=source.offsetParent.clientWidth+1
@@ -125,5 +127,5 @@ document.querySelector('[data-dda-provision-pencil]').click();await frame();
 document.querySelector('input[type=radio]').click();
 const capturedReview=await review();
 if(duplicate){capturedReview.querySelector('[data-edit-review-submit]').click();await frame();}
-document.documentElement.dataset.layout=JSON.stringify({pickerMatch,pickerFits,pickerOverflows,pickerFiltersFit,orderFiltersFit,pickerSubmitReachable,pickerGeometry,chipColors,fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed,beforePencil,afterPencil,duplicateFits,duplicateNo,duplicateTransform,dueReview});
+document.documentElement.dataset.layout=JSON.stringify({pickerMatch,pickerFits,pickerOverflows,pickerFiltersFit,orderFiltersFit,pickerSubmitReachable,filterWidths,pickerGeometry,chipColors,fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed,beforePencil,afterPencil,duplicateFits,duplicateNo,duplicateTransform,dueReview});
 </script></body></html>
