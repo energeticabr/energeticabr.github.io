@@ -51,24 +51,24 @@
 +    return None, engine._prompt_next_or_summary(state, etag)
 --- a/worker/workflow.py
 +++ b/worker/workflow.py
-@@ -22441 +22441 @@
+@@ -22451 +22451 @@
 -            state["options"] = self._include_terminal_option(step, state.get("options", []))
 +            state["options"] = self._selection_options(state, step)
-@@ -33723 +33722,0 @@
+@@ -33786 +33785,0 @@
 -            related_item = self._ensure_related_item(state, flow)
-@@ -33726,0 +33726,6 @@
+@@ -33789,0 +33789,6 @@
 +            recorded_product_id, expense_type_review = financial_catalog.guard_product_expense_type(
 +                self, state, etag, flow, token
 +            )
 +            if expense_type_review is not None:
 +                return expense_type_review
 +            related_item = self._ensure_related_item(state, flow)
-@@ -33762,0 +33768,2 @@
+@@ -33825,0 +33831,2 @@
 +            elif recorded_product_id is not None:
 +                item_id = recorded_product_id
-@@ -37926,0 +37934 @@
+@@ -37989,0 +37997 @@
 +            had_active_filter = financial_catalog.ACTIVE_EXPENSE_TYPE in step["source"].get("filters", [])
-@@ -37927,0 +37936,8 @@
+@@ -37990,0 +37999,8 @@
 +            if not had_active_filter:
 +                state["options"] = self._selection_options(state, step)
 +                allowed_ids = {str(option["id"]) for option in state["options"]}
