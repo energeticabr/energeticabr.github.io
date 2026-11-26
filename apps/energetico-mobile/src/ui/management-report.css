@@ -30,9 +30,9 @@
 .gm-month-change[data-direction=incomplete] { color:#555; }
 .gm-expense-label { display:flex; align-items:center; gap:6px; text-align:left; }
 .gm-expense-label > span { min-width:0; }
-.gm-expense-type-link, .gm-supplier-link { min-width:0; padding:3px 0; border:0; background:transparent; color:#111; font:inherit; font-weight:700; text-align:left; text-decoration:underline; text-decoration-color:#9db1c7; text-underline-offset:2px; overflow-wrap:anywhere; cursor:pointer; }
-:is(.gm-expense-type-link, .gm-supplier-link):hover { color:#174c86; text-decoration-color:currentColor; }
-:is(.gm-expense-type-link, .gm-supplier-link):focus-visible { outline:2px solid #305496; outline-offset:2px; }
+.gm-expense-type-link, .gm-ranking-link { min-width:0; padding:3px 0; border:0; background:transparent; color:#111; font:inherit; font-weight:700; text-align:left; text-decoration:underline; text-decoration-color:#9db1c7; text-underline-offset:2px; overflow-wrap:anywhere; cursor:pointer; }
+:is(.gm-expense-type-link, .gm-ranking-link):hover { color:#174c86; text-decoration-color:currentColor; }
+:is(.gm-expense-type-link, .gm-ranking-link):focus-visible { outline:2px solid #305496; outline-offset:2px; }
 .gm-expense-toggle {
   display:inline-grid; place-items:center; flex:none; width:26px; height:26px; min-height:0; padding:0;
   border:1px solid currentColor; border-radius:5px; background:#fff; color:#075e30;
@@ -147,7 +147,7 @@
 .gm-dashboard-legend-item.is-forecast::before { background:#d08a16; }
 .gm-dashboard-legend-item[aria-pressed=false] { opacity:.42; text-decoration:line-through; }
 .gm-expense-dashboard-rankings { display:grid; grid-template-columns:repeat(var(--gm-dashboard-columns,3),minmax(0,1fr)); gap:8px; }
-.gm-expense-dashboard-rankings--supplier { --gm-dashboard-columns:2; }
+.gm-expense-dashboard-rankings--two-columns { --gm-dashboard-columns:2; }
 .gm-expense-dashboard-ranking h3 { padding-bottom:6px; border-bottom:1px solid #e8edf2; }
 .gm-expense-dashboard-ranking.is-products h3 { color:#256b4b; }
 .gm-expense-dashboard-ranking.is-suppliers h3 { color:#9a6b0d; }

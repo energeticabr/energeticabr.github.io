@@ -110,6 +110,7 @@ export function normalizeManagementProvision(item, columns) {
   const numeric = value => { const number = provisionNumericValue(value); return Number.isFinite(number) ? number : null; };
   const quantity = get("QTD", "QUANTIDADE"), freight = get("FRETE");
   return Object.freeze({ ...provision, branch: provision.branch || get("Title"), stage: get("ETAPA"),
+    account: get("CONTA") || get("FORMAPGTO", "FORMA PGTO", "FORMA DE PAGAMENTO"),
     disbursement: normalizeDisbursement(get("GERADESEMBOLSO")), order: get("IDPEDIDO"),
     date: dateOnly(get("DATA")), unit: numeric(get("VALORTOTAL")),
     quantity: quantity === "" ? 1 : numeric(quantity), freight: freight === "" ? 0 : numeric(freight),
@@ -338,17 +339,17 @@ export function buildManagementExpenseTypeDashboard(snapshot, filters = {},
   // must not silently truncate the twelve-month trend or its category shares.
   const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "", product: "", supplier: "", stage: "", order: "" })
     .filter(row => equals(scalar(row.branch) || "-", branch) && equals(typeFor(row), expenseType));
-  return Object.freeze({ branch, expenseType, ...buildManagementSpendingDashboard(rows, now, true) });
+  return Object.freeze({ branch, expenseType, ...buildManagementSpendingDashboard(rows, now) });
 }
 
-export function buildManagementSupplierDashboard(snapshot, filters = {},
-  { branch, supplier, now = new Date() } = {}) {
-  const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "", supplier: "" })
-    .filter(row => (scalar(row.branch) || "-") === branch && (scalar(row.supplier) || "-") === supplier);
-  return Object.freeze({ branch, supplier, ...buildManagementSpendingDashboard(rows, now) });
+export function buildManagementRankingDashboard(snapshot, filters = {},
+  { branch, field, name, now = new Date() }) {
+  const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "", [field]: "" })
+    .filter(row => (scalar(row.branch) || "-") === branch && (scalar(row[field]) || "-") === name);
+  return Object.freeze({ branch, field, name, ...buildManagementSpendingDashboard(rows, now, field) });
 }
 
-function buildManagementSpendingDashboard(rows, now, includeSuppliers = false) {
+function buildManagementSpendingDashboard(rows, now, selectedField) {
   const current = new Date(now.getFullYear(), now.getMonth(), 1);
   const months = Array.from({ length: 12 }, (_, index) => {
     const date = new Date(current.getFullYear(), current.getMonth() - 11 + index, 1);
@@ -363,8 +364,9 @@ function buildManagementSpendingDashboard(rows, now, includeSuppliers = false) {
   const trendRows = rows.filter(row => inRange.has((row.paymentDate || row.dueDate || "").slice(0, 7)));
   const total = completeSum(trendRows, "total");
   const breakdown = field => Object.freeze(grouped(trendRows, field, total, 8).map(item => Object.freeze(item)));
-  return { total, months: Object.freeze(months), products: breakdown("product"), stages: breakdown("stage"),
-    ...(includeSuppliers ? { suppliers: breakdown("supplier") } : {}) };
+  return { total, months: Object.freeze(months), products: breakdown("product"),
+    ...(selectedField === "supplier" ? {} : { suppliers: breakdown("supplier") }),
+    ...(selectedField === "stage" ? {} : { stages: breakdown("stage") }) };
 }
 
 export function buildManagementProductDetail(snapshot, filters = {}, { branch, product, kind = "expense", asOfDate = new Date() } = {}) {
