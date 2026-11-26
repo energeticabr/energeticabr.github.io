@@ -19,6 +19,7 @@ try {
     ...(/DATA/.test(name) ? { dateTime:{} } : { text:{} }) }))]));
   Object.assign(columns.NOTASPENDENTES.find(c=>c.name==='VALECONTROLE'),{hidden:true,text:{allowMultipleLines:true,textType:'plain',appendChangesToExistingText:false}});
   Object.assign(columns.LANCAMENTOS.find(c=>c.name==='IDFOLHA'),{text:undefined,number:{decimalPlaces:'none'},required:false});
+  columns.LANCAMENTOS.push({ name:'field_16', displayName:'DESCRIÇÃO', text:{allowMultipleLines:true} });
   const rows = {
     FORNECEDORES:[{ id:'1', fields:{ CADASTRO:'Colaborador de teste', STATUS:'ATIVO', EMPREITEIRO:'SIM', FILIAL:'OBRA TESTE', PROFISSAO:'PEDREIRO',CARGO:'PEDREIRO I' } }],
     CADASTROCONTA:[{ id:'8', fields:{ CONTA:'CAIXA' } },{ id:'9', fields:{ CONTA:'BANCO' } }],
@@ -131,6 +132,7 @@ try {
     && !document.querySelector('[data-meal-abandon]')
     && document.querySelector('[data-transport-success]')?.textContent.includes(postedTransport.orderId);
   result.transportSupplier = rows.NOTASPENDENTES.find(row => row.id === postedTransport.orderId)?.fields.FORNECEDOR;
+  result.transportDescription = rows.LANCAMENTOS.find(row => row.id === postedTransport.lines[0].id)?.fields.field_16;
   const receiptBounds = document.querySelector('.meal-voucher-success-dialog').getBoundingClientRect();
   result.transportFits = receiptBounds.left >= 0 && receiptBounds.right <= innerWidth + 1 && receiptBounds.bottom <= innerHeight + 1;
   await new Promise(resolve => setTimeout(resolve, 1600));

@@ -159,7 +159,17 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       'DATA PGTO PREVISTO':draft.dueDate, ...(column(descriptor,['DATA PGTO EFETUADO'],false) ? { 'DATA PGTO EFETUADO':draft.paymentDate || null } : {}),
       FORNECEDOR:line.supplier.label, PRODUTO:line.supplier.profession, ETAPA:draft.stage.label, QUANTIDADE:line.quantity,
       'VALOR UNITÁRIO':line.unitValue, CONTA:draft.account.label, FRETE:0, IDFOLHA:Number(sheet.id),
-      OBS:voucherType === 'transport' && draft.obs ? draft.obs : `${voucher.title}${draft.obs ? ` — ${draft.obs}` : ''}` }, ['FRETE','OBS']);
+      ...(transport ? { 'DESCRIÇÃO':draft.obs } : {}),
+      OBS:transport && draft.obs ? draft.obs : `${voucher.title}${draft.obs ? ` — ${draft.obs}` : ''}` }, ['FRETE','OBS']);
+  }
+  function launchFieldsForRead(launches, fields, row, legacyLaunchIds) {
+    if (legacyLaunchIds && !legacyLaunchIds.includes(String(row.id))) return fields;
+    const name = column(launches, ['DESCRIÇÃO']).name;
+    if (scalar(row.fields?.[name])) return fields;
+    // Older app versions did not write DESCRIÇÃO. An empty value can belong to
+    // an already saved line, while a new line still uses the full write payload.
+    const { [name]:legacyDescription, ...previousFields } = fields;
+    return previousFields;
   }
   function payrollFields(descriptor, draft, line, sheet, launchId) {
     const fields = payload(descriptor, { FORNECEDOR:line.supplier.label, TIPOPGTO:paymentType, VALORUNITARIO:line.unitValue,
@@ -169,7 +179,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     }
     return fields;
   }
-  async function preflightLines(launches, payroll, draft, sheets, orderId, operationId, tokenCache) {
+  async function preflightLines(launches, payroll, draft, sheets, orderId, operationId, tokenCache, legacyLaunchIds) {
     const [savedLaunches, savedPayroll] = await Promise.all([all(launches), all(payroll)]);
     if ([...savedLaunches,...savedPayroll].some(row => !numericId(row?.id) || !row.fields || typeof row.fields !== 'object' || Array.isArray(row.fields)))
       throw new Error('Não foi possível confirmar todos os dados da tentativa anterior.');
@@ -179,9 +189,12 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     const reference = payrollLaunchReferenceColumn(launches.columns);
     const selected = new Map(draft.lines.map(line => [String(line.supplier.id), line]));
     const owned = (rows, tokenName, start) => rows.filter(row => scalar(row.fields?.[tokenName]).startsWith(start) && /^\d+$/.test(scalar(row.fields[tokenName]).slice(start.length)));
+    const foundLegacyLaunchIds = [];
     for (const row of owned(savedLaunches, launchToken, prefix)) {
       const line = selected.get(scalar(row.fields[launchToken]).slice(prefix.length));
-      const fields = line && launchFields(launches, draft, line, orderId, sheets[line.supplier.id]);
+      const expected = line && launchFields(launches, draft, line, orderId, sheets[line.supplier.id]);
+      const fields = expected && launchFieldsForRead(launches, expected, row, legacyLaunchIds);
+      if (fields !== expected) foundLegacyLaunchIds.push(String(row.id));
       // Only an empty legacy reference may be adopted later with a fresh ETag.
       if (fields && !scalar(row.fields[reference.name])) delete fields[reference.name];
       if (!line || !matchesFields(launches, row, fields)
@@ -196,6 +209,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       if (!line || !launch || !matchesFields(payroll, row, payrollFields(payroll, draft, line, sheets[supplierId], launch.id))) throw new Error('A revisão do lote está desatualizada ou os dados da folha foram alterados. Confira antes de retomar.');
     }
     tokenCache.set(launches.id, savedLaunches); tokenCache.set(payroll.id, savedPayroll);
+    return foundLegacyLaunchIds;
   }
   async function confirmOrderRevision(orders, orderId, draft, operationId) {
     const row = await get(orders, orderId), controlName = control(orders), revision = await revisionMarker(draft, operationId);
@@ -301,7 +315,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
     return rows[0];
   }
   const originRows = (descriptor,id,options) => all(descriptor,payrollLaunchLinkFilter(descriptor.columns,id),options);
-  async function ensure(descriptor, fields, label, token, tokenCache, assertReference) {
+  async function ensure(descriptor, fields, label, token, tokenCache, assertReference, legacyLaunchIds = []) {
     const name = column(descriptor,[label]).name, payroll = descriptor.name === 'FOLHAPGTO';
     const launchId = payroll ? fields[column(descriptor,['IDLANCAMENTO']).name] : null;
     let origin;
@@ -318,14 +332,15 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       verifyItem:async row=>{
         if(!numericId(row?.id))throw new Error('O SharePoint não confirmou o ID criado.');
         const expectedFields={...fields,...(!origin?{[name]:token}:{})};
+        const readFields = row => launchFieldsForRead(descriptor, expectedFields, row, legacyLaunchIds);
         let current;
         if(!payroll) {
           const links=await describe('FOLHAPGTO');
           current=await withPayrollWriteLock(payrollOriginKey(siteKey,links.id,row.id),()=>confirmPayrollLaunchReference({
-            columns:descriptor.columns,item:row,fields:expectedFields,assertSession,assertContext:assertReference,
+            columns:descriptor.columns,item:row,fields:readFields(row),assertSession,assertContext:assertReference,
             readItem:id=>get(descriptor,id),updateItem:(id,changes,options)=>repository.updateItem(siteKey,descriptor.id,id,changes,options) }));
         } else current=await get(descriptor,row.id);
-        if(!matchesFields(descriptor,current,expectedFields))throw new Error('O SharePoint não confirmou os dados gravados.');
+        if(!matchesFields(descriptor,current,readFields(current)))throw new Error('O SharePoint não confirmou os dados gravados.');
         return current;
       } });
     const cached=tokenCache.get(descriptor.id);
@@ -573,6 +588,10 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       column(payroll, ['Title']);
       for (const line of draft.lines) payload(payroll, { FORNECEDOR: line.supplier.label, TIPOPGTO: paymentType, VALORUNITARIO: line.unitValue, QTD: line.quantity, DATA: draft.date, IDFOLHA: Number(sheets[line.supplier.id].id), IDLANCAMENTO: 1 });
       const prefix = operationToken(progress.operationId);
+      if (transport) {
+        payload(launches, { 'DESCRIÇÃO':draft.obs });
+        if (!hadOriginalDraft) progress.legacyLaunchIds = [];
+      }
       let orderId = progress.orderId;
       if (draft.orderMode === 'existing') {
         orderId = draft.orderId;
@@ -622,7 +641,9 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
           payrollCreationKey(siteKey,orders.id,orderJournalToken(progress.operationId)), transport ? legacySupplier(draft) : '');
       }
       loading.done('order');
-      await preflightLines(launches, payroll, draft, sheets, orderId, progress.operationId, tokenCache);
+      const foundLegacyLaunchIds = await preflightLines(launches, payroll, draft, sheets, orderId, progress.operationId, tokenCache,
+        transport ? progress.legacyLaunchIds : []);
+      if (transport) progress.legacyLaunchIds ??= foundLegacyLaunchIds;
       if (draft.orderMode === 'new') confirmOrderTotal(orders,launches,await get(orders,orderId),draft,progress.operationId,tokenCache.get(launches.id));
       loading.done('preflight');
       const revision = await confirmOrderRevision(orders, orderId, draft, progress.operationId);
@@ -655,7 +676,7 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         const fields = launchFields(launches, draft, line, orderId, sheet);
         const launchId = await ensure(launches, fields, '__PowerAppsId__', `${prefix}-${line.supplier.id}`, tokenCache,
           async saved=>compatiblePayrollLaunchLink({columns:payroll.columns,rows:await originRows(payroll,saved.id),
-            fields:payrollFields(payroll,draft,line,sheet,saved.id)}));
+            fields:payrollFields(payroll,draft,line,sheet,saved.id)}), progress.legacyLaunchIds);
         progress.lines[line.supplier.id] = launchId;
         onProgress();
         loading.done(`launch:${line.supplier.id}`);
@@ -702,7 +723,8 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
       for (let index = 0; index < draft.lines.length; index++) {
         const line = draft.lines[index], resultLine = resultLines[index], sheet = sheets[line.supplier.id];
         await confirmSheet(line, sheet);
-        await verifyPostedLine({ launches, payroll, draft, line, sheet, orderId, prefix, resultLine, confirmedPayroll });
+        await verifyPostedLine({ launches, payroll, draft, line, sheet, orderId, prefix, resultLine, confirmedPayroll,
+          legacyLaunchIds:progress.legacyLaunchIds ?? [] });
         loading.done(`verified:${line.supplier.id}`);
       }
       return { orderId, lines: resultLines, total: draft.total };
@@ -711,9 +733,10 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
   async function post(rawDraft, progress = {}, onProgress = () => {}) {
     return guardOperation(progress, () => postUnlocked(rawDraft, progress, onProgress));
   }
-  async function verifyPostedLine({ launches, payroll, draft, line, sheet, orderId, prefix, resultLine, confirmedPayroll, signal }) {
+  async function verifyPostedLine({ launches, payroll, draft, line, sheet, orderId, prefix, resultLine, confirmedPayroll, legacyLaunchIds, signal }) {
     const saved = await get(launches, resultLine.id, signal);
-    if (!matchesFields(launches, saved, { ...launchFields(launches,draft,line,orderId,sheet),
+    const fieldsForRead = launchFieldsForRead(launches, launchFields(launches, draft, line, orderId, sheet), saved, legacyLaunchIds);
+    if (!matchesFields(launches, saved, { ...fieldsForRead,
       [column(launches,['__PowerAppsId__']).name]:`${prefix}-${line.supplier.id}` }))
       throw new Error('Os dados ou IDFOLHA do lançamento mudaram durante o envio. Confira antes de concluir.');
     const fields = payrollFields(payroll,draft,line,sheet,resultLine.id);
@@ -770,7 +793,8 @@ export function createMealVoucherData({ repository, graph, tokenProvider, storag
         const resultLine = { supplier:line.supplier.label, total:line.total, sheetId:sheet.id,
           id:String(launchId), payrollId:String(progress.payroll?.[supplierId] || '') };
         const confirmedPayroll = await originRows(payroll, resultLine.id, { signal });
-        resultLine.payrollId = await verifyPostedLine({ launches, payroll, draft, line, sheet, orderId, prefix, resultLine, confirmedPayroll, signal });
+        resultLine.payrollId = await verifyPostedLine({ launches, payroll, draft, line, sheet, orderId, prefix, resultLine, confirmedPayroll,
+          legacyLaunchIds:progress.legacyLaunchIds, signal });
         launchIds.set(String(supplierId), resultLine.id);
         lines.push(resultLine);
       }

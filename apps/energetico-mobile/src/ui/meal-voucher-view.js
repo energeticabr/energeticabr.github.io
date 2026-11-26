@@ -11,6 +11,7 @@ import { scheduleCompletionDismiss } from './completion-receipt-dismiss.js';
 const money = amount => Number(amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const observationDate = new Intl.DateTimeFormat('pt-BR', { timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', year:'numeric' });
 const transportExceptions = /^(ISRAEL|RAFAEL|MAURO|CLEITON)\b/i;
+const transportExcludedNames = new Set(['Edgar Nelson da Silva', 'Feliciano Rogério da Silva'].map(mealVoucherKey));
 let sequence = 0;
 
 export function createMealVoucherView({ data, root, documentRef = globalThis.document, assertSession = () => {}, onHome = () => {}, onSwileRecharge, attachmentTray, sessionKey = '', storage = globalThis.localStorage, voucherType = 'meal', now = () => new Date() } = {}) {
@@ -20,8 +21,8 @@ export function createMealVoucherView({ data, root, documentRef = globalThis.doc
   const benefitName = voucher.name[0].toUpperCase() + voucher.name.slice(1);
   function initialLine(supplier) {
     if (!transport) return mealVoucherDefaultLine(supplier);
-    const excluded = transport && transportExceptions.test(supplier.label.trim());
-    return { supplier, quantity:excluded ? '0' : '5', unitValue:transport ? (excluded ? '0' : '11') : '' };
+    const excluded = transportExceptions.test(supplier.label.trim()) || transportExcludedNames.has(mealVoucherKey(supplier.label));
+    return { supplier, quantity:excluded ? '0' : '5', unitValue:excluded ? '0' : '11,11' };
   }
   const doc = documentRef, id = ++sequence;
   const el = (tag, className = '', text) => { const node = doc.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };

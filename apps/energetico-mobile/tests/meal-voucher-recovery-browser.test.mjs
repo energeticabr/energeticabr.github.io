@@ -22,7 +22,8 @@ test('vales reabrem pedido vazio ou concluem transporte no menu no celular e PC'
       assert.deepEqual(result, { enabled:true, pickers:true, persists:true, noEarlyWrites:true, noOverflow:true, webLock:true, orders:1, launches:1, payroll:1,
         orderDate:'2026-11-02T12:00:00Z', orderAccount:'BANCO', paid:'2026-11-03T12:00:00Z', stage:'ALVENARIA', sheet:'12',
         legacyBlocked:true, abandonFits:true, freshAfterAbandon:true,
-        transportFresh:true, transportSupplier:'TRANCID', transportFits:true, transportMenu:true }, `${width}px`);
+        transportFresh:true, transportSupplier:'TRANCID', transportDescription:'VALE TRANSPORTE (15/11/2026)',
+        transportFits:true, transportMenu:true }, `${width}px`);
     }
   } finally { await server.close(); await rm(cache, { recursive:true, force:true, maxRetries:5, retryDelay:250 }); }
 });
