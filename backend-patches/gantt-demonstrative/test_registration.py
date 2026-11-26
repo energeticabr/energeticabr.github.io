@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
+from requests import HTTPError, Response
 
 ROOT = Path(os.environ["ENERGETICO_WORKER_ROOT"])
 FIXTURES = Path("/home/opc/energetica-build/tests")
@@ -80,7 +82,10 @@ class GanttRegistrationTests(unittest.TestCase):
                 result = self.answer("gantt_create_demonstrative:77")
                 self.assertEqual(result["status"], "gantt_stage_unavailable")
                 self.assertIsNone(self.current())
-        self.assertEqual(self.answer("gantt_create_demonstrative:78")["status"], "gantt_stage_unavailable")
+        response = Response()
+        response.status_code = 404
+        with patch.object(self.sharepoint, "get_item_fields", side_effect=HTTPError(response=response)):
+            self.assertEqual(self.answer("gantt_create_demonstrative:78")["status"], "gantt_stage_unavailable")
 
     def test_cannot_start_from_an_existing_active_flow_or_non_portal_message(self):
         self.assertEqual(self.engine.handle(self.event("whatsapp", "gantt_create_demonstrative:77", trusted=False))["status"],

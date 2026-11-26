@@ -22,6 +22,8 @@ def transform(raw):
 
     anchor = '    def _start_embedded_attendance_demonstrative_registration('
     source = replace_once(source, anchor, '''    def _start_gantt_demonstrative(self, event, key, state, etag):
+        from requests import HTTPError
+
         if (event.get("trusted_portal") is not True or event.get("group_id")
                 or event.get("phone_number_id") != "portal-admin"):
             return {"status": "ignored", "message_id": event.get("message_id")}
@@ -40,9 +42,14 @@ def transform(raw):
         if not match:
             return {"status": "ignored", "message_id": event["message_id"]}
         parent_id = int(match[1])
-        fields = self.sharepoint.get_item_fields(
-            parent_id, ["FILIAL", "ETAPA", "STATUS", "TIPO"], target_list="LANCAMENTOOBRA",
-        )
+        try:
+            fields = self.sharepoint.get_item_fields(
+                parent_id, ["FILIAL", "ETAPA", "STATUS", "TIPO"], target_list="LANCAMENTOOBRA",
+            )
+        except HTTPError as error:
+            if error.response is None or error.response.status_code != 404:
+                raise
+            fields = {}
         linked_fields = {field: str(fields.get(field) or "").strip() for field in ("FILIAL", "ETAPA")}
         if (normalize_text(fields.get("STATUS")) != "iniciado"
                 or normalize_text(fields.get("TIPO")) != "atividade comum"

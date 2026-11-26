@@ -307,6 +307,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         });
         actions.append(start);
       }
+      let finishActions = actions;
       if (parent && item.source?.branch && item.source.stage && item.source.status.trim().toUpperCase() === 'INICIADO'
         && typeof onCreateDemonstrative === 'function') {
         const create = button('+', `Cadastrar demonstrativo da etapa ${item.name}`);
@@ -327,7 +328,9 @@ export function createStageGanttView({ document: doc = globalThis.document, data
           }
           if (isCurrent()) announce('Não foi possível abrir o cadastro de demonstrativo.');
         });
-        actions.append(create);
+        finishActions = make('div', 'gantt-stage-finish-actions');
+        finishActions.append(create);
+        actions.append(finishActions);
       }
       if (!item.finished && typeof data[parent ? 'finalizeStage' : 'finalizeActivity'] === 'function'
         && typeof data.loadAssignments === 'function') {
@@ -340,7 +343,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
         finalize.addEventListener('click', () => {
           if (!savingVisibility && !dialog.inert) void finish.open(item, finalize, { stage: parent });
         });
-        actions.append(finalize);
+        finishActions.append(finalize);
       }
       if (actions.childElementCount) card.append(actions);
       label.append(card);

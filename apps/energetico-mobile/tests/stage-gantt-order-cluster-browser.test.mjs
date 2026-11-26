@@ -17,19 +17,21 @@ test('GANTT mostra Fundação de maio acima de Alvenaria de agosto e destaca cad
    const dom=new JSDOM(stdout);
    try{
     const result=JSON.parse(dom.window.document.documentElement.dataset.layout);
-    assert.deepEqual(result.initial,['EXECUÇÃO FUNDAÇÃO','ALVENARIA E ESTRUTURAS','ACABAMENTO SEM INÍCIO']);
+    assert.deepEqual(result.initial,['EXECUÇÃO FUNDAÇÃO','ALVENARIA E ESTRUTURAS','ACABAMENTO SEM INÍCIO','PINTURA EM ANDAMENTO']);
     assert.deepEqual(result.children,['EXECUÇÃO PAREDES ARRIMO','ARMAÇÃO FERRAGEM ARRIMO','VERIFICAÇÃO GABARITO OBRA']);
     assert.deepEqual(result.refreshed,result.initial);
-    assert.deepEqual(result.allDates,['2026-05-26','2026-08-10','']);
+    assert.deepEqual(result.allDates,['2026-05-26','2026-08-10','','']);
     assert.ok(result.names.every(name=>name.cluster&&name.tag==='STRONG'&&name.weight>=700&&name.fits),JSON.stringify(result));
     assert.deepEqual(result.names.map(name=>name.background),[
      'rgb(36, 114, 58)', // Fundação finalizada.
      'rgb(13, 77, 97)', // Alvenaria em andamento.
      'rgb(36, 114, 58)', 'rgb(36, 114, 58)', 'rgb(36, 114, 58)', // Descritivos finalizados.
      'rgb(13, 77, 97)', // Acabamento não iniciado.
+     'rgb(13, 77, 97)', // Pintura iniciada, com data ausente.
     ]);
     assert.ok(result.names.every(name=>name.color==='rgb(255, 255, 255)'),JSON.stringify(result));
-    assert.deepEqual(result.createButton,{color:'rgb(255, 255, 255)',background:'rgb(36, 114, 58)',fits:true});
+    const createButton={color:'rgb(255, 255, 255)',background:'rgb(36, 114, 58)',fits:true};
+    assert.deepEqual(result.createButtons,[null,{...createButton,suppress:false},null,{...createButton,suppress:true}]);
    }finally{dom.window.close();}
   }
  }finally{await server.close();}
