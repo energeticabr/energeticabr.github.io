@@ -7,6 +7,7 @@ let writes=0,dateWrites=0;
 const duplicate=new URLSearchParams(location.search).has('duplicate');
 const nameFallback=new URLSearchParams(location.search).has('fallback');
 const alignDue=new URLSearchParams(location.search).has('alignDue');
+const compact=new URLSearchParams(location.search).has('compact');
 if(new URLSearchParams(location.search).has('wideControls')){
  const style=document.createElement('style');
  style.textContent='.dda-provision-filters select { letter-spacing: 2px; }';
@@ -32,27 +33,56 @@ function pencilLayout(){
 const beforePencil=pencilLayout();
 document.querySelector('[data-dda-provision-pencil]').click();await frame();
 const search=document.querySelector('.dda-provision-search'),status=document.querySelector('.dda-provision-status'),source=document.querySelector('.dda-provision-source');
-const pickerFiltersFit=Boolean(source&&search.offsetTop===status.offsetTop&&source.offsetTop===status.offsetTop
- &&search.offsetLeft+search.offsetWidth<=source.offsetLeft
+function selectedLabelFits(select){
+ const sample=select.cloneNode(false);
+ sample.append(select.selectedOptions[0].cloneNode(true));
+ Object.assign(sample.style,{position:'absolute',visibility:'hidden',width:'max-content'});
+ select.parentElement.append(sample);
+ const fits=select.offsetWidth>=sample.offsetWidth;
+ sample.remove();
+ return fits;
+}
+const searchFits=compact?search.offsetTop+search.offsetHeight<=source.offsetTop
+ :search.offsetTop===status.offsetTop&&search.offsetLeft+search.offsetWidth<=source.offsetLeft;
+const pickerFiltersFit=Boolean(source&&searchFits&&source.offsetTop===status.offsetTop
  &&source.offsetLeft+source.offsetWidth<=status.offsetLeft
  &&status.offsetLeft+status.offsetWidth<=status.offsetParent.clientWidth+1
- &&status.scrollWidth<=status.clientWidth+1);
+ &&selectedLabelFits(source)&&selectedLabelFits(status));
 source.value='order';source.dispatchEvent(new Event('change'));await frame();
 const orderFiltersFit=source.value==='order'&&status.getClientRects().length===0
  &&source.offsetLeft+source.offsetWidth<=source.offsetParent.clientWidth+1
  &&document.querySelector('.dda-provision-options').textContent.includes('PEDIDO FICTÍCIO');
 source.value='provision';source.dispatchEvent(new Event('change'));await frame();
-const match=document.querySelector(nameFallback?'.dda-provision-name-match':'.dda-provision-line-match'),matchRect=match.getBoundingClientRect();
-const pickerMatch=(nameFallback?match.textContent.includes('Nome do fornecedor semelhante ao DDA'):match.textContent.includes('Provisão #101')&&match.textContent.includes('360,00'))&&document.querySelectorAll('.dda-provision-star').length===1;
-const pickerFits=matchRect.left>=-1&&matchRect.top>=-1&&matchRect.right<=innerWidth+1&&matchRect.bottom<=innerHeight+1;
+const match=document.querySelector(nameFallback?'.dda-provision-name-match':'.dda-provision-line-match');
 const pickerList=document.querySelector('.dda-provision-options');
+if(compact){match.scrollIntoView({block:'nearest'});await frame();}
+const matchRect=match.getBoundingClientRect(),listRect=pickerList.getBoundingClientRect();
+const pickerMatch=(nameFallback?match.textContent.includes('Nome do fornecedor semelhante ao DDA'):match.textContent.includes('Provisão #101')&&match.textContent.includes('360,00'))&&document.querySelectorAll('.dda-provision-star').length===1;
+const pickerFits=matchRect.left>=-1&&matchRect.top>=-1&&matchRect.right<=innerWidth+1&&matchRect.bottom<=innerHeight+1
+ &&(!compact||(matchRect.top>=listRect.top-1&&matchRect.bottom<=listRect.bottom+1));
 const pickerOverflows=pickerList.scrollWidth>pickerList.clientWidth+1;
+const pickerGeometry=compact?Object.fromEntries([
+ ['dialog',document.querySelector('.dda-provision-dialog')],['search',search],['list',pickerList],
+ ['match',match],['header',match.closest('section').querySelector('header')],
+].map(([key,element])=>[key,element.getBoundingClientRect().toJSON()])):null;
 const chipColors=[...pickerList.querySelectorAll('.report-link-comparison')].map(chip=>{
  const css=getComputedStyle(chip);
  return [css.backgroundColor,css.borderTopColor];
 });
 document.querySelector('input[type=radio]').click();
-async function review(){document.querySelector('.dda-provision-save').click();await frame();return document.querySelector('[data-edit-review]');}
+let pickerSubmitReachable=true;
+async function review(){
+ const button=document.querySelector('.dda-provision-save');
+ if(compact){
+  button.scrollIntoView({block:'nearest'});
+  await frame();
+  const {x,y,width,height}=button.getBoundingClientRect();
+  pickerSubmitReachable&&=document.elementFromPoint(x+width/2,y+height/2)===button;
+ }
+ button.click();
+ await frame();
+ return document.querySelector('[data-edit-review]');
+}
 let dialog=await review();
 const rect=dialog.getBoundingClientRect(), buttons=[...dialog.querySelectorAll('button')];
 const fits=rect.left>=-1&&rect.top>=-1&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1;
@@ -95,5 +125,5 @@ document.querySelector('[data-dda-provision-pencil]').click();await frame();
 document.querySelector('input[type=radio]').click();
 const capturedReview=await review();
 if(duplicate){capturedReview.querySelector('[data-edit-review-submit]').click();await frame();}
-document.documentElement.dataset.layout=JSON.stringify({pickerMatch,pickerFits,pickerOverflows,pickerFiltersFit,orderFiltersFit,chipColors,fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed,beforePencil,afterPencil,duplicateFits,duplicateNo,duplicateTransform,dueReview});
+document.documentElement.dataset.layout=JSON.stringify({pickerMatch,pickerFits,pickerOverflows,pickerFiltersFit,orderFiltersFit,pickerSubmitReachable,pickerGeometry,chipColors,fits,hit,transform,dimensions,bounds:{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom},focusInside,writesBefore,cancelled,confirmed,beforePencil,afterPencil,duplicateFits,duplicateNo,duplicateTransform,dueReview});
 </script></body></html>
