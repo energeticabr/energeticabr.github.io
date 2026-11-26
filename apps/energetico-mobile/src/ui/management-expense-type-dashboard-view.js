@@ -14,10 +14,10 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
   const make=(tag,className='',text)=>{const node=doc.createElement(tag);node.className=className;if(text!==undefined)node.textContent=text;return node;};
   const backdrop=make('div','gm-expense-dashboard-backdrop');backdrop.hidden=true;
   const dialog=make('section','gm-expense-dashboard');dialog.tabIndex=-1;
-  dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label','Análise do tipo de despesa');
+  dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');
   const header=make('header','gm-expense-dashboard-header'),heading=make('div'),title=make('h2'),subtitle=make('p');
   title.id=`gm-expense-dashboard-title-${++sequence}`;dialog.setAttribute('aria-labelledby',title.id);
-  const closeButton=make('button','gm-expense-dashboard-close','Fechar');closeButton.type='button';closeButton.setAttribute('aria-label','Fechar análise do tipo de despesa');
+  const closeButton=make('button','gm-expense-dashboard-close','Fechar');closeButton.type='button';
   heading.append(title,subtitle);header.append(heading,closeButton);
   const scroll=make('div','gm-expense-dashboard-scroll');scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label','Gráficos e rankings de gastos');
   dialog.append(header,scroll);backdrop.append(dialog);root.append(backdrop);
@@ -196,13 +196,21 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
     return section;
   }
   function render(data){
-    title.textContent=data.expenseType;subtitle.textContent=data.branch;
+    title.textContent=data.supplier??data.expenseType;subtitle.textContent=data.branch;
+    const subject=data.supplier?'do fornecedor':'do tipo de despesa';
+    dialog.setAttribute('aria-label',`Análise ${subject}`);
+    closeButton.setAttribute('aria-label',`Fechar análise ${subject}`);
     const metrics=make('section','gm-expense-dashboard-metrics');
-    for(const [label,value,kind] of [['Total no período',data.total,'total'],['Pago',data.months.reduce((sum,item)=>sum+(item.paid||0),0),'paid'],['Previsto',data.months.reduce((sum,item)=>sum+(item.forecast||0),0),'forecast']]){
+    const sumMonths=field=>data.months.every(item=>Number.isFinite(item[field]))
+      ? data.months.reduce((sum,item)=>sum+item[field],0) : null;
+    for(const [label,value,kind] of [['Total no período',data.total,'total'],['Pago',sumMonths('paid'),'paid'],['Previsto',sumMonths('forecast'),'forecast']]){
       const card=make('div',`gm-expense-dashboard-metric is-${kind}`);card.append(make('span','',label),make('strong','',money(value)));metrics.append(card);
     }
     const rankings=make('div','gm-expense-dashboard-rankings');
-    rankings.append(renderRanking('Principais produtos',data.products,'is-products'),renderRanking('Principais fornecedores',data.suppliers,'is-suppliers'),renderRanking('Principais etapas',data.stages,'is-stages'));
+    if(!data.suppliers)rankings.classList.add('gm-expense-dashboard-rankings--supplier');
+    rankings.append(renderRanking('Principais produtos',data.products,'is-products'));
+    if(data.suppliers)rankings.append(renderRanking('Principais fornecedores',data.suppliers,'is-suppliers'));
+    rankings.append(renderRanking('Principais etapas',data.stages,'is-stages'));
     const trend = renderTrend(data);
     scroll.replaceChildren(metrics, trend.section, rankings);
     trend.layout();

@@ -376,3 +376,57 @@ test('ranking de produtos abre o próprio período; fechar relatório e atualiza
   root.querySelector('[name=month]').dispatchEvent(new dom.window.Event('change'));
   assert.equal(popup.hidden,true,'uma mudança de filtros não deixa o detalhe antigo aberto');
 });
+
+test('nome do fornecedor abre o gráfico da filial e preserva a expansão de lançamentos', async t => {
+  const october = { ...row, paymentDate: '2026-10-02', total: 25 };
+  const september = { ...october, id: '2', date: '2026-09-01', paymentDate: '2026-09-02', total: 41 };
+  const provision = { id: '8', branch: row.branch, supplier: row.supplier, product: row.product,
+    dueDate: '2026-10-20', total: 34 };
+  const { view, root, dom } = setup(t, async () => ({
+    launches: [
+      october, september,
+      { ...october, id: '3', branch: 'Outra filial', total: 500 },
+      { ...october, id: '4', supplier: 'Alfa Serviços', total: 600 },
+      { ...october, id: '5', supplier: 'ALFA', total: 700 },
+      { ...october, id: '6', product: 'Areia', total: 800 },
+    ],
+    provisions: [provision, { ...provision, id: '9', paidDate: '2026-10-09', total: 900 }],
+    productTypes: [],
+  }));
+  await view.open();
+  const product = root.querySelector('[name=product]');
+  product.value = row.product;
+  product.dispatchEvent(new dom.window.Event('change'));
+
+  const ranking = root.querySelector('[data-section=suppliers]');
+  const dashboard = root.querySelector('.gm-expense-dashboard-backdrop');
+  const supplier = [...ranking.querySelectorAll('button[aria-haspopup=dialog]')]
+    .find(button => button.textContent === row.supplier && button.getAttribute('aria-label').includes(row.branch));
+  assert.ok(supplier, 'o nome do fornecedor deve abrir o gráfico');
+  const toggle = supplier.closest('tr').querySelector('.gm-expense-toggle');
+  toggle.click();
+  assert.equal(dashboard.hidden, true);
+  assert.equal(ranking.querySelector('.gm-ranking-launches [data-launch-id]').dataset.launchId, '1');
+
+  const scroll = root.querySelector('.gm-content');
+  scroll.scrollTop = 120;
+  supplier.focus();
+  supplier.click();
+
+  assert.equal(dashboard.hidden, false);
+  assert.equal(dashboard.querySelector('h2').textContent, row.supplier);
+  assert.equal(dashboard.querySelector('header p').textContent, row.branch);
+  assert.deepEqual([...dashboard.querySelectorAll('.gm-expense-dashboard-metric strong')]
+    .map(metric => metric.textContent.replace(/\s/g, '')), ['R$100,00', 'R$66,00', 'R$34,00']);
+  const paid = dashboard.querySelector('.gm-expense-dashboard-series.is-paid');
+  assert.equal(paid.querySelectorAll('circle').length, 12);
+  assert.match(paid.querySelector('circle[data-month-index="10"]').getAttribute('aria-label'), /set\/26: R\$\s*41,00/);
+  assert.match(paid.querySelector('circle[data-month-index="11"]').getAttribute('aria-label'), /out\/26: R\$\s*25,00/);
+
+  dashboard.querySelector('button').click();
+  assert.equal(dashboard.hidden, true);
+  assert.equal(dom.window.document.activeElement, supplier);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  assert.equal(scroll.scrollTop, 120);
+  assert.equal(product.value, row.product);
+});

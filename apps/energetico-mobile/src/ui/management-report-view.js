@@ -3,6 +3,7 @@ import { addReportCloseControl } from './report-close-control.js';
 import {
   buildSpendingReport9, buildManagementProductDetail,
   buildManagementRankingBreakdown, buildManagementRankingLaunchMonths, buildManagementExpenseTypeDashboard,
+  buildManagementSupplierDashboard,
 } from '../chat/spending-reports-model.js';
 import {
   createManagementProductDetailView, formatDetailDate, formatDetailQuantity, formatDetailUnit,
@@ -53,7 +54,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   const productDetail=createManagementProductDetailView({root,onClose(){
     content.scrollTop=reportPosition.top;content.scrollLeft=reportPosition.left;
   }});
-  const expenseTypeDashboard=createManagementExpenseTypeDashboardView({root,onClose(){
+  const spendingDashboard=createManagementExpenseTypeDashboardView({root,onClose(){
     content.scrollTop=reportPosition.top;content.scrollLeft=reportPosition.left;
   }});
   const showNotice=text=>{notice.textContent=text;notice.hidden=!text;};
@@ -61,7 +62,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   function cell(tr,column,value,span=1,className='') {
     const td=make('td',className,String(value??'').trim()||'—');td.dataset.column=column;td.rowSpan=span;tr.append(td);return td;
   }
-  function addExpansion(tr,nameCell,name,description,createRows,branchCell) {
+  function addExpansion(tr,nameCell,nameLabel,description,createRows,branchCell) {
     const label=make('div','gm-expense-label');
     const toggle=make('button','gm-expense-toggle');
     toggle.type='button';
@@ -85,8 +86,13 @@ export function createManagementReportView({document:doc=globalThis.document,dat
         setExpanded(true);
       }
     });
-    label.append(toggle,make('span','',name));
+    label.append(toggle,nameLabel);
     nameCell.replaceChildren(label);
+  }
+  function openSpendingDashboard(buildDashboard, group, button) {
+    if(root.hidden||!snapshot||destroyed)return;
+    reportPosition={top:content.scrollTop,left:content.scrollLeft};
+    spendingDashboard.open(buildDashboard(snapshot,selected(),{...group,now:now()}),button);
   }
   function productCell(tr,product,branch,kind) {
     const td=cell(tr,'name','');
@@ -158,7 +164,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     for(const item of buildManagementRankingBreakdown(group,section)) {
       const tr=body.insertRow(),name=cell(tr,'name',item.name);
       const description=`${item.name} — ${group.name} — ${branch}`;
-      addExpansion(tr,name,item.name,`lançamentos: ${description}`,
+      addExpansion(tr,name,make('span','',item.name),`lançamentos: ${description}`,
         ()=>[rankingDetailRow(rankingLaunches(item.rows,description))]);
       cell(tr,'count',item.count);
       cell(tr,'quantity',formatDetailQuantity(item.quantity));
@@ -202,11 +208,8 @@ export function createManagementReportView({document:doc=globalThis.document,dat
         });
         const type=make('button','gm-expense-type-link',group.name);type.type='button';type.dataset.expenseType=group.name;
         type.setAttribute('aria-haspopup','dialog');type.setAttribute('aria-label',`Analisar despesas ${group.name} — ${branch.name}`);
-        type.addEventListener('click',()=>{
-          if(root.hidden||!snapshot||destroyed)return;
-          reportPosition={top:content.scrollTop,left:content.scrollLeft};
-          expenseTypeDashboard.open(buildManagementExpenseTypeDashboard(snapshot,selected(),{branch:branch.name,expenseType:group.name,now:now()}),type);
-        });
+        type.addEventListener('click',()=>openSpendingDashboard(
+          buildManagementExpenseTypeDashboard,{branch:branch.name,expenseType:group.name},type));
         label.append(toggle,type);nameCell.replaceChildren(label);
         expenseAmounts(tr,group,comparisonPeriod);
         body.append(tr);
@@ -219,6 +222,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   }
   function render() {
     productDetail.close({restoreFocus:false});
+    spendingDashboard.close({restoreFocus:false});
     content.replaceChildren();showNotice('');if(!snapshot)return;
     const result=buildSpendingReport9(snapshot,selected());
     const logoFrame=make('div','gm-logo'),logo=make('img');logo.src=LOGO;logo.alt='Logo Energética';logoFrame.append(logo);content.append(logoFrame);
@@ -260,7 +264,16 @@ export function createManagementReportView({document:doc=globalThis.document,dat
             const name=cell(tr,'name',group.name);
             const description=`${group.name} — ${branch.name}`;
             const detailType={suppliers:'lançamentos',stages:'produtos',accounts:'fornecedores'}[section];
-            addExpansion(tr,name,group.name,`${detailType}: ${description}`,()=>{
+            let nameLabel=make('span','',group.name);
+            if(section==='suppliers'){
+              const supplier=make('button','gm-supplier-link',group.name);supplier.type='button';
+              supplier.setAttribute('aria-haspopup','dialog');
+              supplier.setAttribute('aria-label',`Analisar gastos de ${description}`);
+              supplier.addEventListener('click',()=>openSpendingDashboard(
+                buildManagementSupplierDashboard,{branch:branch.name,supplier:group.name},supplier));
+              nameLabel=supplier;
+            }
+            addExpansion(tr,name,nameLabel,`${detailType}: ${description}`,()=>{
               const detail=section==='suppliers'?rankingLaunches(group.rows,description):rankingBreakdown(group,section,branch.name);
               return [rankingDetailRow(detail)];
             },branchCell);
@@ -293,6 +306,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   async function load() {
     if(root.hidden||destroyed)return;
     productDetail.close({restoreFocus:false});
+    spendingDashboard.close({restoreFocus:false});
     pickers?.close();controller?.abort();const current=++revision,active=new AbortController();controller=active;snapshot=null;content.replaceChildren();
     showNotice('Carregando gastos do SharePoint…');report.setAttribute('aria-busy','true');refresh.disabled=true;
     try {
@@ -307,13 +321,13 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   }
   function orientationChanged() { landscape.update(); }
   function close() {
-    productDetail.close({restoreFocus:false});expenseTypeDashboard.close({restoreFocus:false});
+    productDetail.close({restoreFocus:false});spendingDashboard.close({restoreFocus:false});
     if(root.hidden)return;controller?.abort();revision++;snapshot=null;pickers?.close();content.replaceChildren();root.hidden=true;
     doc.body.style.overflow=oldOverflow;if(app)app.inert=oldInert;returnFocus?.focus?.();returnFocus=null;
   }
   root.addEventListener('click',event=>{if(event.target===root)close();});
   root.addEventListener('keydown',event=>{
-    if(productDetail.isOpen||expenseTypeDashboard.isOpen)return;
+    if(productDetail.isOpen||spendingDashboard.isOpen)return;
     if(root.hidden)return;if(event.key==='Escape'){event.preventDefault();close();return;}if(event.key!=='Tab')return;
     const nodes=[...panel.querySelectorAll('button,input,select,[tabindex="0"]')].filter(n=>!n.disabled&&!n.closest('[hidden]')&&n.tabIndex>=0),first=nodes[0],last=nodes.at(-1);
     if(event.shiftKey&&(doc.activeElement===first||doc.activeElement===panel)){event.preventDefault();last?.focus();}
@@ -327,5 +341,5 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     pickers?.destroy();pickers=null;const date=now();
     for(const [name] of FIELDS){const control=controls.get(name);control.replaceChildren(Object.assign(make('option','','Todos'),{value:''}));const value=name==='year'?String(date.getFullYear()):name==='month'?String(date.getMonth()+1):'';if(value)control.append(Object.assign(make('option','',value),{value}));control.value=value;}
     root.hidden=false;landscape.update();warning.hidden=true;report.hidden=false;panel.classList.toggle('pl-dialog--portrait',false);panel.focus();await load();
-  },close,destroy(){if(destroyed)return;close();destroyed=true;productDetail.destroy();expenseTypeDashboard.destroy();pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
+  },close,destroy(){if(destroyed)return;close();destroyed=true;productDetail.destroy();spendingDashboard.destroy();pickers?.destroy();win?.removeEventListener('resize',orientationChanged);win?.removeEventListener('orientationchange',orientationChanged);landscape.destroy();root.remove();}});
 }
