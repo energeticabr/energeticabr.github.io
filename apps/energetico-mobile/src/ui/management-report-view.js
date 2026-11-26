@@ -3,7 +3,7 @@ import { addReportCloseControl } from './report-close-control.js';
 import {
   buildSpendingReport9, buildManagementProductDetail,
   buildManagementRankingBreakdown, buildManagementRankingLaunchMonths, buildManagementExpenseTypeDashboard,
-  buildManagementSupplierDashboard,
+  buildManagementRankingDashboard,
 } from '../chat/spending-reports-model.js';
 import {
   createManagementProductDetailView, formatDetailDate, formatDetailQuantity, formatDetailUnit,
@@ -245,12 +245,13 @@ export function createManagementReportView({document:doc=globalThis.document,dat
       expenseAmounts(tr,{...branch,percentage:share},result.comparisonPeriod);branches.append(tr);
     }
     renderExpenses(result.expenseBranches,result.comparisonPeriod);
-    for(const [section,title,label,withQuantity] of [
-      ['products','PRODUTOS COM MAIOR GASTO POR FILIAL','PRODUTO',true],
-      ['stages','ETAPAS COM MAIOR GASTO POR FILIAL','ETAPA',false],
-      ['suppliers','PRINCIPAIS FORNECEDORES POR FILIAL','FORNECEDOR',false],
-      ['accounts','MAIORES GASTOS POR CONTA POR FILIAL','CONTA',false],
+    for(const [section,title,label,field] of [
+      ['products','PRODUTOS COM MAIOR GASTO POR FILIAL','PRODUTO','product'],
+      ['stages','ETAPAS COM MAIOR GASTO POR FILIAL','ETAPA','stage'],
+      ['suppliers','PRINCIPAIS FORNECEDORES POR FILIAL','FORNECEDOR','supplier'],
+      ['accounts','MAIORES GASTOS POR CONTA POR FILIAL','CONTA','account'],
     ]) {
+      const withQuantity=field==='product';
       const labels=['FILIAL',label,'QTDE. LINHAS',...(withQuantity?['QTD TOTAL']:[]),'TOTAL GASTO','% DO TOTAL DO MÊS'];
       const body=table(section,title,labels,withQuantity?[24,28,12,12,13,11]:[24,34,14,15,13]);
       for(const branch of result.branches) {
@@ -264,16 +265,12 @@ export function createManagementReportView({document:doc=globalThis.document,dat
             const name=cell(tr,'name',group.name);
             const description=`${group.name} — ${branch.name}`;
             const detailType={suppliers:'lançamentos',stages:'produtos',accounts:'fornecedores'}[section];
-            let nameLabel=make('span','',group.name);
-            if(section==='suppliers'){
-              const supplier=make('button','gm-supplier-link',group.name);supplier.type='button';
-              supplier.setAttribute('aria-haspopup','dialog');
-              supplier.setAttribute('aria-label',`Analisar gastos de ${description}`);
-              supplier.addEventListener('click',()=>openSpendingDashboard(
-                buildManagementSupplierDashboard,{branch:branch.name,supplier:group.name},supplier));
-              nameLabel=supplier;
-            }
-            addExpansion(tr,name,nameLabel,`${detailType}: ${description}`,()=>{
+            const button=make('button','gm-ranking-link',group.name);button.type='button';
+            button.setAttribute('aria-haspopup','dialog');
+            button.setAttribute('aria-label',`Analisar gastos de ${description}`);
+            button.addEventListener('click',()=>openSpendingDashboard(
+              buildManagementRankingDashboard,{branch:branch.name,field,name:group.name},button));
+            addExpansion(tr,name,button,`${detailType}: ${description}`,()=>{
               const detail=section==='suppliers'?rankingLaunches(group.rows,description):rankingBreakdown(group,section,branch.name);
               return [rankingDetailRow(detail)];
             },branchCell);

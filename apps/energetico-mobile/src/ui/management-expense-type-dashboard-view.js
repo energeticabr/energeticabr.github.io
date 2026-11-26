@@ -196,8 +196,8 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
     return section;
   }
   function render(data){
-    title.textContent=data.supplier??data.expenseType;subtitle.textContent=data.branch;
-    const subject=data.supplier?'do fornecedor':'do tipo de despesa';
+    title.textContent=data.name??data.expenseType;subtitle.textContent=data.branch;
+    const subject={supplier:'do fornecedor',stage:'da etapa',account:'da conta'}[data.field]??'do tipo de despesa';
     dialog.setAttribute('aria-label',`Análise ${subject}`);
     closeButton.setAttribute('aria-label',`Fechar análise ${subject}`);
     const metrics=make('section','gm-expense-dashboard-metrics');
@@ -207,10 +207,10 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
       const card=make('div',`gm-expense-dashboard-metric is-${kind}`);card.append(make('span','',label),make('strong','',money(value)));metrics.append(card);
     }
     const rankings=make('div','gm-expense-dashboard-rankings');
-    if(!data.suppliers)rankings.classList.add('gm-expense-dashboard-rankings--supplier');
     rankings.append(renderRanking('Principais produtos',data.products,'is-products'));
     if(data.suppliers)rankings.append(renderRanking('Principais fornecedores',data.suppliers,'is-suppliers'));
-    rankings.append(renderRanking('Principais etapas',data.stages,'is-stages'));
+    if(data.stages)rankings.append(renderRanking('Principais etapas',data.stages,'is-stages'));
+    if(rankings.childElementCount===2)rankings.classList.add('gm-expense-dashboard-rankings--two-columns');
     const trend = renderTrend(data);
     scroll.replaceChildren(metrics, trend.section, rankings);
     trend.layout();

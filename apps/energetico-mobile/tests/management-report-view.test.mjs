@@ -430,3 +430,72 @@ test('nome do fornecedor abre o gráfico da filial e preserva a expansão de lan
   assert.equal(scroll.scrollTop, 120);
   assert.equal(product.value, row.product);
 });
+
+for (const [section, field, subject, breakdown, totals, september] of [
+  ['stages', 'stage', 'da etapa', 'PRODUTO', ['R$100,00', 'R$65,00', 'R$35,00'], '40,00'],
+  ['accounts', 'account', 'da conta', 'FORNECEDOR', ['R$134,00', 'R$95,00', 'R$39,00'], '70,00'],
+]) {
+  test(`nome ${subject} abre o gráfico mensal da filial e preserva o detalhamento em linha`, async t => {
+    const { normalizeManagementProvision } = await import('../src/chat/spending-reports-model.js');
+    const october = { ...row, paymentDate: '2026-10-02', total: 25 };
+    const septemberLaunch = { ...october, date: '2026-09-02', paymentDate: '2026-09-15' };
+    const provision = (id, total, fields = {}) => normalizeManagementProvision({
+      id, fields: { FILIAL: row.branch, FORNECEDOR: row.supplier, PRODUTO: row.product, ETAPA: row.stage,
+        FORMAPGTO: row.account, DATAPREVISTOPGTO: '2026-10-20', VALORTOTAL: total, ...fields },
+    });
+    const { view, root, dom } = setup(t, async () => ({
+      launches: [
+        october,
+        { ...septemberLaunch, id: '2', account: 'Outra conta', total: 40 },
+        { ...septemberLaunch, id: '3', stage: 'Outra etapa', total: 70 },
+        { ...october, id: '4', branch: 'Outra filial', total: 500 },
+        { ...october, id: '5', account: 'CAIXA', stage: 'FUNDAÇÃO', total: 600 },
+        { ...october, id: '6', product: 'Areia', total: 800 },
+      ],
+      provisions: [
+        provision('7', 22),
+        provision('8', 13, { FORMAPGTO: '' }),
+        provision('9', 17, { ETAPA: 'Outra etapa' }),
+        provision('10', 900, { DATAPGTOEFETUADO: '2026-10-05' }),
+        provision('11', 700, { FILIAL: 'Outra filial' }),
+      ],
+      productTypes: [],
+    }));
+    await view.open();
+    const product = root.querySelector('[name=product]');
+    product.value = row.product;
+    product.dispatchEvent(new dom.window.Event('change'));
+
+    const ranking = root.querySelector(`[data-section=${section}]`);
+    const dashboard = root.querySelector('.gm-expense-dashboard-backdrop');
+    const button = [...ranking.querySelectorAll('button[aria-haspopup=dialog]')]
+      .find(button => button.textContent === row[field] && button.getAttribute('aria-label').includes(row.branch));
+    assert.ok(button, `o nome ${subject} deve abrir o gráfico`);
+    const toggle = button.closest('tr').querySelector('.gm-expense-toggle');
+    toggle.click();
+    assert.equal(dashboard.hidden, true);
+    assert.equal(ranking.querySelector('.gm-ranking-breakdown th').textContent, breakdown);
+
+    const scroll = root.querySelector('.gm-content');
+    scroll.scrollTop = 180;
+    button.click();
+    assert.equal(dashboard.hidden, false);
+    assert.equal(dashboard.querySelector('[role=dialog]').getAttribute('aria-label'), `Análise ${subject}`);
+    assert.equal(dashboard.querySelector('h2').textContent, row[field]);
+    assert.equal(dashboard.querySelector('header p').textContent, row.branch);
+    assert.deepEqual([...dashboard.querySelectorAll('.gm-expense-dashboard-metric strong')]
+      .map(metric => metric.textContent.replace(/\s/g, '')), totals);
+    const paid = [...dashboard.querySelectorAll('.gm-expense-dashboard-series.is-paid circle')];
+    assert.equal(paid.length, 12);
+    assert.equal(paid[10].getAttribute('aria-label').replace(/\s+/g, ' '), `Pago em set/26: R$ ${september}`);
+    assert.equal(dashboard.querySelectorAll('.gm-expense-dashboard-ranking.is-stages').length,
+      field === 'stage' ? 0 : 1);
+
+    dashboard.querySelector('.gm-expense-dashboard-close').click();
+    assert.equal(dashboard.hidden, true);
+    assert.equal(dom.window.document.activeElement, button);
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+    assert.equal(scroll.scrollTop, 180);
+    assert.equal(product.value, row.product);
+  });
+}
