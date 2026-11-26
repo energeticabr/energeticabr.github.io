@@ -31,6 +31,7 @@ function fixture() {
   const columns = Object.fromEntries(Object.entries(names).map(([list, labels]) => [list, labels.map(label => ({ name: label, displayName: label, ...(/DATA/.test(label) ? { dateTime: {} } : (list === 'NOTASPENDENTES' && label === 'VALORTOTAL' || list === 'FOLHAPGTO' && ['VALORUNITARIO','QTD','IDFOLHA','IDLANCAMENTO'].includes(label)) ? { number: {} } : { text: {} }) }))]));
   Object.assign(columns.NOTASPENDENTES.find(c => c.name === 'VALECONTROLE'), { hidden:true, text:{ allowMultipleLines:true, textType:'plain', appendChangesToExistingText:false } });
   Object.assign(columns.LANCAMENTOS.find(c => c.name === 'IDFOLHA'), { text:undefined, number:{ decimalPlaces:'none' }, required:false });
+  columns.LANCAMENTOS.push({ name:'field_16', displayName:'DESCRIÇÃO', text:{allowMultipleLines:true} });
   const rows = { FORNECEDORES: [
     { id: '1', fields: { CADASTRO: 'Ana', STATUS: 'ATIVO', EMPREITEIRO: 'SIM', FILIAL: 'OBRA A', PROFISSAO: 'PEDREIRO' } },
     { id: '2', fields: { CADASTRO: 'Beto', STATUS: 'ATIVO', EMPREITEIRO: 'SIM', FILIAL: 'OBRA A', PROFISSAO: 'SERVENTE' } },
@@ -66,7 +67,7 @@ test('leitura dos fornecedores traz o cargo do fluxo semanal separado da profiss
 });
 const draft = suppliers => ({ date: '2026-10-15', dueDate: '2026-10-30', referenceMonth: '2026-10', stage: { id: '7', label: 'FUNDAÇÃO', branch: 'OBRA A' }, account: { id: '8', label: 'CAIXA' }, orderMode: 'new', obs: 'outubro', files: [], lines: suppliers.map((supplier, index) => ({ supplier, quantity: '1', unitValue: index ? '20' : '10' })) });
 
-test('vale transporte registra a rubrica e a OBS próprias com retomada sem duplicar', async () => {
+test('vale transporte grava a OBS do pedido na descrição de cada lançamento, mantendo o produto', async () => {
   const f = fixture(), data = createMealVoucherData({ repository:f.repo, voucherType:'transport' });
   const { suppliers } = await data.loadOptions();
   const progress = { operationId:'transport-test' };
@@ -77,9 +78,79 @@ test('vale transporte registra a rubrica e a OBS próprias com retomada sem dupl
   assert.deepEqual(f.rows.LANCAMENTOS.map(row => row.fields.FORNECEDOR), ['Ana', 'Beto']);
   assert.match(f.rows.NOTASPENDENTES[0].fields.VALECONTROLE, /\[VALE TRANSPORTE transport-test\]/);
   assert.ok(f.rows.LANCAMENTOS.every(row => row.fields.OBS === obs));
+  assert.deepEqual(f.rows.LANCAMENTOS.map(row => row.fields.field_16), [obs, obs]);
+  assert.deepEqual(f.rows.LANCAMENTOS.map(row => row.fields.PRODUTO), ['PEDREIRO', 'SERVENTE']);
   assert.ok(f.rows.FOLHAPGTO.every(row => row.fields.TIPOPGTO === 'VALE TRANSPORTE'));
   assert.equal((await createMealVoucherData({ repository:f.repo, voucherType:'transport' }).post(selected, progress)).orderId, result.orderId);
   assert.equal(f.rows.LANCAMENTOS.length, 2);
+  assert.equal(f.rows.FOLHAPGTO.length, 2);
+  f.rows.LANCAMENTOS[0].fields.field_16 = '';
+  await assert.rejects(data.recoverCompleted(progress), /dados ou IDFOLHA/);
+});
+
+test('retomada de vale transporte anterior à descrição preserva a linha antiga e descreve as novas', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo, voucherType:'transport' });
+  const { suppliers } = await data.loadOptions(), selected = draft(suppliers);
+  const progress = { operationId:'transport-legacy-description' };
+  f.failSecond();
+  await assert.rejects(data.post(selected, progress), /rede interrompida/);
+  delete progress.legacyLaunchIds;
+  delete f.rows.LANCAMENTOS[0].fields.field_16;
+  f.recover();
+  const resumed = createMealVoucherData({ repository:f.repo, voucherType:'transport' });
+  const result = await resumed.post(selected, progress);
+  assert.deepEqual(f.rows.LANCAMENTOS.map(row => row.fields.field_16), [undefined, 'outubro']);
+  assert.equal((await resumed.recoverCompleted(progress)).result.orderId, result.orderId);
+  assert.equal(f.rows.FOLHAPGTO.length, 2);
+});
+
+test('retomada legada verifica a descrição de uma linha nova mesmo quando a resposta da gravação se perde', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo, voucherType:'transport' });
+  const { suppliers } = await data.loadOptions(), selected = draft(suppliers);
+  const progress = { operationId:'transport-legacy-lost-response' };
+  f.failSecond();
+  await assert.rejects(data.post(selected, progress), /rede interrompida/);
+  delete progress.legacyLaunchIds;
+  delete f.rows.LANCAMENTOS[0].fields.field_16;
+  f.recover();
+  const create = f.repo.createItem;
+  f.repo.createItem = async (...args) => {
+    const row = await create(...args);
+    if (args[1] === 'LANCAMENTOS') {
+      delete row.fields.field_16;
+      throw new Error('resposta perdida');
+    }
+    return row;
+  };
+  await assert.rejects(data.post(selected, progress), /resposta perdida/);
+  await assert.rejects(data.post(selected, progress), /dados de um lançamento foram alterados/);
+  assert.equal(f.rows.LANCAMENTOS.length, 2);
+  assert.equal(f.rows.FOLHAPGTO.length, 1);
+});
+
+test('retomada espera a linha legada de uma gravação incerta aparecer antes de fixar os IDs antigos', async () => {
+  const f = fixture(), data = createMealVoucherData({ repository:f.repo, voucherType:'transport' });
+  const { suppliers } = await data.loadOptions(), selected = draft(suppliers);
+  const progress = { operationId:'transport-legacy-delayed-launch' };
+  const create = f.repo.createItem;
+  f.repo.createItem = async (...args) => {
+    const row = await create(...args);
+    if (args[1] === 'LANCAMENTOS') {
+      delete row.fields.field_16;
+      throw new Error('resposta perdida');
+    }
+    return row;
+  };
+  await assert.rejects(data.post(selected, progress), /resposta perdida/);
+  delete progress.legacyLaunchIds;
+  f.repo.createItem = create;
+  const getItemsPage = f.repo.getItemsPage;
+  f.repo.getItemsPage = async (...args) => args[1] === 'LANCAMENTOS'
+    ? { items:[], hasMore:false } : getItemsPage(...args);
+  await assert.rejects(data.post(selected, progress), /pendente de confirmação/);
+  f.repo.getItemsPage = getItemsPage;
+  await data.post(selected, progress);
+  assert.deepEqual(f.rows.LANCAMENTOS.map(row => row.fields.field_16), [undefined, 'outubro']);
   assert.equal(f.rows.FOLHAPGTO.length, 2);
 });
 

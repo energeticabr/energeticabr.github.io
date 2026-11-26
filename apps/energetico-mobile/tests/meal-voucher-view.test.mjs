@@ -53,7 +53,8 @@ test('campos gerais de alimentação alteram toda a lista filtrada, recalculam e
 
 test('vale transporte inicia os valores e sugere OBS com a data de Brasília', async t => {
   const dom = new JSDOM('<body></body>', { url:'https://example.invalid' }), doc = dom.window.document;
-  const suppliers = ['Ana Silva', 'ISRAEL ESCORAMENTO E ARMAÇÕES', 'Rafael Souza', 'Mauro Lima', 'Cleiton Cesar Nonato']
+  const suppliers = ['Ana Silva', 'ISRAEL ESCORAMENTO E ARMAÇÕES', 'Rafael Souza', 'Mauro Lima', 'Cleiton Cesar Nonato',
+    'EDGAR NELSON DA SILVA', 'Feliciano Rogério da Silva']
     .map((label, index) => ({ id:String(index + 1), label, branch:'OBRA A', profession:'PEDREIRO', cargo:'PEDREIRO I' }));
   const view = createMealVoucherView({ documentRef:doc, voucherType:'transport', now:() => new Date('2026-11-16T01:00:00Z'), data:{
     loadOptions:async () => ({ suppliers, accounts:[{id:'8',label:'CAIXA'}], stages:[{id:'7',label:'FUNDAÇÃO',branch:'OBRA A'}] }),
@@ -68,8 +69,8 @@ test('vale transporte inicia os valores e sugere OBS com a data de Brasília', a
   const click = selector => doc.querySelector(selector).click();
   await view.open();
   assert.equal(doc.querySelector('h2').textContent, 'Vale transporte dos fornecedores');
-  assert.deepEqual([...doc.querySelectorAll('[data-meal-quantity]')].map(node => node.value), ['5','0','0','0','0']);
-  assert.deepEqual([...doc.querySelectorAll('[data-meal-value]')].map(node => node.value), ['11','0','0','0','0']);
+  assert.deepEqual([...doc.querySelectorAll('[data-meal-quantity]')].map(node => node.value), ['5','0','0','0','0','0','0']);
+  assert.deepEqual([...doc.querySelectorAll('[data-meal-value]')].map(node => node.value), ['11,11','0','0','0','0','0','0']);
   click('[data-meal-next]'); await tick(); click('[data-meal-order-new]');
   for (const [name,val] of [['meal-date','2026-11-13'],['meal-due-date','2026-11-20'],['meal-reference-month','2026-11'],['meal-account','8'],['meal-stage','7']]) value(name,val);
   click('[data-meal-next]'); await tick();
@@ -77,7 +78,7 @@ test('vale transporte inicia os valores e sugere OBS com a data de Brasília', a
   click('[data-meal-next]');
   assert.match(doc.querySelector('h2').textContent, /lançamentos de vale transporte/);
   assert.equal(doc.querySelectorAll('[data-meal-person-card]').length, 1);
-  assert.match(doc.querySelector('[data-meal-review-total]').textContent, /55,00/);
+  assert.match(doc.querySelector('[data-meal-review-total]').textContent, /55,55/);
 });
 
 function testTray(initial = []) {
@@ -133,7 +134,7 @@ test('vale transporte mostra o popup por 1,5 s e abre o menu sem repetir a posta
   assert.equal(posts, 1);
   t.mock.timers.reset();
   await h.panel.open();
-  assert.equal(h.doc.querySelector('[data-meal-value="1"]').value, '11');
+  assert.equal(h.doc.querySelector('[data-meal-value="1"]').value, '11,11');
   assert.equal(h.doc.querySelector('[data-transport-success]'), null);
 });
 
