@@ -338,6 +338,17 @@ export function buildManagementExpenseTypeDashboard(snapshot, filters = {},
   // must not silently truncate the twelve-month trend or its category shares.
   const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "", product: "", supplier: "", stage: "", order: "" })
     .filter(row => equals(scalar(row.branch) || "-", branch) && equals(typeFor(row), expenseType));
+  return Object.freeze({ branch, expenseType, ...buildManagementSpendingDashboard(rows, now, true) });
+}
+
+export function buildManagementSupplierDashboard(snapshot, filters = {},
+  { branch, supplier, now = new Date() } = {}) {
+  const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "", supplier: "" })
+    .filter(row => (scalar(row.branch) || "-") === branch && (scalar(row.supplier) || "-") === supplier);
+  return Object.freeze({ branch, supplier, ...buildManagementSpendingDashboard(rows, now) });
+}
+
+function buildManagementSpendingDashboard(rows, now, includeSuppliers = false) {
   const current = new Date(now.getFullYear(), now.getMonth(), 1);
   const months = Array.from({ length: 12 }, (_, index) => {
     const date = new Date(current.getFullYear(), current.getMonth() - 11 + index, 1);
@@ -352,8 +363,8 @@ export function buildManagementExpenseTypeDashboard(snapshot, filters = {},
   const trendRows = rows.filter(row => inRange.has((row.paymentDate || row.dueDate || "").slice(0, 7)));
   const total = completeSum(trendRows, "total");
   const breakdown = field => Object.freeze(grouped(trendRows, field, total, 8).map(item => Object.freeze(item)));
-  return Object.freeze({ branch, expenseType, total, months: Object.freeze(months),
-    products: breakdown("product"), suppliers: breakdown("supplier"), stages: breakdown("stage") });
+  return { total, months: Object.freeze(months), products: breakdown("product"), stages: breakdown("stage"),
+    ...(includeSuppliers ? { suppliers: breakdown("supplier") } : {}) };
 }
 
 export function buildManagementProductDetail(snapshot, filters = {}, { branch, product, kind = "expense", asOfDate = new Date() } = {}) {
