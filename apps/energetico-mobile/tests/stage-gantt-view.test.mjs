@@ -3,6 +3,38 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createStageGanttView } from '../src/ui/stage-gantt-view.js';
 
+test('GANTT cadastra demonstrativo da etapa iniciada à esquerda de Finalizar', async t => {
+  const dom = new JSDOM('<!doctype html>');
+  t.after(() => dom.window.close());
+  const stage = { id: '41', branch: 'Obra A', stage: 'Fundação', type: 'ATIVIDADE COMUM', status: 'INICIADO' };
+  const opened = [];
+  const view = createStageGanttView({ document: dom.window.document, data: {
+    loadSnapshot: async () => ({
+      complete: true,
+      launches: [stage, { ...stage, id: '42', stage: 'Pintura', status: 'NÃO INICIADO' },
+        { ...stage, id: '43', stage: 'Estrutura', status: 'FINALIZADO' }],
+      activities: [{ id: '14', branch: stage.branch, stage: stage.stage, activity: 'Escavação',
+        property: '', supplier: '', status: 'ATIVIDADE INICIADA' }],
+    }),
+    async loadAssignments() {},
+    async finalizeStage() {},
+    async finalizeActivity() {},
+  }, onCreateDemonstrative: async id => { opened.push(id); } });
+  t.after(() => view.destroy());
+  await view.open();
+  view.element.querySelector('.gantt-toggle').click();
+  const buttons = view.element.querySelectorAll('.gantt-create-demonstrative-button');
+  assert.equal(buttons.length, 1);
+  const plus = buttons[0];
+  assert.equal(plus.closest('.gantt-row').querySelector('.gantt-name').textContent, stage.stage);
+  assert.equal(plus.textContent, '+');
+  assert.match(plus.getAttribute('aria-label'), /Fundação/);
+  assert.ok(plus.nextElementSibling.matches('.gantt-finish-button:disabled'));
+  plus.click();
+  plus.click();
+  assert.deepEqual(opened, ['41']);
+});
+
 test('GANTT expande as atividades abaixo da etapa e exibe datas e estados das barras', async t => {
   const dom = new JSDOM('<!doctype html><button data-action="open-stage-gantt">GANTT</button>');
   t.after(() => dom.window.close());

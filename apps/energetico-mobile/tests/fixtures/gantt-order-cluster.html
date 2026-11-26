@@ -13,7 +13,7 @@ const snapshot=window.ganttFixtureSnapshot??{complete:true,launches:[
  activity(122,'ARMAÇÃO FERRAGEM ARRIMO','2026-08-10','2026-11-13'),
  activity(119,'EXECUÇÃO PAREDES ARRIMO','2026-06-19','2026-09-14'),
 ]};
-const view=createStageGanttView({document,now:()=>new Date(2026,10,17),data:{async loadSnapshot(){return structuredClone(snapshot);},async loadAssignments(){return {complete:true,rows:[]};}}});
+const view=createStageGanttView({document,now:()=>new Date(2026,10,17),onCreateDemonstrative(){},data:{async loadSnapshot(){return structuredClone(snapshot);},async loadAssignments(){return {complete:true,rows:[]};},async finalizeStage(){}}});
 window.ganttFixtureView=view;
 await view.open();
 const root=view.element;
@@ -29,6 +29,10 @@ const names=[...root.querySelectorAll('.gantt-name')].map(node=>{
  const card=node.closest('.gantt-cluster--description'),css=getComputedStyle(node),label=node.closest('.gantt-label');
  return {name:node.textContent,tag:node.tagName,cluster:!!card,weight:Number(css.fontWeight),background:card&&getComputedStyle(card).backgroundColor,color:css.color,fits:node.scrollWidth<=node.clientWidth+1&&node.offsetWidth<=label.clientWidth};
 });
+const plus=masonry.querySelector('.gantt-create-demonstrative-button');
+const finish=masonry.querySelector('.gantt-finish-button');
+const createButton=plus&&{color:getComputedStyle(plus).color,background:getComputedStyle(plus).backgroundColor,
+ fits:plus.offsetWidth>=44&&plus.offsetHeight>=44&&plus.offsetLeft+plus.offsetWidth<=finish.offsetLeft&&plus.offsetTop===finish.offsetTop};
 root.querySelector('[aria-label="Atualizar GANTT"]').click();
 await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const refreshed=stageRows().map(row=>row.querySelector('.gantt-name').textContent);
@@ -41,5 +45,5 @@ const allDates=stageRows().map(row=>{
 branches.value=branch;branches.dispatchEvent(new Event('change'));
 stageRows().find(row=>row.querySelector('.gantt-name').textContent==='ALVENARIA E ESTRUTURAS').querySelector('.gantt-toggle').click();
 await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
-document.documentElement.dataset.layout=JSON.stringify({initial,children,names,refreshed,allDates});
+document.documentElement.dataset.layout=JSON.stringify({initial,children,names,refreshed,allDates,createButton});
 </script></body></html>

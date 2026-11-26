@@ -108,7 +108,7 @@ button.gantt-toggle {
 }
 .gantt-cluster--description[data-tone="finished"] { background: var(--gantt-finished); }
 .gantt-name { font-size: .9rem; font-weight: 800; white-space: normal; overflow-wrap: anywhere; }
-:is(.gantt-visibility-button, .gantt-start-button, .gantt-finish-button) {
+:is(.gantt-visibility-button, .gantt-start-button, .gantt-finish-button, .gantt-create-demonstrative-button) {
   display: block;
   width: max-content;
   max-width: 100%;
@@ -133,6 +133,12 @@ button.gantt-toggle {
   color: #0d4d61;
 }
 .gantt-row-actions > button:not(:only-child) { padding-inline: 6px; }
+.gantt-row-actions > .gantt-create-demonstrative-button {
+  min-width: 44px;
+  background: var(--gantt-finished);
+  font-size: 1.25rem;
+  line-height: 1;
+}
 .gantt-row-actions > .gantt-suppress-button:not(:disabled, [aria-disabled="true"]) {
   background: var(--gantt-ongoing); border-color: #8a202e; color: #fff;
 }

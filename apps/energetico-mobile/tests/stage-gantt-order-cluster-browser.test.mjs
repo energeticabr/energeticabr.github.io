@@ -29,6 +29,7 @@ test('GANTT mostra Fundação de maio acima de Alvenaria de agosto e destaca cad
      'rgb(13, 77, 97)', // Acabamento não iniciado.
     ]);
     assert.ok(result.names.every(name=>name.color==='rgb(255, 255, 255)'),JSON.stringify(result));
+    assert.deepEqual(result.createButton,{color:'rgb(255, 255, 255)',background:'rgb(36, 114, 58)',fits:true});
    }finally{dom.window.close();}
   }
  }finally{await server.close();}

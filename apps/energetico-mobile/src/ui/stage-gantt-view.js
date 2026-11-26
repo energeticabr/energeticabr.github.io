@@ -12,7 +12,7 @@ const monthStart = day => `${day.slice(0, 7)}-01`;
 const isoDay = date => date.toISOString().slice(0, 10);
 const stageVisibility = stage => stage.source?.visibility ?? STAGE_GANTT_VISIBLE;
 
-export function createStageGanttView({ document: doc = globalThis.document, data, now = () => new Date() } = {}) {
+export function createStageGanttView({ document: doc = globalThis.document, data, onCreateDemonstrative, now = () => new Date() } = {}) {
   const make = (tag, className = '', text = '') => {
     const node = doc.createElement(tag);
     node.className = className;
@@ -93,6 +93,7 @@ export function createStageGanttView({ document: doc = globalThis.document, data
   let snapshot;
   let pendingVisibility;
   let savingVisibility = false;
+  let openingDemonstrative = false;
   const expanded = new Set();
   let stages = [], today = '', todayRatio = null;
   const announce = message => { notice.textContent = message; notice.hidden = !message; };
@@ -305,6 +306,28 @@ export function createStageGanttView({ document: doc = globalThis.document, data
           if (!savingVisibility && !dialog.inert) void finish.open(item, start, { stage: parent, starting: true });
         });
         actions.append(start);
+      }
+      if (parent && item.source?.branch && item.source.stage && item.source.status.trim().toUpperCase() === 'INICIADO'
+        && typeof onCreateDemonstrative === 'function') {
+        const create = button('+', `Cadastrar demonstrativo da etapa ${item.name}`);
+        create.className = 'gantt-create-demonstrative-button';
+        create.title = create.getAttribute('aria-label');
+        create.addEventListener('click', async () => {
+          if (openingDemonstrative || savingVisibility || dialog.inert) return;
+          openingDemonstrative = true;
+          create.disabled = true;
+          const isCurrent = () => !root.hidden && !dialog.inert && create.isConnected;
+          try {
+            if (await onCreateDemonstrative(item.source.id, { isCurrent }) !== false) return;
+          } catch {
+            // The report is still open if the chat request did not begin.
+          } finally {
+            openingDemonstrative = false;
+            create.disabled = false;
+          }
+          if (isCurrent()) announce('Não foi possível abrir o cadastro de demonstrativo.');
+        });
+        actions.append(create);
       }
       if (!item.finished && typeof data[parent ? 'finalizeStage' : 'finalizeActivity'] === 'function'
         && typeof data.loadAssignments === 'function') {
