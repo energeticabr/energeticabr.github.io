@@ -341,15 +341,44 @@ button.ddr-link-cluster:focus-visible { outline:2px solid #105367; outline-offse
   box-sizing: border-box;
 }
 .dda-provision-filters--source {
-  display: flex;
-  flex-wrap: wrap;
+  grid-template-columns: minmax(0, 1fr) repeat(2, max-content);
 }
-.dda-provision-filters--source .dda-provision-search {
-  flex: 1 1 11rem;
+.dda-provision-filters--source:has(.dda-provision-status[hidden]) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, max-content);
 }
-.dda-provision-filters--source select {
-  flex: 1 1 auto;
-  max-width: 100%;
+.dda-provision-dialog:has(.dda-provision-source) {
+  container: dda-link / inline-size;
+  overflow-y: auto;
+}
+@container dda-link (max-width: 575px) {
+  .dda-provision-filters--source:has(.dda-provision-status:not([hidden])) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dda-provision-filters--source:has(.dda-provision-status:not([hidden])) .dda-provision-search {
+    grid-column: 1 / -1;
+  }
+  .gallery-editor-header {
+    margin-bottom: 6px;
+  }
+  .dda-provision-dialog .gallery-editor-header h2 {
+    font-size: 0.95rem;
+    line-height: 1.2;
+    margin-bottom: 0;
+  }
+  .dda-provision-summary,
+  .dda-provision-feedback {
+    margin-block: 5px;
+  }
+  .dda-provision-option {
+    padding: 6px;
+    gap: 4px;
+  }
+  .dda-provision-options {
+    min-height: 72px;
+  }
+  .dda-provision-dialog .gallery-record-dialog-buttons {
+    margin-top: 6px;
+  }
 }
 .dda-provision-status,
 .dda-provision-source {
