@@ -27,7 +27,8 @@ const LAUNCH_GROUP_MAX_PAGES = 100;
 const LAUNCH_GROUP_PREFER = "HonorNonIndexedQueriesWarningMayFailRandomly";
 // Internal names confirmed for LANCAMENTOS; the report renders their display labels.
 const LAUNCH_GROUP_FIELDS = Object.freeze([
-  ["DATA", "field_2"], ["DATA PGTO PREVISTO", "field_3"], ["FORNECEDOR", "field_5"], ["PRODUTO", "field_7"],
+  ["DATA", "field_2"], ["DATA PGTO PREVISTO", "field_3"], ["DATA PGTO EFETUADO", "field_4"],
+  ["FORNECEDOR", "field_5"], ["PRODUTO", "field_7"],
   ["QUANTIDADE", "field_8"], ["VALOR UNITÁRIO", "field_9"], ["FRETE", "field_10"],
   ["CONTA", "field_14"], ["CONCLUÍDO", "field_19"],
 ]);

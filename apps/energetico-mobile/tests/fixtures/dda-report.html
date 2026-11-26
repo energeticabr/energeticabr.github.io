@@ -17,7 +17,10 @@ const settlementLayout=new URLSearchParams(location.search).has('settlement');
 const paymentMode=new URLSearchParams(location.search).get('payment');
 const refusalMode=new URLSearchParams(location.search).has('refusal');
 const priorityMode=new URLSearchParams(location.search).get('priority');
-if(settlementLayout)Object.assign(source[3].fields,{VENCIMENTO:'2026-10-28',DDA_CICLO_AGENDAMENTO:'PAGO_AGENDADO',DESCRITIVOPROVIS_x00c3_O:'56'});
+if(settlementLayout){
+ Object.assign(source[3].fields,{VENCIMENTO:'2026-10-28',DDA_CICLO_AGENDAMENTO:'PAGO_AGENDADO',DESCRITIVOPROVIS_x00c3_O:'56'});
+ source.push({id:'5',fields:{Title:'PAGO SEM VÍNCULO — EXEMPLO',VENCIMENTO:'2026-12-02',SITUACAO:'Pago',VALOR:50,Created:'2026-11-27T13:00:00Z'}});
+}
 source[0].fields.CNPJ_FORNECEDOR='00.111.111/0001-22';
 source[0].fields.DESCRITIVOPROVIS_x00c3_O='46';
 source[0].fields.EMISSAO='2026-10-20T00:00:00Z';
@@ -102,6 +105,7 @@ if(settlementLayout){
  await document.fonts.ready;await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
  const badge=document.querySelector('[data-dda-id="4"] .ddr-schedule-cluster'),note=badge?.querySelector('.ddr-settlement-pending');
  const action=document.querySelector('[data-dda-settle-provision="4"]');
+ const pendingLink=document.querySelector('[data-dda-id="5"] .ddr-settlement-pending');
  const paidRow=badge.closest('tr');
  const paidBackgrounds=[...new Set([paidRow,...paidRow.cells].map(cell=>getComputedStyle(cell).backgroundColor))];
  const openBackground=getComputedStyle(document.querySelector('[data-dda-id="1"]')).backgroundColor;
@@ -111,7 +115,8 @@ if(settlementLayout){
   fits:badge?.scrollWidth<=badge?.clientWidth+1&&note?.scrollWidth<=note?.clientWidth+1,
   aligned:badge?.parentElement.children.length===1,
   actionFits:action?.offsetWidth>0&&action.offsetWidth<=action.parentElement.clientWidth,
-  selected:document.documentElement.dataset.ddaSettlementSelected,paidBackgrounds,openBackground});
+  selected:document.documentElement.dataset.ddaSettlementSelected,paidBackgrounds,openBackground,
+  pendingLink:pendingLink?.textContent,pendingLinkFits:pendingLink?.scrollWidth<=pendingLink?.clientWidth+1});
 }
 if(syncMode){
  const refresh=document.querySelector('.pl-refresh');refresh.click();refresh.click();await new Promise(r=>setTimeout(r,0));

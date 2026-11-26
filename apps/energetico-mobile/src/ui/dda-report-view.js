@@ -314,7 +314,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   for(const [label,value,hint] of [['DDAs encontrados',result.rows.length],['Valor nominal total',money(result.total)],['Vencidos no filtro',result.overdue],['Vencem hoje',result.today],['Qtd DDA vencendo em 7d',result.dueWithin7Days,'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo em 7d',money(result.totalDueWithin7Days),'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo hoje',money(result.totalDueToday),'Vencimento hoje, conforme os filtros.']]){const metric=make('div','ddr-metric');if(hint)metric.title=hint;metric.append(make('span','',label),make('strong','',value));summary.append(metric);}
   summary.append(lastUpdate.element,refreshStatus.element);content.append(summary);
   content.append(make('p','ddr-source','Situação bancária, pagamento confirmado ou recusa registrada pelo usuário. Ordenação pela data de priorização, quando indicada, ou pelo vencimento.'));
-  if(result.visibleOutsideStatus)content.append(make('p','ddr-source',`${result.visibleOutsideStatus} DDA(s) pagos com baixa pendente ficam fora dos totais da situação selecionada.`));
+  if(result.visibleOutsideStatus)content.append(make('p','ddr-source',`${result.visibleOutsideStatus} DDA(s) em acompanhamento ficam fora dos totais da situação selecionada.`));
   if(result.missingAmounts)content.append(make('p','ddr-warning',`${result.missingAmounts} DDA(s) sem valor nominal válido. Total indisponível.`));
   if(!result.rows.length){content.append(make('p','ddr-empty','Nenhum DDA encontrado para os filtros selecionados.'));return;}
   const table=make('table','ddr-table');table.setAttribute('aria-label','DDAs da empresa');const head=make('thead'),tr=make('tr'),body=make('tbody');
@@ -365,7 +365,11 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
     cluster.dataset.scheduleState=row.paidBySchedule?'paid':'scheduled';
    }
    const pendingSettlement=ddaSettlementPending(row,settledDdaIds);
-   if(pendingSettlement)cluster.append(make('small','ddr-settlement-pending','Baixa pendente'));
+   const pendingLink=row.requiresSettledLink&&pendingSettlement&&!row.provisionId&&!row.orderId;
+   if(pendingSettlement){
+    const label=pendingLink?'Vinculação pendente':row.orderId&&!row.provisionId?'Lançamento pendente':'Baixa pendente';
+    cluster.append(make('small','ddr-settlement-pending',label));
+   }
    status.append(cluster);
    if(row.priorityDate){
     const priority=make('div','ddr-status-cluster ddr-priority-cluster');
@@ -382,15 +386,16 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const link=make('td','ddr-link');
    const linked=row.provisionId||row.orderId;
    const linkConflict=row.provisionId&&row.orderId;
-   const linkState=linked?'linked':row.linkReviewed?'regularized':'missing';
+   const regularized=row.linkReviewed&&!row.requiresSettledLink;
+   const linkState=linked?'linked':regularized?'regularized':'missing';
    const canReview=!printAll&&canReviewDdaUnlinked(row)&&typeof data.unlinkedReview?.save==='function';
    const linkLabel=linkConflict?`Descritivo ID ${row.provisionId} · Pedido ID ${row.orderId}`
-    :row.provisionId?`ID ${row.provisionId}`:row.orderId?`Pedido ID ${row.orderId}`:row.linkReviewed?'SEM VINCULAÇÃO':'N/A';
+    :row.provisionId?`ID ${row.provisionId}`:row.orderId?`Pedido ID ${row.orderId}`:regularized?'SEM VINCULAÇÃO':'N/A';
    const linkCluster=make(canReview?'button':'span','ddr-link-cluster',linkLabel);
    linkCluster.dataset.linkState=linkState;
    linkCluster.title=linkConflict?'Confirme qual vínculo deve ficar antes de dar baixa.'
     :row.provisionId?`Descritivo provisão vinculado: ID ${row.provisionId}`
-    :row.orderId?`Pedido vinculado: ID ${row.orderId}`:row.linkReviewed?'Ausência de vinculação regularizada':'Nenhum vínculo registrado';
+    :row.orderId?`Pedido vinculado: ID ${row.orderId}`:regularized?'Ausência de vinculação regularizada':'Nenhum vínculo registrado';
    if(canReview){
     linkCluster.type='button';linkCluster.dataset.ddaUnlinkedReview=row.id;
     linkCluster.addEventListener('click',()=>askUnlinkedReview(row,linkCluster));
@@ -507,7 +512,9 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    let verified=initialSettledDdaIds;
    // The automatic reminder only checks paid DDAs before opening the report.
    if(!verified||nextRows.some(row=>row.provisionId&&row.status!=='Pago')){
-    if(nextRows.some(row=>row.provisionId))loading.textContent='Conferindo baixas de provisões no SharePoint…';
+    if(nextRows.some(row=>row.provisionId||(row.requiresSettledLink&&row.orderId&&row.status==='Pago'))){
+     loading.textContent='Conferindo baixas e lançamentos no SharePoint…';
+    }
     verified=await readSettledDdaIds(nextRows,data.provisionLink,active.signal,{includeUnpaid:true});
    }
    if(!isCurrent())return;

@@ -10,6 +10,8 @@ export {ddaSearchKey} from './dda-bank-status.js';
 const text=value=>typeof value==='string'||typeof value==='number'?String(value).trim():'';
 const linkId=value=>{const id=text(value);return /^[1-9]\d*$/.test(id)&&Number.isSafeInteger(Number(id))?id:'';};
 const auditTime=value=>/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)?Date.parse(value):NaN;
+// Apply the rule to new SharePoint entries starting at 16:00 Brasília on 26/11/2026.
+const DDA_SETTLED_LINK_START=Date.parse('2026-11-26T19:00:00Z');
 
 function ddaWasScheduledAt(row,confirmedAt){
  const observedAt=auditTime(row.scheduledAt);
@@ -17,12 +19,18 @@ function ddaWasScheduledAt(row,confirmedAt){
 }
 
 export function ddaSettlementPending(row,settledDdaIds){
- return Boolean(settledDdaIds&&row.status==='Pago'
+ if(row.status!=='Pago')return false;
+ if(row.requiresSettledLink){
+  if(row.orderId)return Boolean(row.provisionId)||!settledDdaIds?.has(row.id);
+  return !row.provisionId||!settledDdaIds?.has(row.id);
+ }
+ return Boolean(settledDdaIds
   &&(row.provisionId||(!row.orderId&&row.paidBySchedule))&&!settledDdaIds.has(row.id));
 }
 
 export async function readSettledDdaIds(rows,provisionLink,signal,{includeUnpaid=false}={}){
- const candidates=rows.filter(row=>row.provisionId&&row.status!==DDA_REFUSED_STATUS&&(includeUnpaid||row.status==='Pago'));
+ const candidates=rows.filter(row=>row.status!==DDA_REFUSED_STATUS&&
+  (row.provisionId?(includeUnpaid||row.status==='Pago'):row.requiresSettledLink&&row.orderId&&row.status==='Pago'));
  if(!candidates.length)return new Set();
  if(typeof provisionLink?.loadSettledDdaIds!=='function')return null;
  try{
@@ -56,23 +64,29 @@ export function normalizeDdaReportRows(snapshot){
   const paidBySchedule=scheduleLifecycle==='PAGO_AGENDADO'||Boolean(audited&&ddaWasScheduledAt({scheduledAt},confirmedAt));
   const status=normalizeDdaStatus(value('SITUACAO'));
   const priorityDate=registrationDateKey(value(DDA_PRIORITY_FIELD));
+  const created=value('Created')??value('Criado')??row.createdDateTime;
+  const requiresSettledLink=auditTime(created)>=DDA_SETTLED_LINK_START;
   // Preserve legacy text for the write precondition even when it is not a usable link ID.
   const linkSnapshot=Object.freeze({
    provisionId:text(value('DESCRITIVOPROVIS_x00c3_O')),orderId:text(value(DDA_ORDER_FIELD)),
   });
-  return {id,paymentLine,key:text(value('CHAVE_DDA')),paidManually,confirmedAt,paidBySchedule,scheduledAt,supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),priorityDate,issued:registrationDateKey(value('EMISSAO')),amount,status:paidBySchedule&&status!==DDA_REFUSED_STATUS?'Pago':status,schedule,document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt,provisionId:linkId(linkSnapshot.provisionId),orderId:linkId(linkSnapshot.orderId),linkSnapshot,linkReviewed:value(DDA_UNLINKED_REVIEW_FIELD)===true};
+  return {id,paymentLine,key:text(value('CHAVE_DDA')),paidManually,confirmedAt,paidBySchedule,scheduledAt,supplier:text(value('FORNECEDOR'))||'Fornecedor não informado',supplierCnpj:supplierCnpj(value('CNPJ_FORNECEDOR')),due:registrationDateKey(value('VENCIMENTO')),priorityDate,issued:registrationDateKey(value('EMISSAO')),amount,status:paidBySchedule&&status!==DDA_REFUSED_STATUS?'Pago':status,schedule,document:text(value('DOCUMENTO')),bank:text(value('BANCO')),payer:text(value('PAGADOR')),checkedAt,provisionId:linkId(linkSnapshot.provisionId),orderId:linkId(linkSnapshot.orderId),linkSnapshot,linkReviewed:value(DDA_UNLINKED_REVIEW_FIELD)===true,requiresSettledLink};
  });
  const counts=new Map();
  for(const row of normalized)if(row.supplierCnpj)counts.set(row.supplierCnpj,(counts.get(row.supplierCnpj)||0)+1);
  return Object.freeze(normalized.map(row=>Object.freeze({...row,supplierDdaCount:row.supplierCnpj?counts.get(row.supplierCnpj):null})));
 }
 export function canReviewDdaUnlinked(row){
- return !row.provisionId&&!row.orderId&&!row.paidManually&&isDdaOpenStatus(row.status);
+ return !row.requiresSettledLink&&!row.provisionId&&!row.orderId&&!row.paidManually&&isDdaOpenStatus(row.status);
 }
 export function hasDdaMenuAlert(rows,now=new Date()){
  const today=ddaTodayKey(now);
- return rows.some(row=>row.due&&!row.paidManually&&isDdaOpenStatus(row.status)&&
-  (row.due<=today||(!row.provisionId&&!row.orderId&&!row.linkReviewed)));
+ return rows.some(row=>{
+  const unlinked=!row.provisionId&&!row.orderId;
+  if(row.requiresSettledLink&&row.status==='Pago'&&unlinked)return true;
+  return row.due&&!row.paidManually&&isDdaOpenStatus(row.status)&&
+   (row.due<=today||(unlinked&&(!row.linkReviewed||row.requiresSettledLink)));
+ });
 }
 export function buildDdaReport(rows,{status='Em aberto',bank='',search='',settledDdaIds}={},now=new Date()){
  const query=normalizeSearchText(search),today=ddaTodayKey(now);
@@ -81,8 +95,10 @@ export function buildDdaReport(rows,{status='Em aberto',bank='',search='',settle
  const matchesStatus=row=>row.status===DDA_REFUSED_STATUS
   ? status===DDA_REFUSED_STATUS
   : !status||(openFilter?isDdaOpenStatus(row.status):row.status===status);
+ const awaitingClosure=row=>openFilter&&row.status!==DDA_REFUSED_STATUS&&
+  (ddaSettlementPending(row,settledDdaIds)||(status==='Em aberto'&&row.requiresSettledLink&&row.status!=='Pago'));
  const sortingDate=row=>row.priorityDate||row.due||'9999';
- const filtered=rows.filter(row=>(matchesStatus(row)||(openFilter&&ddaSettlementPending(row,settledDdaIds)))&&(!bank||row.bank===bank)&&(!query||includesSearchText(normalizeSearchText([row.id,row.supplier,row.document,row.bank].join(' ')),query)))
+ const filtered=rows.filter(row=>(matchesStatus(row)||awaitingClosure(row))&&(!bank||row.bank===bank)&&(!query||includesSearchText(normalizeSearchText([row.id,row.supplier,row.document,row.bank].join(' ')),query)))
   .sort((a,b)=>sortingDate(a).localeCompare(sortingDate(b))||Number(a.id)-Number(b.id));
  const inStatus=filtered.filter(matchesStatus);
  const missingAmounts=inStatus.filter(row=>row.amount==null).length;

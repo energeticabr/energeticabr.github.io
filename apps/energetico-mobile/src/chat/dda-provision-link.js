@@ -103,7 +103,9 @@ export function rankDdaProvisionOptions(options,{supplier,amount,due}={}){
  }));
 }
 
-export function createDdaProvisionLink({repository,directRepository=repository,siteKey='personal',assertSession=()=>{},loadOrderOptions}){
+export function createDdaProvisionLink({
+ repository,directRepository=repository,siteKey='personal',assertSession=()=>{},loadOrderOptions,loadLaunchGroup,
+}){
  if(!repository)throw new TypeError('Repositório SharePoint obrigatório.');
  function active(signal){assertSession();signal?.throwIfAborted();}
  let listPromise;
@@ -155,7 +157,7 @@ export function createDdaProvisionLink({repository,directRepository=repository,s
   }
   return options;
  }
- async function loadSettledDdaIds(rows,{signal}={}){
+ async function loadSettledProvisionDdaIds(rows,signal){
   const candidates=new Map(),settled=new Set();
   for(const row of rows){
    if(!validId(row.id)||!validId(row.provisionId))continue;
@@ -183,39 +185,81 @@ export function createDdaProvisionLink({repository,directRepository=repository,s
    if(rawLink!=null&&typeof rawLink!=='string'&&typeof rawLink!=='number')throw new Error('Vínculo de provisão inválido.');
    const parent=String(rawLink??'').trim();
    if(!candidates.has(parent))continue;
-   if(!groups.has(parent))groups.set(parent,{count:0,hasDue:false,undatedUnpaid:false,unpaidDays:new Set()});
+   if(!groups.has(parent))groups.set(parent,{count:0,hasDue:false,unpaidDays:new Set(),confirmedDays:new Set()});
    const group=groups.get(parent),due=paymentDateKey(line.fields[paymentFields.DATAPREVISTOPGTO]
     ??childField(line.fields,columns,'DATAPGTOPREVISTO'));
    group.count++;
    if(due)group.hasDue=true;
-   if(!provisionChildPaid(line.fields,paymentFields)){
-    if(due)group.unpaidDays.add(due);
-    else group.undatedUnpaid=true;
-   }
+   const paid=provisionChildPaid(line.fields,paymentFields);
+   if(!paid)group.unpaidDays.add(due);
+   else if(due)group.confirmedDays.add(due);
   }
-  const fullyPaidGroups=new Map();
+  const parentChecks=new Map();
   for(const [parent,group] of groups){
    for(const row of candidates.get(parent)){
-    if(row.status==='Pago'&&group.count>1&&row.due&&group.hasDue){
-     // A different due day under the same parent is a separate obligation.
-     if(!group.undatedUnpaid&&!group.unpaidDays.has(row.due))settled.add(row.id);
-    }else if(!group.undatedUnpaid&&!group.unpaidDays.size){
-     // Retain the existing proof for single provisions, unpaid DDAs and missing dates.
-     if(!fullyPaidGroups.has(parent))fullyPaidGroups.set(parent,[]);
-     fullyPaidGroups.get(parent).push(row.id);
+    const strict=row.requiresSettledLink;
+    const unpaid=group.unpaidDays;
+    const coversDue=strict?group.confirmedDays.has(row.due):group.hasDue;
+    const byDue=row.status==='Pago'&&group.count>1&&row.due&&coversDue;
+    const duePaid=byDue&&!unpaid.has('')&&!unpaid.has(row.due);
+    if(!strict&&byDue){
+     if(duePaid)settled.add(row.id);
+    }else if(!unpaid.size||duePaid){
+     // A verified installment is independent of other due dates under the same description.
+     if(!parentChecks.has(parent))parentChecks.set(parent,[]);
+     parentChecks.get(parent).push({id:row.id,needsPaidDate:!unpaid.size,strict});
     }
    }
   }
-  const checkParent=async ([id,ddaIds])=>{
+  const checkParent=async ([id,ddaRows])=>{
    let item;
    try{item=await repository.getItem(siteKey,parents.id,id,'?$expand=fields',{signal});}
    catch{active(signal);return;}
    active(signal);
-   if(hasItemIdentity(item,id)&&paymentDateKey(item.fields.DATAPGTOEFETUADO))for(const ddaId of ddaIds)settled.add(ddaId);
+   if(!hasItemIdentity(item,id))return;
+   const paidDate=paymentDateKey(item.fields.DATAPGTOEFETUADO);
+   for(const row of ddaRows){
+    if((!row.strict||item.fields.STATUS!==PROVISION_FISCAL_DRAFT_STATUS)&&(!row.needsPaidDate||paidDate))settled.add(row.id);
+   }
   };
-  const paidGroups=[...fullyPaidGroups];
+  const paidGroups=[...parentChecks];
   for(let offset=0;offset<paidGroups.length;offset+=8)await Promise.all(paidGroups.slice(offset,offset+8).map(checkParent));
   return settled;
+ }
+ async function loadPostedOrderDdaIds(rows,signal){
+  const candidates=new Map(),posted=new Set();
+  if(!loadLaunchGroup)return posted;
+  for(const row of rows){
+   if(!row.requiresSettledLink||row.status!=='Pago'||row.provisionId||!validId(row.orderId))continue;
+   if(!candidates.has(row.orderId))candidates.set(row.orderId,[]);
+   candidates.get(row.orderId).push(row.id);
+  }
+  if(!candidates.size)return posted;
+  active(signal);
+  let orders;
+  try{orders=await directRepository.resolveList(siteKey,['NOTASPENDENTES'],{signal});}
+  catch{active(signal);return posted;}
+  active(signal);
+  if(orders?.status!=='resolved'||!orders.id)return posted;
+  const checkOrder=async ([id,ddaIds])=>{
+   try{
+    const order=await directRepository.getItem(siteKey,orders.id,id,undefined,{signal,restrictedFields:['ID']});
+    active(signal);
+    if(!hasItemIdentity(order,id))return;
+    const launches=await loadLaunchGroup(id,{signal});
+    active(signal);
+    if(launches.length&&launches.every(item=>paymentDateKey(item.fields['DATA PGTO EFETUADO']))){
+     for(const ddaId of ddaIds)posted.add(ddaId);
+    }
+   }catch{active(signal);}
+  };
+  const checks=[...candidates];
+  for(let offset=0;offset<checks.length;offset+=6)await Promise.all(checks.slice(offset,offset+6).map(checkOrder));
+  return posted;
+ }
+ async function loadSettledDdaIds(rows,{signal}={}){
+  const [provisions,orders]=await Promise.all([loadSettledProvisionDdaIds(rows,signal),loadPostedOrderDdaIds(rows,signal)]);
+  return new Set([...provisions,...orders]);
  }
  async function save({ddaId,provisionId,signal,sharedLinkETag,expectedLink}){
   if(!validId(ddaId)||!validId(provisionId))throw new RangeError('ID de vínculo inválido.');
