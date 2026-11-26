@@ -7,6 +7,11 @@ let writes=0,dateWrites=0;
 const duplicate=new URLSearchParams(location.search).has('duplicate');
 const nameFallback=new URLSearchParams(location.search).has('fallback');
 const alignDue=new URLSearchParams(location.search).has('alignDue');
+if(new URLSearchParams(location.search).has('wideControls')){
+ const style=document.createElement('style');
+ style.textContent='.dda-provision-filters select { letter-spacing: 2px; }';
+ document.head.append(style);
+}
 const frame=()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
 const view=createDdaReportView({document,data:{
  loadSnapshot:async()=>({rows:[{id:'28',fields:{Title:'FORNECEDOR FICTÍCIO',VALOR:360,SITUACAO:'Em aberto',VENCIMENTO:'2026-11-04'}}]}),
