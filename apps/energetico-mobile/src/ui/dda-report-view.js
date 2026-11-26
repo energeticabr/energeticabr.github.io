@@ -1,5 +1,5 @@
 import {normalizeDdaReportRows,buildDdaReport,ddaSettlementPending,readSettledDdaIds,canReviewDdaUnlinked} from '../chat/dda-report-model.js';
-import {DDA_REFUSED_STATUS} from '../chat/dda-bank-status.js';
+import {DDA_REFUSED_STATUS,canPrioritizeDda} from '../chat/dda-bank-status.js';
 import {ddaDueTone,ddaTodayKey} from './dda-card.js';
 import {bindReportLandscape} from './report-landscape.js';
 import {addReportCloseControl} from './report-close-control.js';
@@ -15,7 +15,7 @@ const money=value=>value==null?'Não disponível':new Intl.NumberFormat('pt-BR',
 const date=value=>value?value.slice(8,10)+'/'+value.slice(5,7)+'/'+value.slice(0,4):'Não informado';
 const weekday=new Intl.DateTimeFormat('pt-BR',{weekday:'long',timeZone:'UTC'});
 const daysSince=(day,today)=>Math.round((Date.parse(`${today}T00:00:00Z`)-Date.parse(`${day}T00:00:00Z`))/86400000);
-const ROW_CONTROLS=['data-dda-pdf','data-dda-provision-check','data-dda-provision-pencil','data-dda-settle-provision','data-dda-toggle-barcode','data-dda-copy-barcode','data-dda-unlinked-review','data-dda-refuse'];
+const ROW_CONTROLS=['data-dda-pdf','data-dda-provision-check','data-dda-provision-pencil','data-dda-settle-provision','data-dda-toggle-barcode','data-dda-copy-barcode','data-dda-unlinked-review','data-dda-refuse','data-dda-prioritize'];
 function rowControlSelector(element){
  const attribute=ROW_CONTROLS.find(name=>element?.hasAttribute(name));
  return attribute?`[${attribute}="${element.getAttribute(attribute)}"]`:null;
@@ -177,22 +177,49 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    },
   });
  }
- function askDdaDecision(row,trigger,{question,marker,errorMessage,save}){
+ function askPriority(row,trigger){
+  const input=make('input','ddr-priority-date');
+  input.type='date';input.required=true;input.max='9999-12-31';input.value=row.priorityDate;
+  input.setAttribute('aria-label','Data de priorização');
+  askDdaDecision(row,trigger,{
+   question:'Qual a data de priorização?',
+   marker:'ddaPriorityDialog',
+   input,cancelLabel:'Cancelar',submitLabel:'Salvar',
+   errorMessage:'Não foi possível confirmar a priorização. Tente novamente ou atualize o relatório.',
+   async save(signal){
+    const priorityDate=input.value;
+    const receipt=await data.prioritizeDda({row,priorityDate,signal});
+    if(receipt?.id!==row.id||receipt.priorityDate!==priorityDate)throw new Error('Confirmação inválida.');
+    return {priorityDate};
+   },
+  });
+ }
+ function askDdaDecision(row,trigger,{question,marker,input,cancelLabel='Não',submitLabel='Sim',errorMessage,save}){
   if(destroyed||root.hidden||root.getAttribute('aria-busy')==='true'||nestedViewOpen()||settlementOpening||!rows?.includes(row))return;
   const overlay=make('div','gallery-record-overlay dda-payment-overlay');
   const dialog=make('section','gallery-record-dialog dda-payment-dialog');
   dialog.dataset[marker]='';dialog.tabIndex=-1;
   dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-label',question);
   const feedback=make('p','dda-payment-feedback');feedback.setAttribute('role','status');
-  const actions=make('div','gallery-record-dialog-buttons'),no=button('Não'),yes=button('Sim');
-  yes.className='dda-payment-yes';actions.append(no,yes);
-  dialog.append(make('h2','',question),make('p','dda-payment-summary',row.supplier+' · DDA '+row.id),feedback,actions);
+  const form=make('form'),actions=make('div','gallery-record-dialog-buttons'),no=button(cancelLabel),yes=button(submitLabel);
+  yes.type='submit';yes.className='dda-payment-yes';actions.append(no,yes);
+  const first=input||no;
+  if(input){
+   // Let Tab move through the native date segments before wrapping the dialog.
+   const start=make('span','sr-only');start.tabIndex=0;start.setAttribute('aria-hidden','true');
+   start.addEventListener('focus',()=>(yes.disabled?dialog:yes).focus({preventScroll:true}));
+   form.append(start,input);
+  }
+  form.append(feedback,actions);
+  dialog.append(make('h2','',question),make('p','dda-payment-summary',row.supplier+' · DDA '+row.id),form);
   overlay.append(dialog);
   const entry=decisionDialog={overlay,trigger};
   no.addEventListener('click',closeDecisionDialog);
-  yes.addEventListener('click',async()=>{
+  form.addEventListener('submit',async event=>{
+   event.preventDefault();
    if(yes.disabled||decisionDialog!==entry)return;
-   no.disabled=yes.disabled=true;feedback.setAttribute('role','status');feedback.textContent='Salvando no SharePoint…';dialog.focus();
+   for(const control of form.elements)control.disabled=true;
+   feedback.setAttribute('role','status');feedback.textContent='Salvando no SharePoint…';dialog.focus();
    try{
     const change=await save(controller.signal);
     if(decisionDialog!==entry)return;
@@ -202,18 +229,19 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    }catch{
     if(decisionDialog!==entry)return;
     feedback.setAttribute('role','alert');feedback.textContent=errorMessage;
-    no.disabled=yes.disabled=false;no.focus();
+    for(const control of form.elements)control.disabled=false;
+    (input||no).focus();
    }
   });
   overlay.addEventListener('keydown',event=>{
    if(event.key==='Escape'){
     event.preventDefault();event.stopPropagation();if(!no.disabled)closeDecisionDialog();
-   }else if(event.key==='Tab'){
+   }else if(event.key==='Tab'&&(!input||no.disabled||(!event.shiftKey&&doc.activeElement===yes))){
     event.preventDefault();event.stopPropagation();
-    (no.disabled?dialog:doc.activeElement===no?yes:no).focus();
+    (no.disabled?dialog:doc.activeElement===yes?first:yes).focus();
    }
   });
-  panel.inert=true;root.append(overlay);no.focus();
+  panel.inert=true;root.append(overlay);first.focus();
  }
  function askSettlement(row,trigger){
   if(root.hidden||destroyed||root.getAttribute('aria-busy')==='true'||nestedViewOpen()||settlementOpening
@@ -283,7 +311,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
   if(balanceMetric)summary.append(balanceMetric.element);
   for(const [label,value,hint] of [['DDAs encontrados',result.rows.length],['Valor nominal total',money(result.total)],['Vencidos no filtro',result.overdue],['Vencem hoje',result.today],['Qtd DDA vencendo em 7d',result.dueWithin7Days,'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo em 7d',money(result.totalDueWithin7Days),'De hoje até daqui a 7 dias, inclusive, conforme os filtros.'],['Valor DDA vencendo hoje',money(result.totalDueToday),'Vencimento hoje, conforme os filtros.']]){const metric=make('div','ddr-metric');if(hint)metric.title=hint;metric.append(make('span','',label),make('strong','',value));summary.append(metric);}
   summary.append(lastUpdate.element,refreshStatus.element);content.append(summary);
-  content.append(make('p','ddr-source','Situação bancária, pagamento confirmado ou recusa registrada pelo usuário. Ordenação pelo vencimento mais próximo.'));
+  content.append(make('p','ddr-source','Situação bancária, pagamento confirmado ou recusa registrada pelo usuário. Ordenação pela data de priorização, quando indicada, ou pelo vencimento.'));
   if(result.visibleOutsideStatus)content.append(make('p','ddr-source',`${result.visibleOutsideStatus} DDA(s) pagos com baixa pendente ficam fora dos totais da situação selecionada.`));
   if(result.missingAmounts)content.append(make('p','ddr-warning',`${result.missingAmounts} DDA(s) sem valor nominal válido. Total indisponível.`));
   if(!result.rows.length){content.append(make('p','ddr-empty','Nenhum DDA encontrado para os filtros selecionados.'));return;}
@@ -293,6 +321,7 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const refused=row.status===DDA_REFUSED_STATUS;
    const line=make('tr');line.dataset.ddaId=row.id;
    line.toggleAttribute('data-dda-paid',row.status==='Pago');
+   line.toggleAttribute('data-dda-prioritized',Boolean(row.priorityDate));
    const pastDue=Boolean(row.due&&row.due<today);
    const due=make('td','ddr-due');due.dataset.dueTone=pastDue?'overdue':ddaDueTone(row.due,currentDate);
    const dueDate=make('span','ddr-due-date',date(row.due));
@@ -336,6 +365,18 @@ export function createDdaReportView({document:doc=globalThis.document,data,openM
    const pendingSettlement=ddaSettlementPending(row,settledDdaIds);
    if(pendingSettlement)cluster.append(make('small','ddr-settlement-pending','Baixa pendente'));
    status.append(cluster);
+   if(row.priorityDate){
+    const priority=make('div','ddr-status-cluster ddr-priority-cluster');
+    const day=make('time','',date(row.priorityDate));day.dateTime=row.priorityDate;
+    priority.append(make('strong','','DATA PRIOR'),day);
+    status.append(priority);
+   }
+   if(!printAll&&row.key&&canPrioritizeDda(row.status)&&typeof data.prioritizeDda==='function'){
+    const prioritize=button('Priorizar DDA '+row.id,'PRIORIZAR');
+    prioritize.className='ddr-prioritize';prioritize.dataset.ddaPrioritize=row.id;
+    prioritize.addEventListener('click',()=>askPriority(row,prioritize));
+    status.append(prioritize);
+   }
    const link=make('td','ddr-link');
    const linkState=row.provisionId?'linked':row.linkReviewed?'regularized':'missing';
    const canReview=!printAll&&canReviewDdaUnlinked(row)&&typeof data.unlinkedReview?.save==='function';

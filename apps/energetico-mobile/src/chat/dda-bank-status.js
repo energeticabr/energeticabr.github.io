@@ -3,6 +3,7 @@ import { ddaPaidManually } from './dda-payment-confirmation.js';
 export const DDA_UNLINKED_REVIEW_FIELD = 'DDA_x0020_sem_x0020_vincula_x00e';
 export const DDA_REFUSED_FIELD = 'DDA_RECUSADO';
 export const DDA_REFUSED_STATUS = 'Recusado';
+export const DDA_PRIORITY_FIELD = 'DATA_PRIOR';
 
 const statusLabels = new Map([
   ['em aberto', 'Em aberto'],
@@ -25,6 +26,10 @@ export function normalizeDdaStatus(value) {
 export function isDdaOpenStatus(value) {
   const status = normalizeDdaStatus(value);
   return status === 'Em aberto' || status === 'Agendado';
+}
+
+export function canPrioritizeDda(status) {
+  return isDdaOpenStatus(status) || ddaSearchKey(status) === 'vencido';
 }
 
 const scheduleLabels = {

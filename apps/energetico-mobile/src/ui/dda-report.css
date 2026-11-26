@@ -350,3 +350,35 @@ button.ddr-link-cluster:focus-visible { outline:2px solid #105367; outline-offse
   font: inherit;
   font-size: 0.875rem;
 }
+.ddr-table tr[data-dda-prioritized],
+.ddr-table tr[data-dda-prioritized] > td {
+  background: #ffd59e;
+  print-color-adjust: exact;
+}
+.ddr-status .ddr-priority-cluster {
+  margin-top: 5px;
+  border-color: #e7a1a9;
+  border-left-color: #bd2036;
+  background: #ffe9ec;
+  color: #a5142a;
+}
+.ddr-priority-cluster time { display: block; font-weight: 700; }
+.ddr-table .ddr-prioritize {
+  max-width: 100%;
+  margin-top: 5px;
+  color: #8a4000;
+  border-color: #c98748;
+  overflow-wrap: anywhere;
+}
+.ddr-overlay .ddr-priority-date {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid #92b5c4;
+  border-radius: 8px;
+  background: #fff;
+  color: #17394b;
+  font: inherit;
+}
+@media print { .ddr-prioritize { display: none !important; } }

@@ -8,7 +8,8 @@ import { FINANCIAL_GALLERY_MODELS } from './financial-gallery-models.js';
 import { TAX_GUIDES_GALLERY_MODEL } from './tax-guides-gallery-model.js';
 import { ddaPaidManually } from './dda-payment-confirmation.js';
 import { createDdaProvisionLink } from './dda-provision-link.js';
-import { DDA_REFUSED_FIELD, DDA_REFUSED_STATUS, DDA_UNLINKED_REVIEW_FIELD } from './dda-bank-status.js';
+import { DDA_PRIORITY_FIELD, DDA_REFUSED_FIELD, DDA_REFUSED_STATUS, DDA_UNLINKED_REVIEW_FIELD } from './dda-bank-status.js';
+import { createDdaPriority } from './dda-priority.js';
 import { createDdaRefusal } from './dda-refusal.js';
 import { createDdaUnlinkedReview } from './dda-unlinked-review.js';
 import { createNfeOrderLink, NFE_ORDER_FIELD, NFE_PROVISION_DESCRIPTION_FIELD } from './nfe-order-link.js';
@@ -66,7 +67,7 @@ export const REGISTRATION_GALLERY_MODELS = Object.freeze({
   dda: Object.freeze({
     title: "GALERIA DDA", listName: "DDAS SICOOB", aliases: ["DDAS SICOOB"],
     nativeCard: true, readOnly: true, readTransport: "rest", showAttachments: true, recordLabel: "DDA",
-    restReadFields: ["ID", "Title", "CHAVE_DDA", "PGTO_CONFIRMADO", "PGTO_CONFIRMADO_EM", "PGTO_CONFIRMADO_POR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "STATUS_DDA", "STATUS_CONSULTADO_EM", "DDA_CICLO_AGENDAMENTO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "DESCRITIVOPROVIS_x00c3_O", DDA_UNLINKED_REVIEW_FIELD, DDA_REFUSED_FIELD],
+    restReadFields: ["ID", "Title", "CHAVE_DDA", "PGTO_CONFIRMADO", "PGTO_CONFIRMADO_EM", "PGTO_CONFIRMADO_POR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "STATUS_DDA", "STATUS_CONSULTADO_EM", "DDA_CICLO_AGENDAMENTO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "DESCRITIVOPROVIS_x00c3_O", DDA_UNLINKED_REVIEW_FIELD, DDA_REFUSED_FIELD, DDA_PRIORITY_FIELD],
     restExpandSystemFields: false,
     searchPlaceholder: "Pesquisar fornecedor, documento ou ID",
     fields: ["FORNECEDOR", "VENCIMENTO", "EMISSAO", "VALOR", "SITUACAO", "CNPJ_FORNECEDOR", "DOCUMENTO", "BANCO", "VALOR_PAGAMENTO", "NOSSO_NUMERO", "LINHA_DIGITAVEL", "CODIGO_BARRAS", "PAGADOR", "CNPJ_PAGADOR", "BLOQUEADO", "MENSAGEM", "ULTIMA_CONSULTA", "DESCRITIVOPROVIS_x00c3_O", "ID"],
@@ -586,7 +587,11 @@ export function createRegistrationGalleryData({ kind, ...options } = {}) {
       ...options.siteConfig[siteKey], readTransport: 'rest', writeTransport: 'rest',
     } };
     const writeOptions = { repository: galleryRepository({ ...options, siteConfig }), siteKey, assertSession: options.assertSession };
-    return { unlinkedReview: createDdaUnlinkedReview(writeOptions), rejectDda: createDdaRefusal(writeOptions) };
+    return {
+      unlinkedReview: createDdaUnlinkedReview(writeOptions),
+      rejectDda: createDdaRefusal(writeOptions),
+      prioritizeDda: createDdaPriority(writeOptions),
+    };
   }
   function financialMovementOrderLink() {
     const siteKey = options.siteKey || 'personal';
