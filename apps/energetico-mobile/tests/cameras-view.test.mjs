@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
+import { createChatClient } from '../src/chat/chat-client.js';
 import { createCamerasView } from '../src/ui/cameras-view.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
@@ -117,27 +118,33 @@ const mixedCatalog = [
   { id: 'patio-1', label: 'Pátio · canal 1', cameraGroup: 'patio-1', cameraLabel: 'Pátio' },
   { id: 'other', label: 'Pátio · canal 2' },
   { id: 'patio-2', label: 'Pátio · canal 2', cameraGroup: 'patio-1', cameraLabel: 'Pátio' },
+  { id: 'patio-3', label: 'Pátio · canal 3', cameraGroup: 'patio-1', cameraLabel: 'Pátio' },
 ];
 
-test('reúne canais intercalados da mesma câmera na lista e na seleção da grade', async t => {
-  const { document, grids } = setup(t, { catalog: mixedCatalog, useGrid: true, accountKey: 'conta' });
-  document.defaultView.localStorage.setItem('energetico:camera-name:v1:conta:patio-2', 'Portão');
+test('reúne os canais da mesma câmera recebidos da API, inclusive o primeiro canal renomeado', async t => {
+  const client = createChatClient({
+    apiBaseUrl: 'https://example.com',
+    tokenProvider: async () => 'test-session',
+    fetchImpl: async () => Response.json({ channels: mixedCatalog }),
+  });
+  const { document, grids } = setup(t, { cameraList: client.listCameraChannels, useGrid: true, accountKey: 'conta' });
+  document.defaultView.localStorage.setItem('energetico:camera-name:v1:conta:patio-1', 'Portão');
   await flush();
 
   const group = document.querySelector('.camera-group');
   assert.equal(group?.querySelector('h2')?.textContent, 'Pátio');
   assert.deepEqual([...group.querySelectorAll('[data-camera-open]')].map(button => button.dataset.cameraOpen),
-    ['patio-1', 'patio-2']);
-  assert.equal(group.querySelector('[data-camera-open="patio-2"]').getAttribute('aria-label'), 'Abrir Portão');
+    ['patio-1', 'patio-2', 'patio-3']);
+  assert.equal(group.querySelector('[data-camera-open="patio-1"]').getAttribute('aria-label'), 'Abrir Portão');
   assert.deepEqual([...document.querySelectorAll('[data-camera-open]')].map(button => button.dataset.cameraOpen),
-    ['patio-1', 'patio-2', 'other']);
+    ['patio-1', 'patio-2', 'patio-3', 'other']);
 
   document.querySelector('[data-camera-grid]').click();
-  for (const id of ['other', 'patio-2', 'patio-1']) {
+  for (const id of ['other', 'patio-3', 'patio-2', 'patio-1']) {
     document.querySelector(`[data-camera-select="${id}"]`).click();
   }
   document.querySelector('[data-camera-open-grid]').click();
-  assert.deepEqual(grids[0].ids, ['patio-1', 'patio-2', 'other']);
+  assert.deepEqual(grids[0].ids, ['patio-1', 'patio-2', 'patio-3', 'other']);
 });
 
 test('reúne canais da mesma câmera ao abrir um visual salvo com a ordem antiga', async t => {

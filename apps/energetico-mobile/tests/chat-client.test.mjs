@@ -10,7 +10,8 @@ const testCameraPassword = randomUUID();
 test('normaliza status e última conexão no catálogo de câmeras', async () => {
   const client = clientWith(async () => jsonResponse({ channels: [
     { id: 'ch-1', label: 'Câmera', status: 'offline', lastOnlineAt: '2026-11-24T12:00:00Z', input: { password: testCameraPassword } },
-    { id: 'ch-2', label: 'Sem histórico', status: 'offline', lastOnlineAt: 'inválido' },
+    { id: 'ch-2', label: 'Sem histórico', status: 'offline', lastOnlineAt: 'inválido',
+      cameraGroup: 'id inválido', cameraLabel: 'Agrupamento inválido' },
     { id: 'ch-3', label: 'Status inesperado', status: 'sleeping', lastOnlineAt: null },
   ] }));
   assert.deepEqual(await client.listCameraChannels(), [
