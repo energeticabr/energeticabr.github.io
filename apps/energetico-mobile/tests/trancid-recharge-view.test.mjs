@@ -74,6 +74,9 @@ test('Trancid only sends the reviewed recharge after confirmation', async t => {
   assert.deepEqual(calls.at(-1), ['confirm', { id: 'preview-1' }]);
   assert.equal(calls.filter(([operation]) => operation === 'confirm').length, 1);
   assert.match(document.body.textContent, /Pedido enviado.*790001/s);
+  click('Agora não');
+  assert.doesNotMatch(document.body.textContent, /Deseja cadastrar um descritivo provisão/);
+  assert.equal(calls.at(-1)[0], 'confirm');
 });
 
 test('Trancid defaults to 55, applies the general field to every card and preserves individual edits', async t => {
@@ -106,6 +109,44 @@ test('Trancid defaults to 55, applies the general field to every card and preser
   assert.deepEqual([value(a), value(b)], ['65,00', '65,00']);
 });
 
+test('Trancid prompts after a confirmed order and provisions only after the edited boleto date is accepted', async t => {
+  const calls = [];
+  const ui = await fixture(t, async (operation, body) => {
+    calls.push([operation, body]);
+    if (operation === 'directory') return cards;
+    if (operation === 'preview') return preview;
+    if (operation === 'confirm') return { id: preview.id, orderCode: '790001', status: 'SUBMITTED',
+      creditCents: 5500, paymentMethod: 'BOLETO' };
+    if (operation === 'provision_preview') return {
+      orderCode: '790001', dueDate: '2026-12-11', totalCents: 5555, locked: false,
+      cards: [{ ...cards[0], amountCents: 5500, supplierId: null }],
+      suppliers: [{ id: 71, name: 'Pessoa Avila', branch: 'A', product: 'Servente' }],
+    };
+    if (operation === 'provision') return { parentId: 18, lineCount: 1, dueDate: '2026-12-14' };
+    throw new Error(operation);
+  });
+  ui.document.querySelector('[aria-label="Selecionar Pessoa Ávila, cartão final 0101"]').click();
+  ui.click('Conferir pedido');
+  await settle();
+  ui.click('Enviar pedido à Trancid');
+  await settle();
+  assert.match(ui.document.body.textContent, /Deseja cadastrar um descritivo provisão/);
+  assert.equal(calls.at(-1)[0], 'confirm');
+  ui.click('Sim, cadastrar');
+  await settle();
+  assert.deepEqual(calls.at(-1), ['provision_preview', { id: preview.id }]);
+  assert.equal(ui.document.querySelector('input[type=date]').value, '2026-12-11');
+  ui.click('Confirmar descritivo provisão');
+  await settle();
+  assert.equal(calls.at(-1)[0], 'provision_preview');
+  ui.input('input[type=date]', '2026-12-14');
+  ui.input('select', '71');
+  ui.click('Confirmar descritivo provisão');
+  await settle();
+  assert.deepEqual(calls.at(-1), ['provision', { id: preview.id, dueDate: '2026-12-14', suppliers: { 'card-a': 71 } }]);
+  assert.match(ui.document.body.textContent, /Descritivo provisão 18 cadastrado.*14\/12\/2026/s);
+});
+
 test('Trancid requires the gallery check after an uncertain submission', async t => {
   const operations = [];
   let wentHome = false;
@@ -134,6 +175,33 @@ test('Trancid requires the gallery check after an uncertain submission', async t
   assert.ok(document.querySelector('main.trancid-gallery-page'));
   document.querySelector('.trancid-gallery-page nav button[aria-label="Início"]').click();
   assert.equal(wentHome, true);
+});
+
+test('Trancid can resume a provision from the same gallery page', async t => {
+  const calls = [];
+  const ui = await fixture(t, async (operation, body) => {
+    calls.push([operation, body]);
+    if (operation === 'history') return {
+      orders: [{ orderCode: '790001', creditCents: 5500, status: 'Enviado', paymentMethod: 'BOLETO',
+        provisionRequestId: preview.id }], page: 2,
+    };
+    if (operation === 'provision_preview') return { orderCode: '790001', dueDate: '2026-12-14',
+      totalCents: 5555, locked: true, lineCount: 1, parentId: null };
+    if (operation === 'provision') return { parentId: 18, lineCount: 1, dueDate: '2026-12-14' };
+    throw new Error(operation);
+  }, true);
+  ui.click('Descritivo provisão');
+  await settle();
+  assert.equal(ui.document.querySelector('input[type=date]').disabled, true);
+  ui.click('Retomar cadastro');
+  await settle();
+  ui.click('Voltar à galeria');
+  await settle();
+  assert.deepEqual(calls.slice(1), [
+    ['provision_preview', { id: preview.id }],
+    ['provision', { id: preview.id, dueDate: '2026-12-14', suppliers: {} }],
+    ['history', { page: 2 }],
+  ]);
 });
 
 test('Trancid opens its paginated history in a full-screen gallery and returns to RH', async t => {

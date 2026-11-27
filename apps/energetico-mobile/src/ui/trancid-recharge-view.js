@@ -115,7 +115,7 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     if (isGallery) {
       galleryHeader = createHrBenefitGalleryHeader({
         root: screen, title, onBack: close,
-        onHome: onHome && (() => { dispose(); onHome(); }),
+        onHome: onHome && (() => { if (!confirming) { dispose(); onHome(); } }),
         onRefresh: () => loadGallery(1, false, true),
       });
     } else {
@@ -146,7 +146,7 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     if (busy || signal.aborted) return;
     busy = true;
     screen.setAttribute('aria-busy', 'true');
-    const controls = [...content.querySelectorAll('button, input')].filter(control => !control.disabled);
+    const controls = [...content.querySelectorAll('button, input, select')].filter(control => !control.disabled);
     if (!refresh.hidden) controls.push(refresh);
     controls.forEach(control => { control.disabled = true; });
     message();
@@ -329,7 +329,7 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     });
   }
 
-  function showReceipt(order) {
+  function showReceipt(order, offerProvision = true) {
     const details = make('section', '', 'swile-summary');
     const submitted = order?.status === 'SUBMITTED' && order.orderCode;
     const heading = make('h3', submitted ? 'Pedido enviado' : 'Envio sem confirmação');
@@ -345,13 +345,133 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
         : 'Confira a Galeria Trancid antes de iniciar outra recarga.'));
     }
     const actions = make('div', '', 'swile-actions');
-    actions.append(button('Consultar Galeria Trancid', () => {
+    const galleryButton = button('Consultar Galeria Trancid', () => {
       isGallery = true;
       mount();
       content.replaceChildren();
       void loadGallery();
-    }, true));
+    }, !offerProvision || !submitted);
+    if (submitted && order.id && offerProvision) {
+      details.append(make('p', 'Deseja cadastrar um descritivo provisão para este pedido?'));
+      actions.append(
+        button('Sim, cadastrar', () => beginProvision(order, () => showReceipt(order)), true),
+        button('Agora não', () => showReceipt(order, false)),
+      );
+    }
+    actions.append(galleryButton);
     content.replaceChildren(details, actions);
+    heading.focus({ preventScroll: true });
+  }
+
+  function beginProvision(order, goBack) {
+    return run(async () => {
+      message('Conferindo o vencimento do boleto e os fornecedores…');
+      await detailQueue;
+      if (signal.aborted) return;
+      const prepared = await request('provision_preview', { id: order.id }, { signal });
+      if (signal.aborted) return;
+      if (prepared?.orderCode !== order.orderCode || !/^\d{4}-\d{2}-\d{2}$/.test(prepared.dueDate) ||
+          !Number.isSafeInteger(prepared.totalCents) || prepared.totalCents <= 0) {
+        throw new Error('A Trancid não confirmou a conferência desta provisão.');
+      }
+      message();
+      if (prepared.parentId) showProvisionComplete(order, prepared, goBack);
+      else showProvision(order, prepared, goBack);
+    });
+  }
+
+  function showProvision(order, prepared, goBack) {
+    const section = make('section', '', 'swile-summary trancid-provision');
+    const heading = make('h3', 'Descritivo provisão');
+    heading.tabIndex = -1;
+    section.append(heading, make('p', `Pedido ${order.orderCode} · Boleto · ${reais(prepared.totalCents)}`));
+    const due = make('input');
+    due.type = 'date';
+    due.required = true;
+    due.value = prepared.dueDate;
+    due.disabled = prepared.locked;
+    const dateFields = make('div', '', 'swile-dates');
+    dateFields.append(field('Data de vencimento', due));
+    section.append(dateFields);
+    const selections = new Map();
+    if (prepared.locked) {
+      section.append(make('p', `Cadastro iniciado com ${prepared.lineCount} ${prepared.lineCount === 1 ? 'linha' : 'linhas'} de provisão pgto.`));
+    } else {
+      section.append(make('p', 'Será cadastrada uma linha de provisão pgto por fornecedor.'));
+      const list = make('ul', '', 'swile-preview-list trancid-provision-cards');
+      for (const card of prepared.cards) {
+        const row = make('li');
+        row.append(make('span', card.name), make('strong', reais(card.amountCents)));
+        if (!card.supplierId) {
+          const select = make('select');
+          select.required = true;
+          select.append(make('option', 'Selecione um fornecedor'));
+          select.firstChild.value = '';
+          const suggestions = new Set(card.suggestedIds);
+          const options = [...prepared.suppliers].sort((left, right) =>
+            Number(suggestions.has(right.id)) - Number(suggestions.has(left.id)));
+          for (const supplier of options) {
+            const label = `${supplier.name} · ${supplier.product} · ${supplier.branch}`;
+            const option = make('option', label);
+            option.value = String(supplier.id);
+            select.append(option);
+          }
+          selections.set(card.id, select);
+          row.append(field(`Fornecedor de ${card.name} · ${cardLabel(card)}`, select));
+        }
+        list.append(row);
+      }
+      section.append(list);
+    }
+    const actions = make('div', '', 'swile-actions');
+    actions.append(button(isGallery ? 'Voltar à galeria' : 'Voltar ao pedido', goBack), button(
+      prepared.locked ? 'Retomar cadastro' : 'Confirmar descritivo provisão',
+      () => {
+        if (!due.value || !due.checkValidity()) {
+          message('Informe uma data de vencimento válida.', true);
+          due.focus();
+          return;
+        }
+        for (const select of selections.values()) {
+          if (!select.value) {
+            message('Selecione o fornecedor de cada cartão sem vínculo confirmado.', true);
+            select.focus();
+            return;
+          }
+        }
+        const suppliers = Object.fromEntries([...selections].map(([id, select]) => [id, Number(select.value)]));
+        void run(async () => {
+          message('Cadastrando o descritivo e as linhas de provisão pgto…');
+          confirming = true;
+          closeButton.disabled = true;
+          try {
+            const saved = await request('provision', { id: order.id, dueDate: due.value, suppliers });
+            if (!Number.isSafeInteger(saved?.parentId) || saved.parentId <= 0) {
+              throw new Error('Não foi possível confirmar a provisão. Abra a conferência novamente para retomar.');
+            }
+            if (!signal.aborted) {
+              message();
+              showProvisionComplete(order, saved, goBack);
+            }
+          } finally {
+            confirming = false;
+            closeButton.disabled = false;
+          }
+        });
+      }, true));
+    content.replaceChildren(section, actions);
+    heading.focus({ preventScroll: true });
+  }
+
+  function showProvisionComplete(order, saved, goBack) {
+    const section = make('section', '', 'swile-summary');
+    const heading = make('h3', `Descritivo provisão ${saved.parentId} cadastrado`);
+    heading.tabIndex = -1;
+    section.append(heading, make('p', `Pedido ${order.orderCode} · Vencimento ${formatDate(saved.dueDate)}`),
+      make('p', `${saved.lineCount} ${saved.lineCount === 1 ? 'linha' : 'linhas'} de provisão pgto.`));
+    const actions = make('div', '', 'swile-actions');
+    actions.append(button(isGallery ? 'Voltar à galeria' : 'Voltar ao pedido', goBack));
+    content.replaceChildren(section, actions);
     heading.focus({ preventScroll: true });
   }
 
@@ -375,7 +495,7 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     });
   }
 
-  function galleryOrder(order, index) {
+  function galleryOrder(order, index, page) {
     const item = make('article', '', 'trancid-order');
     const heading = make('div', '', 'trancid-order-heading');
     const summary = make('button', '', 'trancid-order-summary');
@@ -470,6 +590,14 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
     }
     heading.append(summary);
     item.append(heading, details);
+    if (order.provisionRequestId) {
+      const action = button('Descritivo provisão', () => beginProvision(
+        { id: order.provisionRequestId, orderCode: order.orderCode }, () => loadGallery(page),
+      ));
+      action.className = 'trancid-order-provision';
+      action.setAttribute('aria-label', `Descritivo provisão do pedido ${order.orderCode}`);
+      item.append(action);
+    }
     return item;
   }
 
@@ -506,7 +634,7 @@ export function openTrancidRechargeView({ document: doc, request, gallery = fals
 
   function showGallery({ orders, page, hasMore, checkedAt }, focusPage = false) {
     const list = make('div', '', 'swile-order-list');
-    (orders ?? []).forEach((order, index) => list.append(galleryOrder(order, index)));
+    (orders ?? []).forEach((order, index) => list.append(galleryOrder(order, index, page)));
     if (orders?.length === 0) list.append(make('p', 'Nenhum pedido encontrado.'));
     const navigation = make('nav', '', 'swile-actions');
     navigation.setAttribute('aria-label', 'Páginas de pedidos');

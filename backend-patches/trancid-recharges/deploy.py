@@ -34,25 +34,27 @@ DETAILS_ROUTE = LEGACY_ROUTE.replace(
     '"trancid_recharge_confirm", "trancid_recharge_history",',
     '"trancid_recharge_confirm", "trancid_recharge_history", "trancid_recharge_details",',
 )
-ROUTE = DETAILS_ROUTE.replace(
+BOLETO_ROUTE = DETAILS_ROUTE.replace(
     '                    "trancid_recharge_confirm", "trancid_recharge_history", "trancid_recharge_details",',
     '                    "trancid_recharge_confirm", "trancid_recharge_history", "trancid_recharge_details",\n'
     '                    "trancid_recharge_boleto",',
 )
-MODULES = ('trancid_recharges.py', 'trancid_portal_adapter.py')
+ROUTE = BOLETO_ROUTE.replace(
+    '                    "trancid_recharge_boleto",\n',
+    '                    "trancid_recharge_boleto",\n'
+    '                    "trancid_recharge_provision_preview", "trancid_recharge_provision",\n',
+)
+MODULES = ('trancid_recharges.py', 'trancid_portal_adapter.py', 'trancid_provisions.py')
 
 
 def patch_bridge(data):
     source = data.decode('utf-8')
     if source.count(ROUTE) == 1:
         return data
-    if source.count(ANCHOR) != 1:
-        raise ValueError('Unexpected portal routing. Review the active bridge.')
-    if source.count(DETAILS_ROUTE + ANCHOR) == 1:
-        source = source.replace(DETAILS_ROUTE + ANCHOR, ROUTE + ANCHOR, 1)
-    elif source.count(LEGACY_ROUTE + ANCHOR) == 1:
-        source = source.replace(LEGACY_ROUTE + ANCHOR, ROUTE + ANCHOR, 1)
-    elif 'handle_trancid_recharges' not in source:
+    previous = [route for route in (BOLETO_ROUTE, DETAILS_ROUTE, LEGACY_ROUTE) if source.count(route) == 1]
+    if len(previous) == 1:
+        source = source.replace(previous[0], ROUTE, 1)
+    elif 'handle_trancid_recharges' not in source and source.count(ANCHOR) == 1:
         source = source.replace(ANCHOR, ROUTE + ANCHOR, 1)
     else:
         raise ValueError('Unexpected Trancid routing. Review the active bridge.')
@@ -146,7 +148,7 @@ def main():
                 install(path, *updates[path])
                 installed.append(path)
             subprocess.run(['runuser', '-u', ACCOUNT, '--', str(ROOTS[0] / '.venv/bin/python'), '-B', '-c',
-                            'import trancid_recharges; import trancid_portal_adapter'],
+                            'import trancid_recharges; import trancid_portal_adapter; import trancid_provisions'],
                            cwd=ROOTS[0], check=True, timeout=15)
             restart()
         except BaseException:

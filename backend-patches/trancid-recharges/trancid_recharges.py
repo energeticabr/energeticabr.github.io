@@ -54,6 +54,9 @@ class Service:
                 id INTEGER PRIMARY KEY CHECK (id=1), collected REAL NOT NULL,
                 stale INTEGER NOT NULL DEFAULT 0, orders_json TEXT NOT NULL
             )''')
+            db.execute('''CREATE TABLE IF NOT EXISTS trancid_provisions (
+                order_code TEXT PRIMARY KEY, source TEXT NOT NULL, plan TEXT, parent_id INTEGER
+            )''')
             yield db
 
     def public_id(self, provider_id):
@@ -207,7 +210,7 @@ class Service:
                        (collected, json.dumps(snapshot)))
         return collected, snapshot
 
-    def history(self, page, *, refresh=False):
+    def history(self, page, *, refresh=False, owner=None):
         if type(page) is not int or page < 1:
             raise GatewayError('Página inválida do histórico Trancid.')
         with self.connect() as db:
@@ -226,7 +229,16 @@ class Service:
                 stale = True
         page = min(page, max(1, (len(orders) + HISTORY_PAGE_SIZE - 1) // HISTORY_PAGE_SIZE))
         start = (page - 1) * HISTORY_PAGE_SIZE
-        return {'orders': orders[start:start + HISTORY_PAGE_SIZE], 'hasMore': start + HISTORY_PAGE_SIZE < len(orders),
+        entries = orders[start:start + HISTORY_PAGE_SIZE]
+        if owner:
+            with self.connect() as db:
+                references = {json.loads(row['receipt']).get('orderCode'): row['id']
+                              for row in db.execute("SELECT id,receipt FROM orders WHERE owner=? AND state='submitted' AND receipt IS NOT NULL",
+                                                    (owner,))}
+            entries = [{**entry, 'provisionRequestId': references[entry['orderCode']]}
+                       if entry['orderCode'] in references and entry.get('paymentMethod') == PAYMENT_METHOD
+                       and entry.get('paymentStatus') in ('Pendente pgto', 'Pago') else entry for entry in entries]
+        return {'orders': entries, 'hasMore': start + HISTORY_PAGE_SIZE < len(orders),
                 'page': page, 'stale': stale, 'checkedAt': datetime.fromtimestamp(collected, timezone.utc).isoformat()}
 
     def reconcile_history(self, db, orders):
@@ -289,11 +301,17 @@ def handle_portal(identity, body):
         elif action == 'trancid_recharge_confirm':
             value = service.confirm(owner, body.get('id'))
         elif action == 'trancid_recharge_history':
-            value = service.history(body.get('page', 1), refresh=body.get('refresh') is True)
+            value = service.history(body.get('page', 1), refresh=body.get('refresh') is True, owner=owner)
         elif action == 'trancid_recharge_details':
             value = service.order_details(body.get('orderCode'))
         elif action == 'trancid_recharge_boleto':
             value = service.order_boleto(body.get('orderCode'))
+        elif action == 'trancid_recharge_provision_preview':
+            from trancid_provisions import prepare
+            value = prepare(service, owner, body.get('id'))
+        elif action == 'trancid_recharge_provision':
+            from trancid_provisions import register
+            value = register(service, owner, body.get('id'), body.get('dueDate'), body.get('suppliers'))
         else:
             raise GatewayError('Operação Trancid inválida.')
         return 200, {'status': 'processed', 'messages': [], 'trancid': value}
@@ -303,7 +321,10 @@ def handle_portal(identity, body):
         if body.get('action') == 'trancid_recharge_confirm':
             return 409, {'code': 'TRANCID_NOT_SUBMITTED', 'error': str(error)}
         return 502, {'error': str(error)}
-    except (OSError, sqlite3.Error):
+    except (OSError, sqlite3.Error, RuntimeError):
+        if body.get('action') in ('trancid_recharge_provision_preview', 'trancid_recharge_provision'):
+            LOGGER.exception('Falha ao conferir ou registrar a provisão Trancid.')
+            return 503, {'error': 'Não foi possível confirmar a provisão. Abra a conferência novamente para retomar.'}
         return 503, {'error': 'O registro de recargas Trancid está temporariamente indisponível.'}
 
 
