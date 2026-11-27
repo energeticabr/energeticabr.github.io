@@ -11802,6 +11802,8 @@ export function createAppController({
         renameVisual: client.renameCameraVisual,
         start: client.startCameraPlayback,
         prepareGrid: client.prepareCameraGrid,
+        renewLive: client.renewCameraPlayback,
+        playbackIsGone: client.cameraPlaybackIsGone,
         move: client.moveCamera,
         listRecordings: client.listCameraRecordings,
         playRecording: client.playCameraRecording,

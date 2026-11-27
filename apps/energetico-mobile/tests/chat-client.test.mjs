@@ -56,6 +56,46 @@ test('live HEVC is opt-in and uses the same scoped media URL', async () => {
   assert.equal(await client.startCameraPlayback('ch-1', { codecs: ['h264', 'hevc'] }), API_BASE + path);
 });
 
+test('reenvia o endereço anterior da própria câmera ao reconectar reprodução individual', async () => {
+  const previousPath = `/api/portal-camera-media/${'a'.repeat(43)}/hevc.m3u8`;
+  const replacement = `/api/portal-camera-media/${'b'.repeat(43)}/hevc.m3u8`;
+  const client = clientWith(async (_url, options) => {
+    assert.deepEqual(JSON.parse(options.body), { action: 'play', channelId: 'ch-1', replacePath: previousPath });
+    return jsonResponse({ path: replacement });
+  });
+  assert.equal(await client.startCameraPlayback('ch-1', { previousUrl: API_BASE + previousPath }), API_BASE + replacement);
+});
+
+test('renova apenas endereços de vídeo locais em uma única chamada autenticada', async () => {
+  const path = `/api/portal-camera-media/${'a'.repeat(43)}/hevc.m3u8`;
+  const { signal } = new AbortController();
+  let calls = 0;
+  const client = clientWith(async (url, options) => {
+    calls++;
+    assert.equal(url, API_BASE + '/api/portal-cameras');
+    assert.equal(options.headers.Authorization, 'Bearer graph-token');
+    assert.equal(options.signal, signal);
+    assert.deepEqual(JSON.parse(options.body), { action: 'renew-live', paths: [path] });
+    return jsonResponse({});
+  });
+  await client.renewCameraPlayback([API_BASE + path, 'https://example.com' + path, API_BASE + path], { signal });
+  assert.equal(calls, 1);
+});
+
+test('só confirma que a transmissão anterior sumiu quando sua playlist retorna 404', async () => {
+  const url = API_BASE + `/api/portal-camera-media/${'b'.repeat(43)}/h264.m3u8`;
+  const statuses = [202, 502, 404];
+  const client = clientWith(async (target, options) => {
+    assert.equal(target, url + '?ready=1');
+    assert.equal(options.credentials, 'omit');
+    assert.equal(options.headers?.Authorization, undefined);
+    return new Response(null, { status: statuses.shift() });
+  });
+  assert.equal(await client.cameraPlaybackIsGone(url), false);
+  assert.equal(await client.cameraPlaybackIsGone(url), false);
+  assert.equal(await client.cameraPlaybackIsGone(url), true);
+});
+
 test('a grade abre as prévias com uma única autenticação e aguarda cada vídeo', async () => {
   const calls = [];
   const waits = [];

@@ -1007,9 +1007,32 @@ export function createChatClient({
       ? new URL(path, baseUrl).href : null;
   }
 
-  async function startCameraPlayback(channelId, { signal, codecs } = {}) {
+  function cameraPlaylistPath(url) {
+    if (typeof url !== "string" || !url.startsWith(baseUrl.origin + "/")) return null;
+    const path = url.slice(baseUrl.origin.length);
+    return cameraPlaylistUrl(path) ? path : null;
+  }
+
+  async function renewCameraPlayback(urls, { signal } = {}) {
+    const paths = [...new Set(urls.map(cameraPlaylistPath).filter(Boolean))];
+    if (paths.length) await cameraRequest({ action: "renew-live", paths }, signal);
+  }
+
+  function cameraReadiness(url, signal, readResponse) {
+    return request(url + "?ready=1", {
+      method: "GET", cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal,
+    }, readResponse, true);
+  }
+
+  async function cameraPlaybackIsGone(url, { signal } = {}) {
+    if (!cameraPlaylistPath(url)) return false;
+    return cameraReadiness(url, signal, response => response.status === 404);
+  }
+
+  async function startCameraPlayback(channelId, { signal, codecs, previousUrl } = {}) {
     if (!/^[a-z0-9-]{1,48}$/.test(channelId ?? "")) throw new Error("Selecione uma câmera.");
-    const result = await cameraRequest({ action: "play", channelId, codecs }, signal);
+    const replacePath = cameraPlaylistPath(previousUrl) ?? undefined;
+    const result = await cameraRequest({ action: "play", channelId, codecs, replacePath }, signal);
     const url = cameraPlaylistUrl(result?.path);
     if (!url) throw new Error("Não foi possível abrir a transmissão.");
     return url;
@@ -1017,9 +1040,9 @@ export function createChatClient({
 
   function prepareCameraGrid(channelIds, { signal, codecs, previousUrl } = {}) {
     const payload = { action: "play-grid", channelIds, codecs };
-    if (channelIds?.length === 1 && typeof previousUrl === "string" && previousUrl.startsWith(baseUrl.origin + "/")) {
-      const previousPath = previousUrl.slice(baseUrl.origin.length);
-      if (cameraPlaylistUrl(previousPath)) payload.replacePath = previousPath;
+    if (channelIds?.length === 1) {
+      const previousPath = cameraPlaylistPath(previousUrl);
+      if (previousPath) payload.replacePath = previousPath;
     }
     const open = () => cameraRequest(payload, signal);
     let retried;
@@ -1045,13 +1068,11 @@ export function createChatClient({
       const url = cameraPlaylistUrl(result?.paths?.[channelId]);
       if (!url) throw new Error("Não foi possível abrir esta câmera.");
       for (let waited = 0; waited < 320_000;) {
-        const ready = await request(url + "?ready=1", {
-          method: "GET", cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal,
-        }, response => {
+        const ready = await cameraReadiness(url, signal, response => {
           if (response.status === 204) return true;
           if (response.status === 202) return false;
           throw Object.assign(new Error("Não foi possível abrir esta câmera."), { status: response.status });
-        }, true);
+        });
         if (ready) return url;
         // Check promptly while a warm source or the first queued preview can become ready.
         const delay = waited < 4_000 ? 500 : 2_000;
@@ -1124,6 +1145,6 @@ export function createChatClient({
     createCameraVisual: writeCameraVisual.bind(null, "create-visual"),
     importCameraVisual: writeCameraVisual.bind(null, "import-visual"),
     renameCameraVisual: writeCameraVisual.bind(null, "rename-visual"),
-    listCameraChannels, listCameraStatusEvents, startCameraPlayback, prepareCameraGrid, moveCamera, listCameraRecordings, playCameraRecording, swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence,
+    listCameraChannels, listCameraStatusEvents, startCameraPlayback, prepareCameraGrid, renewCameraPlayback, cameraPlaybackIsGone, moveCamera, listCameraRecordings, playCameraRecording, swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence,
   });
 }

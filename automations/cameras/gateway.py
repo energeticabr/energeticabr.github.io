@@ -33,9 +33,9 @@ VISUAL_BLANK = re.compile(r"[\t-\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u
 CHANNEL_LABEL_SUFFIX = re.compile(r"\s*[·•–—-]\s*canal\s+\d+\s*$", re.IGNORECASE)
 GRAPH_ME = "https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,userType"
 MAX_STREAMS = 8
-MAX_STARTING_PREVIEWS = 2
-MAX_STARTING_WITH_SLOW_PREVIEWS = 3
-SLOW_PREVIEW_SECONDS = 12
+MAX_STARTING_PREVIEWS = 3
+MAX_STARTING_WITH_SLOW_PREVIEWS = 4
+SLOW_PREVIEW_SECONDS = 8
 START_TIMEOUT_SECONDS = 75
 LIVE_STALL_SECONDS = 130
 LIVE_HANDOFF_STALE_SECONDS = 20
@@ -512,6 +512,22 @@ class Gateway:
             stream.capability = secrets.token_urlsafe(32)
             stream.expires = now + PLAYBACK_URL_SECONDS
 
+    def renew_live(self, paths, viewer):
+        if (not isinstance(paths, list) or not 1 <= len(paths) <= MAX_STREAMS
+                or not all(isinstance(path, str) and path.endswith(".m3u8") and MEDIA_ROUTE.fullmatch(path)
+                           for path in paths)):
+            raise PlaybackError(400)
+        with self.lock:
+            self.expire()
+            now = time.monotonic()
+            for stream in self.streams.values():
+                idle_seconds = PREVIEW_IDLE_SECONDS if stream.preview else IDLE_SECONDS
+                if (stream.viewer == viewer and stream.mode == "live" and stream.has_video
+                        and now < stream.expires and now - stream.last_request <= idle_seconds
+                        and stream.path in paths):
+                    # Renew access without keeping an abandoned encoder alive.
+                    stream.expires = now + PLAYBACK_URL_SECONDS
+
     def _open_stream(self, key, *, recording=None, preview=False):
         viewer, channel, direct = key
         entry = dict(self.entries[channel])
@@ -552,6 +568,11 @@ class Gateway:
         self.streams.pop(previous_key).close()
         return 0
 
+    @staticmethod
+    def _stale_reconnect(stream, previous_path):
+        return (isinstance(previous_path, str) and stream.path == previous_path
+                and stream.stalled_live(time.monotonic(), LIVE_HANDOFF_STALE_SECONDS))
+
     def start_grid(self, channels, viewer, *, codecs=(), replace_path=None):
         if (not isinstance(channels, list) or not 1 <= len(channels) <= MAX_STREAMS
                 or not all(isinstance(channel, str) and channel in self.entries for channel in channels)
@@ -567,7 +588,8 @@ class Gateway:
             requested = {channel: self._stream_key(channel, viewer, codecs) for channel in channels}
             for channel, key in requested.items():
                 stream = self.streams.get(key)
-                if stream and stream.mode != "live":
+                if stream and (stream.mode != "live"
+                               or (len(channels) == 1 and self._stale_reconnect(stream, replace_path))):
                     del self.streams[key]
                     stream.close()
                     stream = None
@@ -595,7 +617,7 @@ class Gateway:
                 result["retryAfterMs"] = retry_after
             return result
 
-    def start(self, channel, viewer, recording=None, *, codecs=()):
+    def start(self, channel, viewer, recording=None, *, codecs=(), replace_path=None):
         if not isinstance(channel, str) or channel not in self.entries:
             raise PlaybackError(404)
         with self.lock:
@@ -603,7 +625,8 @@ class Gateway:
             key = self._stream_key(channel, viewer, codecs if recording is None else ())
             stream = self.streams.get(key)
             desired = "playback" if recording is not None else "live"
-            replace = stream and (stream.mode != desired or desired == "playback")
+            replace = stream and (stream.mode != desired or desired == "playback"
+                                  or self._stale_reconnect(stream, replace_path))
             if self.query_active and (not stream or replace):
                 raise PlaybackError(429)
             if replace:
@@ -772,10 +795,14 @@ def handler_for(gateway):
                         raise ValueError("invalid status cursor")
                     result = gateway.camera_status_events(after)
                 elif data.get("action") == "play":
-                    result = {"path": gateway.start(data.get("channelId"), viewer, codecs=codecs)}
+                    result = {"path": gateway.start(data.get("channelId"), viewer, codecs=codecs,
+                                                    replace_path=data.get("replacePath"))}
                 elif data.get("action") == "play-grid":
                     result = gateway.start_grid(data.get("channelIds"), viewer, codecs=codecs,
                                                 replace_path=data.get("replacePath"))
+                elif action == "renew-live":
+                    gateway.renew_live(data.get("paths"), viewer)
+                    result = {}
                 elif data.get("action") == "move":
                     gateway.move(data.get("channelId"), viewer, data.get("direction"))
                     result = {"accepted": True}

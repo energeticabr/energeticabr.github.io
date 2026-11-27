@@ -6,7 +6,7 @@ import { createCamerasView } from '../src/ui/cameras-view.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, android = false,
-  cameraList, timerControl, catalog, startError, visualService } = {}) {
+  cameraList, timerControl, catalog, startError, visualService, renewLive, playbackIsGone } = {}) {
   const dom = new JSDOM('<button>Menu</button>', { url: 'https://example.com' });
   t.after(() => dom.window.close());
   const { document, HTMLMediaElement, HTMLDialogElement } = dom.window;
@@ -34,7 +34,7 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, 
     id: `site-${index + 1}`, label: `Obra ${index + 1}`,
   }))),
     ...visualService,
-    start,
+    start, renewLive, playbackIsGone,
     prepareGrid: useGrid ? (ids, { signal, previousUrl, codecs }) => {
       grids.push({ ids, signal, previousUrl, codecs });
       return start;
@@ -489,6 +489,7 @@ test('a grade reconecta uma transmissão interrompida sem reabrir os demais cana
   await flush();
   assert.deepEqual(grids.map(grid => grid.ids), [['site-1', 'site-2'], ['site-1']]);
   assert.deepEqual(starts.at(-1).codecs, ['h264', 'hevc']);
+  assert.match(grids.at(-1).previousUrl, /hevc\.m3u8$/);
   video.dispatchEvent(new Event('playing'));
   video.dispatchEvent(new Event('waiting'));
   elapse();
@@ -513,6 +514,50 @@ test('a grade reconecta uma transmissão interrompida sem reabrir os demais cana
   assert.equal(timers.size, 1);
   document.querySelector('[data-camera-player-back]').click();
   assert.equal(timers.size, 0);
+});
+
+test('renova a transmissão em exibição sem reabrir o vídeo e interrompe a renovação ao sair', async t => {
+  const timerControl = { cleared: [] };
+  const renewals = [];
+  const { document, starts } = setup(t, { timerControl, renewLive: async (urls, { signal }) => renewals.push({ urls, signal }) });
+  Object.defineProperty(document, 'hidden', { value: false });
+  await flush();
+  await timerControl.callback();
+  assert.equal(renewals.length, 0);
+  document.querySelector('[data-camera-open]').click();
+  await flush();
+  const video = document.querySelector('video');
+  video.dispatchEvent(new document.defaultView.Event('playing'));
+  await timerControl.callback();
+  await flush();
+  await timerControl.callback();
+  assert.deepEqual(renewals.map(item => item.urls), [[video.src]]);
+  assert.equal(starts.length, 1);
+  document.querySelector('[data-camera-player-back]').click();
+  await timerControl.callback();
+  assert.equal(renewals.length, 1);
+});
+
+test('reabre apenas a playlist perdida assim que o serviço confirma o 404', async t => {
+  const { document, grids, starts } = setup(t, { useGrid: true, playbackIsGone: async () => true });
+  await flush();
+  document.querySelector('[data-camera-grid]').click();
+  for (let index = 0; index < 2; index++) document.querySelectorAll('[data-camera-select]')[index].click();
+  document.querySelector('[data-camera-open-grid]').click();
+  await flush();
+  const [stalled, healthy] = document.querySelectorAll('video');
+  const window = document.defaultView;
+  for (const video of [stalled, healthy]) video.dispatchEvent(new window.Event('playing'));
+  let timeout;
+  window.setTimeout = (callback, delay) => { timeout = { callback, delay }; return 1; };
+  window.clearTimeout = () => { timeout = null; };
+  stalled.dispatchEvent(new window.Event('waiting'));
+  assert.equal(timeout.delay, 2000);
+  timeout.callback();
+  await flush();
+  assert.deepEqual(grids.map(grid => grid.ids), [['site-1', 'site-2'], ['site-1']]);
+  assert.equal(starts.find(item => item.id === 'site-2').signal.aborted, false);
+  assert.equal(timeout, null);
 });
 
 test('a troca de codec envia a playlist antiga somente para a câmera afetada', async t => {
@@ -560,7 +605,7 @@ for (const buffered of [false, true]) {
     await flush();
     assert.deepEqual(grids.map(grid => grid.ids), [['site-1', 'site-2', 'site-3', 'site-4'], ['site-1']]);
     assert.deepEqual(starts.at(-1).codecs, buffered ? [] : ['h264', 'hevc']);
-    assert.equal(grids.at(-1).previousUrl, buffered ? previousUrl : undefined);
+    assert.equal(grids.at(-1).previousUrl, previousUrl);
     assert.ok(starts.filter(start => start.id !== 'site-1').every(start => !start.signal.aborted));
     stalled.dispatchEvent(new window.Event('playing'));
     assert.equal(document.querySelectorAll('.cameras-player__tile-live:not([hidden])').length, 4);
