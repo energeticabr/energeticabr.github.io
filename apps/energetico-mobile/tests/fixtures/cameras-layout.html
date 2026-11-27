@@ -92,8 +92,9 @@ const layout = {viewport:rect(dialog),
   tabs:document.querySelector('.cameras-header__tabs') && rect(document.querySelector('.cameras-header__tabs')),
   listHeadings, selectionHeadings,
   cards:[...document.querySelectorAll('.camera-card')].map(rect),
-  offlineStatus:document.querySelector('[data-camera-status]') && {
+  noSignalStatus:document.querySelector('[data-camera-status]') && {
     ribbon:rect(document.querySelector('[data-camera-status]')),
+    label:document.querySelector('[data-camera-status]').textContent,
     lastOnline:rect(document.querySelector('.camera-card__last-online')),
     preview:rect(document.querySelector('.camera-card__preview')),
   },
@@ -111,6 +112,7 @@ const layout = {viewport:rect(dialog),
   controls:document.querySelector('.cameras-player__actions') && rect(document.querySelector('.cameras-player__actions')),
   drawer:document.querySelector('.cameras-player__drawer') && rect(document.querySelector('.cameras-player__drawer')),
   liveStateColor:player && getComputedStyle(player.querySelector('.cameras-player__live-state')).color,
+  liveStateText:player?.querySelector('.cameras-player__live-state').textContent,
   recording:document.querySelector('.cameras-player__recording') && rect(document.querySelector('.cameras-player__recording')),
   recordingTime:document.querySelector('.cameras-player__recording-times') && rect(document.querySelector('.cameras-player__recording-times'))};
 if (wallMode) {
@@ -192,9 +194,12 @@ if (wallMode) {
       };
     });
     const tile = video.closest('.cameras-player__tile');
-    const ribbon = tile.querySelector('.cameras-player__status[data-offline]');
-    layout.playerOffline = { tile: rect(tile), ribbon: rect(ribbon),
-      noSpinner: getComputedStyle(ribbon, '::before').content === 'none' };
+    const offlineTile = player.querySelector('[data-camera-video="camera-2"]').closest('.cameras-player__tile');
+    layout.unavailableChannels = [tile, offlineTile].map(tile => {
+      const ribbon = tile.querySelector('.cameras-player__status');
+      return { tile: rect(tile), ribbon: rect(ribbon), label: ribbon.textContent,
+        offline: ribbon.hasAttribute('data-offline'), noSpinner: getComputedStyle(ribbon, '::before').content === 'none' };
+    });
     tile.querySelector('[data-camera-dismiss]').click();
     layout.seven = measurePlayer();
     liveVideo.closest('.cameras-player__tile').querySelector('[data-camera-dismiss]').click();
