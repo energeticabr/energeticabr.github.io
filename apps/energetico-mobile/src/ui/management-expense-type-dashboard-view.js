@@ -134,8 +134,9 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
         setAttributes(label, { x: xAt(index), y });
       });
 
-      const paidVisible = !paidPlot.group.hasAttribute('hidden');
-      for (const { group, path, points } of plots) {
+      const mergeEqualLabels = !totalPlot.group.hasAttribute('hidden') && !paidPlot.group.hasAttribute('hidden');
+      for (const plot of plots) {
+        const { group, path, points } = plot;
         const positions = points.map((point, index) => ({ x: xAt(index), y: yAt(point.value ?? 0) }));
         const commands = positions.map(({ x, y }, index) => {
           if (index === 0) return `M ${x} ${y}`;
@@ -144,14 +145,19 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
           return `C ${mid} ${previous.y}, ${mid} ${y}, ${x} ${y}`;
         });
         path.setAttribute('d', commands.join(' '));
-        points.forEach(({ value, circle, label, width: labelWidth }, index) => {
+        points.forEach((point, index) => {
           const { x, y } = positions[index];
-          setAttributes(circle, { cx: x, cy: y });
-          if (!label || group.hasAttribute('hidden')) return;
-          if (group === totalPlot.group && paidVisible && value === paidPlot.points[index].value) {
-            label.setAttribute('hidden', '');
-            return;
+          setAttributes(point.circle, { cx: x, cy: y });
+          if (!point.label || group.hasAttribute('hidden')) return;
+          let labelPoint = point;
+          if (mergeEqualLabels && (plot === totalPlot || plot === paidPlot) &&
+              totalPlot.points[index].value === paidPlot.points[index].value) {
+            // Position the shared label in the Total pass so it keeps that month's priority.
+            if (plot === paidPlot) return;
+            point.label.setAttribute('hidden', '');
+            labelPoint = paidPlot.points[index];
           }
+          const { label, width: labelWidth } = labelPoint;
           const labelY = valueLabelOffsets.map(offset => y - 10 + offset).find(candidate =>
             candidate >= 16 && candidate <= bottom + 16 && !occupied.some(other =>
               Math.abs(other.x - x) < (other.width + labelWidth) / 2 + 4 && Math.abs(other.y - candidate) < 19));

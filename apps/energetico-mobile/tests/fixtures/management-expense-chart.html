@@ -22,7 +22,8 @@
       paid: value, forecast, total: value + forecast };
   });
   const rank = [{ name: 'CONCRETO USINADO', total: 97500, percentage: 24.7 }];
-  createManagementExpenseTypeDashboardView({ root }).open({
+  const dashboard = createManagementExpenseTypeDashboardView({ root });
+  dashboard.open({
     expenseType: 'MATERIAL', branch: '004 - EDIFÍCIO XAVANTE', months,
     total: months.reduce((sum, month) => sum + month.total, 0),
     products: rank, suppliers: rank, stages: rank,
@@ -73,8 +74,26 @@
   svg.dispatchEvent(new PointerEvent('pointerleave'));
   await waitForLayout();
 
+  const crowdedMonths = [
+    [335441, 7441], [265673, 0], [319062, 160], [721837, 0], [571681, 19672], [531881, 0],
+    [194166, 7128], [267269, 0], [475641, 0], [214545, 0], [412853, 10081], [125867, 0],
+  ].map(([paid, forecast], index) => ({
+    period: months[index].period, paid, forecast, total: paid + forecast,
+  }));
+  dashboard.open({
+    expenseType: 'MATERIAL', branch: '004 - EDIFÍCIO XAVANTE', months: crowdedMonths,
+    total: crowdedMonths.reduce((sum, month) => sum + month.total, 0),
+    products: rank, suppliers: rank, stages: rank,
+  });
+  const crowdedChart = root.querySelector('svg');
+  Object.assign(crowdedChart.style, { width: '508px', height: '190px' });
+  await waitForLayout();
+  const equalMonthLabels = ['total', 'paid'].filter(series =>
+    getComputedStyle(crowdedChart.querySelectorAll(`.is-${series} .gm-dashboard-value-label`)[3]).display !== 'none');
+
   document.documentElement.dataset.layout = JSON.stringify({
     coverage: drawnWidth / cardWidth, valueHeight, monthHeight, noOverlap, rankSize,
     lastLabel, detail: detail.textContent, detailVisible, resized: drawnWidth - resized, months: monthsLabels.length,
+    equalMonthLabels,
   });
 </script>

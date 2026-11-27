@@ -28,6 +28,7 @@ test('gráfico de despesas preenche a largura e conserva os valores legíveis ao
         assert.ok(layout.noOverlap && layout.detailVisible && layout.months === 12 && layout.resized > 65, details);
         assert.match(layout.lastLabel, /137,2\s+mil/);
         assert.match(layout.detail.replace(/\u00a0/g, ' '), /nov\/26.*R\$ 137\.200,00/);
+        assert.deepEqual(layout.equalMonthLabels, ['paid'], details);
       } finally {
         dom.window.close();
       }
