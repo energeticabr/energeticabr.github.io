@@ -405,20 +405,19 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   min-height: 0;
 }
 .cameras-player__grid { overflow: hidden; }
-.cameras-player__grid[data-count="2"],
-.cameras-player__grid[data-count="3"],
-.cameras-player__grid[data-count="4"] {
-  grid-template-columns: minmax(0, 1fr);
+.cameras-player__grid[data-count="2"] {
   grid-template-rows: repeat(2, minmax(0, 1fr));
 }
-.cameras-player__grid[data-count="3"],
-.cameras-player__grid[data-count="4"] { overflow-y: auto; grid-auto-rows: minmax(140px, 1fr); }
-.cameras-player__grid[data-count="5"],
-.cameras-player__grid[data-count="6"],
-.cameras-player__grid[data-count="7"],
-.cameras-player__grid[data-count="8"] {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(4, minmax(0, 1fr));
+@media (orientation: portrait) {
+  .cameras-player__grid:is([data-count="3"], [data-count="4"], [data-count="5"], [data-count="6"], [data-count="7"], [data-count="8"]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(var(--camera-rows, 2), minmax(0, 1fr));
+  }
+  .cameras-player__grid:is([data-count="5"], [data-count="6"]) { --camera-rows: 3; }
+  .cameras-player__grid:is([data-count="7"], [data-count="8"]) { --camera-rows: 4; }
+  .cameras-player__grid:is([data-count="3"], [data-count="5"], [data-count="7"]) > :last-child {
+    grid-column: 1 / -1;
+  }
 }
 .cameras-player__tile {
   position: relative;
@@ -492,6 +491,38 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
 .cameras-player__label { left: 8px; }
 .cameras-player__tile-live { right: 8px; color: #fff; font-weight: 750; }
 .cameras-player__tile-live[hidden] { display: none !important; }
+.cameras-player__dismiss {
+  position: absolute;
+  z-index: 3;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: 700 24px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.cameras-player__dismiss::before {
+  position: absolute;
+  z-index: -1;
+  inset: 6px;
+  border: 1px solid #ffffff70;
+  border-radius: 50%;
+  background: #111e;
+  content: "";
+}
+.cameras-player__dismiss:focus-visible { outline: 2px solid #fff; outline-offset: -4px; border-radius: 50%; }
+.cameras-player__dismiss[hidden] { display: none; }
+.cameras-player__dismiss:not([hidden]) ~ .cameras-player__label {
+  box-sizing: border-box;
+  max-width: calc(100% - 60px);
+}
 .cameras-player__status {
   position: absolute;
   z-index: 2;
@@ -511,6 +542,14 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   pointer-events: none;
 }
 .cameras-player__status:empty { display: none; }
+.cameras-player__status[data-offline] {
+  padding: 5px 10px;
+  border-radius: 3px;
+  background: #a92727;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
 .cameras-player__status[data-loading="true"]::before {
   flex: none;
   width: 15px;
@@ -735,11 +774,26 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
     grid-template-rows: repeat(2, minmax(0, 1fr));
     overflow: hidden;
   }
-  .cameras-player__grid[data-count="5"], .cameras-player__grid[data-count="6"],
-  .cameras-player__grid[data-count="7"], .cameras-player__grid[data-count="8"] {
+  .cameras-player__grid[data-count="6"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+  .cameras-player__grid[data-count="8"] {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
   }
+  .cameras-player__grid[data-count="5"] {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+  .cameras-player__grid[data-count="5"] > * { grid-column: span 2; }
+  .cameras-player__grid[data-count="5"] > :nth-child(n+4) { grid-column: span 3; }
+  .cameras-player__grid[data-count="7"] {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+  .cameras-player__grid[data-count="7"] > * { grid-column: span 3; }
+  .cameras-player__grid[data-count="7"] > :nth-child(n+5) { grid-column: span 4; }
   .cameras-player__actions { justify-content: center; min-height: 62px; background: #050505; color: #fff; }
   .cameras-player__action { color: #fff; }
   .cameras-player__action[aria-pressed="true"] { color: #fff; background: #ffffff20; }
@@ -775,7 +829,6 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   .cameras-player__title { font-size: 14px; }
   .cameras-player__back, .cameras-player__expand { width: 36px; }
   .cameras-player__live-state { font-size: 9px; }
-  .cameras-player__grid[data-count="3"], .cameras-player__grid[data-count="4"] { grid-auto-rows: minmax(135px, 1fr); }
   .cameras-player__action { flex-basis: 58px; min-width: 56px; }
   .cameras-player__action-label { font-size: 10px; }
   .cameras-player__drawer[data-open="true"] { height: min(40vh, 330px); }

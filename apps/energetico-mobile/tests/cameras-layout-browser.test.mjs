@@ -77,7 +77,7 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
       assert.ok(inputFocused);
     } else {
       assert.equal(layout.portrait,String(height > width));
-      if (height < width) assert.equal(layout.liveStateColor, 'rgb(242, 244, 246)');
+      if (height < width) assert.equal(layout.liveStateColor, mode === 'single' ? 'rgb(255, 170, 165)' : 'rgb(242, 244, 246)');
       const expectedTiles = mode === 'single' ? 1 : mode === 'pair' ? 2 : 8;
       assert.equal(layout.tiles.length,expectedTiles);
       assert.equal(layout.savedFrames.length, 1);
@@ -90,6 +90,27 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
       assert.ok(layout.tiles.every(tile => tile.width > 100 && tile.height > minimumTileHeight
         && tile.left >= 0 && tile.right <= width && tile.top >= 0 && tile.bottom <= height));
       if (mode === 'player') {
+        const { tile, button, label, ribbon, clickable, noSpinner } = layout.playerOffline;
+        assert.ok(clickable && noSpinner);
+        assert.equal(button.width, 44);
+        assert.equal(button.height, 44);
+        assert.ok(label.right <= button.left);
+        for (const bounds of [button, ribbon]) {
+          assert.ok(bounds.left >= tile.left && bounds.right <= tile.right
+            && bounds.top >= tile.top && bounds.bottom <= tile.bottom);
+        }
+        for (const [view, count] of [[layout.seven, 7], [layout.six, 6]]) {
+          assert.equal(view.videos.length, count);
+          const rows = new Map();
+          for (const video of view.videos) {
+            rows.set(video.top, (rows.get(video.top) ?? 0) + video.width);
+            assert.ok(video.top >= view.stage.top && video.bottom <= view.stage.bottom);
+          }
+          assert.equal(rows.size, height > width ? Math.ceil(count / 2) : 2);
+          assert.ok([...rows.values()].every(width => Math.abs(width - view.stage.width) < 2));
+        }
+        const first = layout.six.videos[0];
+        assert.ok(height > width ? first.height > layout.tiles[0].height : first.width > layout.tiles[0].width);
         for (const view of ['focused', 'individual']) {
           const { stage, videos } = layout[view];
           assert.equal(videos.length, 1);
