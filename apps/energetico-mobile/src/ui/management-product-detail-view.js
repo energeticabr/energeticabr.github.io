@@ -1,4 +1,5 @@
 import {formatReportMoney} from '../chat/contractor-report-model.js';
+import {bindSvgChartOption, restoreChartOption} from './management-chart-filter.js';
 
 let sequence=0;
 const quantityFormat=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:6});
@@ -33,11 +34,24 @@ function chartTitle(doc,svg,title,description) {
   const descriptionNode=svgNode(doc,'desc');descriptionNode.textContent=description;
   svg.append(titleNode,descriptionNode);
 }
-function appendMonthlyValueChart(doc,parent,analytics) {
+function chartOption(doc,svg,source,value,label,hitArea,interaction) {
+  const option=svgNode(doc,'g');
+  svg.append(option);
+  if(!interaction)return option;
+  const key=`${source}:${value}`;
+  bindSvgChartOption(option,{
+    key,label,selected:interaction.filter?.source===source&&interaction.filter.value===value,
+    activate:()=>interaction.select(source,value,key),
+  });
+  option.append(svgNode(doc,'rect',{...hitArea,class:'gm-product-chart-hit','aria-hidden':'true'}));
+  return option;
+}
+
+function appendMonthlyValueChart(doc,parent,analytics,interaction) {
   const section=doc.createElement('section');section.className='gm-product-chart';section.dataset.chart='monthly-purchases';
   addChartHeading(doc,section,'Valor mensal das compras',`${analytics.startPeriod} a ${analytics.endPeriod}`);
-  const months=analytics.months,values=months.map(month=>month.total),scale=chartScale(values);
-  const svg=svgNode(doc,'svg',{class:'gm-product-chart-svg',viewBox:'0 0 760 260',role:'img',
+  const months=analytics.purchaseMonths||analytics.months,scale=chartScale(months.map(month=>month.total));
+  const svg=svgNode(doc,'svg',{class:'gm-product-chart-svg',viewBox:'0 0 760 260',role:interaction?'group':'img',
     'aria-label':`Valor mensal das compras em reais, de ${analytics.startPeriod} a ${analytics.endPeriod}`});
   chartTitle(doc,svg,'Valor mensal das compras',months.map(month=>`${month.period}: ${chartMoney(month.total)}.`).join(' '));
   const left=96,right=748,top=18,bottom=207,plotHeight=bottom-top;
@@ -59,47 +73,55 @@ function appendMonthlyValueChart(doc,parent,analytics) {
     previous={index,x,y};
   });
   svg.append(svgNode(doc,'path',{class:'gm-product-chart-line',d:commands.join(' '),'data-series':''}));
+  const slot=(right-left)/Math.max(1,months.length-1);
   months.forEach((month,index)=>{
     const x=xFor(index),label=svgNode(doc,'text',{class:'gm-product-chart-month',x,y:231,'text-anchor':'middle'});
-    label.textContent=month.label;svg.append(label);
+    const description=`${month.period}: ${chartMoney(month.total)}`;
+    const hitX=x-slot/2;
+    const option=chartOption(doc,svg,section.dataset.chart,month.key,description,
+      {x:hitX,y:top,width:Math.min(slot,760-hitX),height:219},interaction);
+    label.textContent=month.label;option.append(label);
     if(Number.isFinite(month.total)){
       const point=svgNode(doc,'circle',{class:'gm-product-chart-point',cx:x,cy:yFor(month.total),r:4,'data-month-point':month.key});
-      const pointTitle=svgNode(doc,'title');pointTitle.textContent=`${month.period}: ${chartMoney(month.total)}`;point.append(pointTitle);svg.append(point);
+      const pointTitle=svgNode(doc,'title');pointTitle.textContent=description;point.append(pointTitle);option.append(point);
     }
   });
   section.append(svg);parent.append(section);
 }
-function appendSupplierChart(doc,parent,analytics) {
+function appendSupplierChart(doc,parent,analytics,interaction) {
   const section=doc.createElement('section');section.className='gm-product-chart';section.dataset.chart='suppliers';
   addChartHeading(doc,section,'Valor comprado por fornecedor',`${analytics.startPeriod} a ${analytics.endPeriod}`);
   if(!analytics.suppliers.length){const empty=doc.createElement('p');empty.className='gm-product-chart-empty';empty.textContent='Nenhuma compra registrada neste período.';section.append(empty);parent.append(section);return;}
   const width=900,rowHeight=38,height=Math.max(72,analytics.suppliers.length*rowHeight+22);
   const svg=svgNode(doc,'svg',{class:'gm-product-chart-svg gm-product-supplier-svg',viewBox:`0 0 ${width} ${height}`,
-    role:'img','aria-label':`Valor comprado por fornecedor, de ${analytics.startPeriod} a ${analytics.endPeriod}`});
+    role:interaction?'group':'img','aria-label':`Valor comprado por fornecedor, de ${analytics.startPeriod} a ${analytics.endPeriod}`});
   chartTitle(doc,svg,'Valor comprado por fornecedor',analytics.suppliers.map(row=>`${row.name}: ${chartMoney(row.total)}.`).join(' '));
   const values=analytics.suppliers.map(row=>row.total),scale=chartScale(values),xStart=326,plotWidth=396,valueX=892;
   const zeroX=xStart+plotWidth*scale.position(0);
   svg.append(svgNode(doc,'line',{class:'gm-product-chart-zero',x1:zeroX,x2:zeroX,y1:8,y2:height-5}));
   analytics.suppliers.forEach((supplier,index)=>{
     const y=18+index*rowHeight,rowY=y+10;
+    const description=`${supplier.name}: ${chartMoney(supplier.total)}`;
+    const option=chartOption(doc,svg,section.dataset.chart,supplier.name,description,
+      {x:0,y:y-7,width,height:rowHeight},interaction);
     const label=svgNode(doc,'text',{class:'gm-product-chart-label',x:310,y:rowY+4,'text-anchor':'end',
       textLength:296,lengthAdjust:'spacingAndGlyphs'});
-    label.textContent=supplier.name;const labelTitle=svgNode(doc,'title');labelTitle.textContent=supplier.name;label.append(labelTitle);svg.append(label);
+    label.textContent=supplier.name;const labelTitle=svgNode(doc,'title');labelTitle.textContent=supplier.name;label.append(labelTitle);option.append(label);
     const bar=svgNode(doc,'rect',{class:`gm-product-chart-bar${Number.isFinite(supplier.total)?'':' gm-product-chart-bar--incomplete'}`,
       x:Number.isFinite(supplier.total)?Math.min(zeroX,xStart+plotWidth*scale.position(supplier.total)):zeroX,
       y,width:Number.isFinite(supplier.total)?Math.max(1,Math.abs(plotWidth*scale.position(supplier.total)-plotWidth*scale.position(0))):1,
       height:18,rx:3,'data-supplier-bar':supplier.name});
-    const barTitle=svgNode(doc,'title');barTitle.textContent=`${supplier.name}: ${chartMoney(supplier.total)}`;bar.append(barTitle);svg.append(bar);
+    const barTitle=svgNode(doc,'title');barTitle.textContent=description;bar.append(barTitle);option.append(bar);
     const amount=svgNode(doc,'text',{class:'gm-product-chart-value',x:valueX,y:rowY+4,'text-anchor':'end'});
-    amount.textContent=chartMoney(supplier.total);svg.append(amount);
+    amount.textContent=chartMoney(supplier.total);option.append(amount);
   });
   section.append(svg);parent.append(section);
 }
-function appendMonthlyQuantityChart(doc,parent,analytics) {
+function appendMonthlyQuantityChart(doc,parent,analytics,interaction) {
   const section=doc.createElement('section');section.className='gm-product-chart';section.dataset.chart='monthly-quantity';
   addChartHeading(doc,section,'Quantidade adquirida por mês',`${analytics.startPeriod} a ${analytics.endPeriod}`);
-  const months=analytics.months,values=months.map(month=>month.quantity),scale=chartScale(values);
-  const svg=svgNode(doc,'svg',{class:'gm-product-chart-svg',viewBox:'0 0 760 260',role:'img',
+  const months=analytics.quantityMonths||analytics.months,scale=chartScale(months.map(month=>month.quantity));
+  const svg=svgNode(doc,'svg',{class:'gm-product-chart-svg',viewBox:'0 0 760 260',role:interaction?'group':'img',
     'aria-label':`Quantidade adquirida por mês, de ${analytics.startPeriod} a ${analytics.endPeriod}`});
   chartTitle(doc,svg,'Quantidade adquirida por mês',months.map(month=>`${month.period}: ${chartQuantity(month.quantity)}.`).join(' '));
   const left=96,right=748,top=18,bottom=207,plotHeight=bottom-top;
@@ -112,22 +134,25 @@ function appendMonthlyQuantityChart(doc,parent,analytics) {
   const zeroY=bottom-plotHeight*scale.position(0),slot=(right-left)/months.length,barWidth=slot*.56;
   months.forEach((month,index)=>{
     const x=left+slot*index+slot/2,label=svgNode(doc,'text',{class:'gm-product-chart-month',x,y:231,'text-anchor':'middle'});
-    label.textContent=month.label;svg.append(label);
+    const description=`${month.period}: ${chartQuantity(month.quantity)}`;
+    const option=chartOption(doc,svg,section.dataset.chart,month.key,description,
+      {x:x-slot/2,y:top,width:slot,height:219},interaction);
+    label.textContent=month.label;option.append(label);
     const value=month.quantity,known=Number.isFinite(value),valueY=known?bottom-plotHeight*scale.position(value):zeroY;
     const bar=svgNode(doc,'rect',{class:`gm-product-chart-bar gm-product-chart-column${known?'':' gm-product-chart-bar--incomplete'}`,
       x:x-barWidth/2,y:known?Math.min(zeroY,valueY):zeroY,width:barWidth,
       height:known?Math.max(1,Math.abs(zeroY-valueY)):1,rx:2,'data-month-bar':month.key});
-    const barTitle=svgNode(doc,'title');barTitle.textContent=`${month.period}: ${chartQuantity(value)}`;bar.append(barTitle);svg.append(bar);
+    const barTitle=svgNode(doc,'title');barTitle.textContent=description;bar.append(barTitle);option.append(bar);
   });
   section.append(svg);parent.append(section);
 }
-function appendProductAnalytics(doc,parent,analytics) {
+function renderProductAnalytics(doc,analytics,interaction) {
   const section=doc.createElement('section');section.className='gm-product-analytics';
   const heading=doc.createElement('h3');heading.className='gm-product-analytics-title';heading.textContent='ANÁLISE DE COMPRAS · ÚLTIMOS 12 MESES';section.append(heading);
-  appendMonthlyValueChart(doc,section,analytics);
-  appendSupplierChart(doc,section,analytics);
-  appendMonthlyQuantityChart(doc,section,analytics);
-  parent.append(section);
+  appendMonthlyValueChart(doc,section,analytics,interaction);
+  appendSupplierChart(doc,section,analytics,interaction);
+  appendMonthlyQuantityChart(doc,section,analytics,interaction);
+  return section;
 }
 
 export function createManagementProductDetailView({root,onClose=()=>{}}) {
@@ -160,12 +185,13 @@ export function createManagementProductDetailView({root,onClose=()=>{}}) {
     if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();return;}
     if(event.key!=='Tab')return;
     event.stopPropagation();
-    if(event.shiftKey&&(doc.activeElement===closeButton||doc.activeElement===dialog)){event.preventDefault();scroll.focus();}
-    else if(!event.shiftKey&&(doc.activeElement===scroll||doc.activeElement===dialog)){event.preventDefault();closeButton.focus();}
+    const lastControl=[...scroll.querySelectorAll('[data-chart-option]')].at(-1)||scroll;
+    if(event.shiftKey&&(doc.activeElement===closeButton||doc.activeElement===dialog)){event.preventDefault();lastControl.focus();}
+    else if(!event.shiftKey&&(doc.activeElement===lastControl||doc.activeElement===dialog)){event.preventDefault();closeButton.focus();}
   });
   return Object.freeze({
     get isOpen(){return !backdrop.hidden;},
-    open(detail,source) {
+    open(detail,source,loadAnalytics) {
       if(destroyed)return;
       close({restoreFocus:false});
       trigger=source||doc.activeElement;
@@ -209,7 +235,23 @@ export function createManagementProductDetailView({root,onClose=()=>{}}) {
       }
       scroll.replaceChildren(table);
       if(hasFreight)scroll.append(make('p','gm-product-freight','Os totais incluem o frete informado no registro.'));
-      if(detail.analytics)appendProductAnalytics(doc,scroll,detail.analytics);
+      if(detail.analytics){
+        let charts;
+        const interaction=loadAnalytics?{
+          filter:undefined,
+          select(chart,value,key){
+            const {filter}=interaction;
+            interaction.filter=filter?.source===chart&&filter.value===value?undefined:{source:chart,value};
+            const previousTop=scroll.scrollTop;
+            const next=renderProductAnalytics(doc,loadAnalytics(interaction.filter),interaction);
+            charts.replaceWith(next);charts=next;
+            scroll.scrollTop=previousTop;
+            restoreChartOption(scroll,key);
+          },
+        }:undefined;
+        charts=renderProductAnalytics(doc,detail.analytics,interaction);
+        scroll.append(charts);
+      }
       background=[...root.children].filter(node=>node!==backdrop).map(node=>[node,Boolean(node.inert)]);
       for(const [node] of background)node.inert=true;
       backdrop.hidden=false;scroll.scrollTop=0;closeButton.focus({preventScroll:true});

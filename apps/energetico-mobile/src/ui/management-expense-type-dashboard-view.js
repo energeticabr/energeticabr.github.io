@@ -1,4 +1,5 @@
 import {formatReportMoney} from '../chat/contractor-report-model.js';
+import {bindSvgChartOption, restoreChartOption} from './management-chart-filter.js';
 
 let sequence=0;
 const money=value=>Number.isFinite(value)?formatReportMoney(value):'INCOMPLETO';
@@ -25,18 +26,26 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
   actions.append(yearFilter,closeButton);heading.append(title,subtitle);header.append(heading,actions);
   const scroll=make('div','gm-expense-dashboard-scroll');scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label','Gráficos e rankings de gastos');
   dialog.append(header,scroll);backdrop.append(dialog);root.append(backdrop);
-  let trigger=null,background=[],destroyed=false,trendObserver,buildYear;
+  let trigger=null,background=[],destroyed=false,trendObserver,buildYear,chartFilter;
   const hiddenSeries=new Set();
 
   function close({restoreFocus=true}={}) {
     if(backdrop.hidden)return;
     trendObserver?.disconnect();trendObserver=undefined;
     hiddenSeries.clear();
+    chartFilter=undefined;
     backdrop.hidden=true;scroll.replaceChildren();title.textContent='';subtitle.textContent='';
     for(const [node,inert] of background)node.inert=inert;
     background=[];
     if(restoreFocus&&trigger?.isConnected)trigger.focus({preventScroll:true});
     trigger=null;buildYear=null;onClose();
+  }
+  function selectChart(field,value,key) {
+    chartFilter=chartFilter?.field===field&&chartFilter.value===value ? undefined : {field,value};
+    const previousTop=scroll.scrollTop;
+    render(buildYear(Number(yearSelect.value),chartFilter));
+    scroll.scrollTop=previousTop;
+    restoreChartOption(scroll,key);
   }
   function renderTrend(data) {
     const section=make('section','gm-expense-dashboard-card gm-expense-dashboard-trend-card');
@@ -54,9 +63,12 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
       for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, String(value));
     }
     const svg = makeSvg('svg', {
-      class: 'gm-expense-dashboard-trend', role: 'img',
+      class: 'gm-expense-dashboard-trend', role: 'group',
       'aria-label': `Evolução mensal de gastos pagos, previstos e totais em ${data.year}`,
     });
+    const selectedMonth=data.months.findIndex(month=>chartFilter?.field==='month'&&chartFilter.value===month.period);
+    const marker=makeSvg('line',{class:'gm-dashboard-selected-month','aria-hidden':'true'});
+    if(selectedMonth>=0)svg.append(marker);
     const values = data.months.flatMap(month => [month.paid, month.forecast, month.total]).filter(Number.isFinite);
     const min = Math.min(0, ...values);
     const max = Math.max(0, ...values);
@@ -87,12 +99,14 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
         const value = month[field];
         const period = shortMonth(month.period);
         const amount = money(value);
-        const circle = makeSvg('circle', {
-          r: 4, fill: color, tabindex: 0, 'data-month-index': index, 'aria-label': `${label} em ${period}: ${amount}`,
+        const circle = makeSvg('circle', {r: 4, fill: color, 'data-month-index': index});
+        const key=`${field}:${month.period}`;
+        bindSvgChartOption(circle,{
+          key,label:`${label} em ${period}: ${amount}`,selected:index===selectedMonth,
+          activate:()=>selectChart('month',month.period,key),
         });
         circle.append(makeSvg('title', {}, `${label} · ${period}: ${amount}`));
         circle.addEventListener('focus', () => showMonth(index));
-        circle.addEventListener('click', () => showMonth(index));
         group.append(circle);
         const valueLabel = Number.isFinite(value) ? makeSvg('text', {
           class: 'gm-dashboard-value-label', 'text-anchor': 'middle', 'aria-hidden': 'true',
@@ -129,6 +143,7 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
       const staggerMonths = monthStep < monthLabelWidth + 3;
       const bottom = height - (staggerMonths ? 56 : 40);
       const yAt = value => bottom - ((value - min) / (max - min || 1)) * (bottom - top);
+      if(selectedMonth>=0)setAttributes(marker,{x1:xAt(selectedMonth),x2:xAt(selectedMonth),y1:top,y2:bottom});
 
       const occupied = grid.map(({ label, line, width: labelWidth }, index) => {
         const y = bottom - (bottom - top) * index / (grid.length - 1);
@@ -176,14 +191,26 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
         });
       }
     }
-    svg.addEventListener('pointermove',event=>{
+    function monthIndexAt(event) {
       const matrix = svg.getScreenCTM?.();
       const chartX = matrix
         ? new doc.defaultView.DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse()).x
         : event.clientX - svg.getBoundingClientRect().left;
-      showMonth(Math.max(0, Math.min(data.months.length - 1, Math.round((chartX - startX) / monthStep))));
+      return Math.max(0, Math.min(data.months.length - 1, Math.round((chartX - startX) / monthStep)));
+    }
+    svg.addEventListener('pointermove',event=>showMonth(monthIndexAt(event)));
+    svg.addEventListener('click',event=>{
+      if(event.target.closest('[data-chart-option]'))return;
+      const month=data.months[monthIndexAt(event)];
+      if(!month)return;
+      const visibleSeries=series.find(([field])=>!hiddenSeries.has(field));
+      selectChart('month',month.period,`${visibleSeries?.[0]}:${month.period}`);
     });
-    svg.addEventListener('pointerleave',event=>{if(event.pointerType!=='touch')monthDetail.hidden=true;});
+    svg.addEventListener('pointerleave',event=>{
+      if(selectedMonth>=0)showMonth(selectedMonth);
+      else if(event.pointerType!=='touch')monthDetail.hidden=true;
+    });
+    if(selectedMonth>=0)showMonth(selectedMonth);
     svg.addEventListener('keydown',event=>{
       if(!['ArrowLeft','ArrowRight'].includes(event.key))return;event.preventDefault();
       const current=Number(monthDetail.dataset.monthIndex||0),next=Math.max(0,Math.min(data.months.length-1,current+(event.key==='ArrowRight'?1:-1)));
@@ -204,12 +231,17 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
     section.append(svg, legend);
     return { section, svg, layout };
   }
-  function renderRanking(titleText,items,sectionClass){
+  function renderRanking(titleText,items,sectionClass,field){
     const section=make('section',`gm-expense-dashboard-card gm-expense-dashboard-ranking ${sectionClass}`);section.append(make('h3','',titleText));
     const max=Math.max(0,...items.map(item=>item.total||0));
     if(!items.length){section.append(make('p','gm-expense-dashboard-empty','Sem gastos no período.'));return section;}
     for(const [index,item] of items.entries()){
-      const row=make('div','gm-dashboard-rank-row');row.setAttribute('aria-label',`${item.name}: ${money(item.total)}, ${Number.isFinite(item.percentage)?item.percentage.toLocaleString('pt-BR',{maximumFractionDigits:1}):'incompleto'} por cento`);
+      const row=make('button','gm-dashboard-rank-row');row.type='button';
+      const key=`${field}:${item.name}`;
+      row.dataset.chartOption=key;
+      row.setAttribute('aria-pressed',String(chartFilter?.field===field&&chartFilter.value===item.name));
+      row.setAttribute('aria-label',`${item.name}: ${money(item.total)}, ${Number.isFinite(item.percentage)?item.percentage.toLocaleString('pt-BR',{maximumFractionDigits:1}):'incompleto'} por cento`);
+      row.addEventListener('click',()=>selectChart(field,item.name,key));
       const rank=make('span','gm-dashboard-rank-number',String(index+1).padStart(2,'0'));
       const label=make('span','gm-dashboard-rank-name',item.name);
       const track=make('span','gm-dashboard-rank-track'),bar=make('span','gm-dashboard-rank-bar');bar.style.width=`${max>0&&Number.isFinite(item.total)?Math.max(0,item.total/max*100):0}%`;bar.title=`${money(item.total)} · ${Number.isFinite(item.percentage)?item.percentage.toLocaleString('pt-BR',{maximumFractionDigits:2}):'INCOMPLETO'}%`;
@@ -225,19 +257,16 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
     dialog.setAttribute('aria-label',`Análise ${subject}`);
     closeButton.setAttribute('aria-label',`Fechar análise ${subject}`);
     const metrics=make('section','gm-expense-dashboard-metrics');
-    const sumMonths=field=>data.months.every(item=>Number.isFinite(item[field]))
-      ? data.months.reduce((sum,item)=>sum+item[field],0) : null;
-    for(const [label,value,kind] of [['Total no período',data.total,'total'],['Pago',sumMonths('paid'),'paid'],['Previsto',sumMonths('forecast'),'forecast']]){
+    for(const [label,value,kind] of [['Total no período',data.total,'total'],['Pago',data.paid,'paid'],['Previsto',data.forecast,'forecast']]){
       const card=make('div',`gm-expense-dashboard-metric is-${kind}`);card.append(make('span','',label),make('strong','',money(value)));metrics.append(card);
     }
     const rankings=make('div','gm-expense-dashboard-rankings');
-    rankings.append(renderRanking('Principais produtos',data.products,'is-products'));
-    if(data.suppliers)rankings.append(renderRanking('Principais fornecedores',data.suppliers,'is-suppliers'));
-    if(data.stages)rankings.append(renderRanking('Principais etapas',data.stages,'is-stages'));
+    rankings.append(renderRanking('Principais produtos',data.products,'is-products','product'));
+    if(data.suppliers)rankings.append(renderRanking('Principais fornecedores',data.suppliers,'is-suppliers','supplier'));
+    if(data.stages)rankings.append(renderRanking('Principais etapas',data.stages,'is-stages','stage'));
     if(rankings.childElementCount===2)rankings.classList.add('gm-expense-dashboard-rankings--two-columns');
     const trend = renderTrend(data);
     scroll.replaceChildren(metrics, trend.section, rankings);
-    scroll.scrollTop=0;
     trend.layout();
     const ResizeObserver = doc.defaultView.ResizeObserver;
     if (ResizeObserver) {
@@ -247,7 +276,11 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
   }
   yearSelect.addEventListener('change',()=>{
     const option=yearSelect.selectedOptions[0];
-    if(buildYear&&option&&!option.disabled)render(buildYear(Number(option.value)));
+    if(buildYear&&option&&!option.disabled){
+      chartFilter=undefined;
+      render(buildYear(Number(option.value)));
+      scroll.scrollTop=0;
+    }
   });
   closeButton.addEventListener('click',()=>close());
   backdrop.addEventListener('click',event=>{if(event.target===backdrop)close();event.stopPropagation();});
@@ -255,7 +288,7 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
     if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();return;}
     if(event.key!=='Tab')return;event.stopPropagation();
     const firstControl=yearSelect.disabled?closeButton:yearSelect;
-    const lastControl=scroll.querySelector('.gm-expense-dashboard-legend button:last-child')||scroll;
+    const lastControl=[...scroll.querySelectorAll('.gm-dashboard-legend-item,.gm-dashboard-rank-row')].at(-1) || scroll;
     if(event.shiftKey&&(doc.activeElement===firstControl||doc.activeElement===dialog)){event.preventDefault();lastControl.focus();}
     else if(!event.shiftKey&&(doc.activeElement===lastControl||doc.activeElement===dialog)){event.preventDefault();firstControl.focus();}
   });
@@ -274,7 +307,7 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
       yearSelect.value=String(data.year);
       background=[...root.children].filter(node=>node!==backdrop).map(node=>[node,Boolean(node.inert)]);
       for(const [node] of background)node.inert=true;
-      backdrop.hidden=false;render(data);closeButton.focus({preventScroll:true});
+      backdrop.hidden=false;render(data);scroll.scrollTop=0;closeButton.focus({preventScroll:true});
     },
     close,
     destroy(){if(destroyed)return;close({restoreFocus:false});destroyed=true;backdrop.remove();},

@@ -59,6 +59,21 @@ try {
       supplierBars:scroll.querySelectorAll('[data-chart=suppliers] [data-supplier-bar]').length,
       monthlyQuantities:scroll.querySelectorAll('[data-chart=monthly-quantity] [data-month-bar]').length}};
   results.fillsReportHeight=JSON.parse(document.documentElement.dataset.geometry).fillsReportHeight;
+  const supplierOption=()=>scroll.querySelector('[data-supplier-bar="Fornecedor secundário"]').closest('[role=button]');
+  supplierOption().scrollIntoView({block:'center',behavior:'instant'});
+  const hit=supplierOption().querySelector('.gm-product-chart-hit');
+  const hitRect=hit.getBoundingClientRect();
+  const clicked=document.elementFromPoint(hitRect.left+hitRect.width/2,hitRect.top+hitRect.height/2);
+  const hitOption=clicked?.closest('[data-chart-option]')===supplierOption();
+  if(hitOption)clicked.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  const selected=supplierOption();
+  results.chartFilter=hitOption&&document.activeElement===selected
+    &&selected.getAttribute('aria-pressed')==='true'
+    &&scroll.querySelector('[data-month-point="2026-10"]').textContent.includes('0,00')
+    &&scroll.querySelector('[data-month-bar="2026-08"]').textContent.endsWith(': 5');
+  selected.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+  results.chartFilterCleared=supplierOption().getAttribute('aria-pressed')==='false'
+    &&scroll.querySelector('[data-month-point="2026-10"]').textContent.includes('757,40');
   scroll.scrollTop=1000;
   close.click();
   Object.assign(results,{returned:!root.hidden&&popup.hidden,sameDOM:report.innerHTML===previous,

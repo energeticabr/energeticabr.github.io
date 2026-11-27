@@ -3,7 +3,7 @@ import { addReportCloseControl } from './report-close-control.js';
 import {
   buildSpendingReport9, buildManagementProductDetail,
   buildManagementRankingBreakdown, buildManagementRankingLaunchMonths, buildManagementExpenseTypeDashboard,
-  buildManagementRankingDashboard,
+  buildManagementRankingDashboard, buildManagementProductPurchaseAnalytics,
 } from '../chat/spending-reports-model.js';
 import {
   createManagementProductDetailView, formatDetailDate, formatDetailQuantity, formatDetailUnit,
@@ -93,7 +93,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     if(root.hidden||!snapshot||destroyed)return;
     reportPosition={top:content.scrollTop,left:content.scrollLeft};
     const source=snapshot, filters=selected(), openedAt=now();
-    spendingDashboard.open(year=>buildDashboard(source,filters,{...group,now:openedAt,year}),button);
+    spendingDashboard.open((year,chartFilter)=>buildDashboard(source,filters,{...group,now:openedAt,year,chartFilter}),button);
   }
   function productCell(tr,product,branch,kind) {
     const td=cell(tr,'name','');
@@ -104,7 +104,9 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     tr.addEventListener('click',()=>{
       if(root.hidden||!snapshot||destroyed)return;
       reportPosition={top:content.scrollTop,left:content.scrollLeft};
-      productDetail.open(buildManagementProductDetail(snapshot,selected(),{product,branch,kind,asOfDate:now()}),button);
+      const source=snapshot, options={product,branch,kind,asOfDate:now()};
+      productDetail.open(buildManagementProductDetail(source,selected(),options),button,
+        chartFilter=>buildManagementProductPurchaseAnalytics(source,{...options,chartFilter}));
     });
     return td;
   }

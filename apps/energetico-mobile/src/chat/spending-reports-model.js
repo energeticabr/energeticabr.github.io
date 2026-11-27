@@ -271,7 +271,11 @@ function previousMonthKey(year, month, offset) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function buildManagementProductPurchaseAnalytics(snapshot, { branch, product, matchesGroup, asOfDate }) {
+const matchesProductGroup = kind => kind === "expense" ? equals : (left, right) => scalar(left) === scalar(right);
+
+export function buildManagementProductPurchaseAnalytics(snapshot,
+  { branch, product, kind = "expense", asOfDate = new Date(), chartFilter } = {}) {
+  const matchesGroup = matchesProductGroup(kind);
   const endKey = asYearMonth(asOfDate);
   const [endYear, endMonth] = endKey.split("-");
   const keys = Array.from({ length: 12 }, (_, index) => previousMonthKey(endYear, endMonth, 11 - index));
@@ -280,7 +284,11 @@ function buildManagementProductPurchaseAnalytics(snapshot, { branch, product, ma
     matchesGroup(scalar(row.branch) || "-", branch)
     && matchesGroup(scalar(row.product) || "-", product)
     && monthly.has(String(row.date || "").slice(0, 7)));
-  for (const row of launches) monthly.get(row.date.slice(0, 7)).push(row);
+  for (const row of launches) {
+    if (chartFilter?.source !== "suppliers" || (scalar(row.supplier) || "-") === chartFilter.value) {
+      monthly.get(row.date.slice(0, 7)).push(row);
+    }
+  }
   const months = keys.map(key => {
     const [year, month] = key.split("-");
     const rows = monthly.get(key);
@@ -291,11 +299,21 @@ function buildManagementProductPurchaseAnalytics(snapshot, { branch, product, ma
       quantity: rows.length ? completeSum(rows, "quantity") : 0,
       count: rows.length });
   });
-  const suppliers = groupRows(launches, row => row.supplier).map(([name, rows]) => Object.freeze({
+  const monthSelected = chartFilter && chartFilter.source !== "suppliers";
+  const supplierRows = monthSelected ? monthly.get(chartFilter.value) || [] : launches;
+  const suppliers = groupRows(supplierRows, row => row.supplier).map(([name, rows]) => Object.freeze({
     name, total: completeSum(rows, "total"), quantity: completeSum(rows, "quantity"), count: rows.length,
   })).sort(byValue);
-  return Object.freeze({ startPeriod: months[0].period, endPeriod: months.at(-1).period,
-    months: Object.freeze(months), suppliers: Object.freeze(suppliers) });
+  const selectedMonths = monthSelected
+    ? Object.freeze(months.map(month => month.key === chartFilter.value ? month
+      : Object.freeze({ ...month, total: 0, quantity: 0, count: 0 })))
+    : months;
+  Object.freeze(months);
+  return Object.freeze({ startPeriod: months[0].period, endPeriod: months.at(-1).period, months,
+    suppliers: Object.freeze(suppliers),
+    ...(chartFilter?.source === "monthly-purchases" ? { quantityMonths: selectedMonths } : {}),
+    ...(chartFilter?.source === "monthly-quantity" ? { purchaseMonths: selectedMonths } : {}),
+  });
 }
 
 function monthSection(rows, period, previous = false) {
@@ -327,7 +345,7 @@ export function buildManagementRankingLaunchMonths(rows) {
 }
 
 export function buildManagementExpenseTypeDashboard(snapshot, filters = {},
-  { branch, expenseType, now = new Date(), year = now.getFullYear() } = {}) {
+  { branch, expenseType, now = new Date(), year = now.getFullYear(), chartFilter } = {}) {
   const productTypes = new Map();
   for (const row of snapshot?.productTypes || []) {
     const product = scalar(row.product).toLocaleLowerCase("pt-BR");
@@ -339,30 +357,35 @@ export function buildManagementExpenseTypeDashboard(snapshot, filters = {},
   // must not silently truncate the annual trend or its category shares.
   const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "", product: "", supplier: "", stage: "", order: "" })
     .filter(row => equals(scalar(row.branch) || "-", branch) && equals(typeFor(row), expenseType));
-  return Object.freeze({ branch, expenseType, ...buildManagementSpendingDashboard(rows, year) });
+  return Object.freeze({ branch, expenseType, ...buildManagementSpendingDashboard(rows, year, chartFilter) });
 }
 
 export function buildManagementRankingDashboard(snapshot, filters = {},
-  { branch, field, name, now = new Date(), year = now.getFullYear() }) {
+  { branch, field, name, now = new Date(), year = now.getFullYear(), chartFilter }) {
   const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "", [field]: "" })
     .filter(row => (scalar(row.branch) || "-") === branch && (scalar(row[field]) || "-") === name);
-  return Object.freeze({ branch, field, name, ...buildManagementSpendingDashboard(rows, year, field) });
+  return Object.freeze({ branch, field, name, ...buildManagementSpendingDashboard(rows, year, chartFilter, field) });
 }
 
-function buildManagementSpendingDashboard(rows, year, selectedField) {
+function buildManagementSpendingDashboard(rows, year, chartFilter, selectedField) {
   const availableYears = new Set();
-  const trendRows = [];
+  const yearRows = [];
+  const filteredRows = [];
   const rowsByMonth = Array.from({ length: 12 }, () => []);
+  const monthSelected = chartFilter?.field === "month";
   for (const row of rows) {
     const date = row.paymentDate || row.dueDate;
     const rowYear = Number(date.slice(0, 4));
     const monthRows = rowsByMonth[Number(date.slice(5, 7)) - 1];
     if (!monthRows) continue;
     if (Number.isFinite(row.total) && row.total !== 0) availableYears.add(rowYear);
-    if (rowYear === year) {
-      trendRows.push(row);
-      monthRows.push(row);
-    }
+    if (rowYear !== year) continue;
+    yearRows.push(row);
+    const matches = !chartFilter || (monthSelected
+      ? date.slice(0, 7) === chartFilter.value
+      : (scalar(row[chartFilter.field]) || "-") === chartFilter.value);
+    if (matches) filteredRows.push(row);
+    if (matches || monthSelected) monthRows.push(row);
   }
   const months = rowsByMonth.map((monthRows, index) => {
     const period = `${year}-${String(index + 1).padStart(2, "0")}`;
@@ -371,17 +394,22 @@ function buildManagementSpendingDashboard(rows, year, selectedField) {
     return Object.freeze({ period, paid, forecast,
       total: paid == null || forecast == null ? null : new Decimal(paid).plus(forecast).toNumber() });
   });
-  const total = completeSum(trendRows, "total");
-  const breakdown = field => Object.freeze(grouped(trendRows, field, total, 8).map(item => Object.freeze(item)));
+  const { paid, forecast } = paymentAmounts(filteredRows);
+  const total = completeSum(filteredRows, "total");
+  const breakdown = field => {
+    const source = field === chartFilter?.field ? yearRows : filteredRows;
+    const denominator = source === yearRows ? completeSum(yearRows, "total") : total;
+    return Object.freeze(grouped(source, field, denominator, 8).map(item => Object.freeze(item)));
+  };
   const years = Object.freeze([...availableYears].sort((a, b) => b - a));
-  return { year, years, total, months: Object.freeze(months), products: breakdown("product"),
+  return { year, years, total, paid, forecast, months: Object.freeze(months), products: breakdown("product"),
     ...(selectedField === "supplier" ? {} : { suppliers: breakdown("supplier") }),
     ...(selectedField === "stage" ? {} : { stages: breakdown("stage") }) };
 }
 
 export function buildManagementProductDetail(snapshot, filters = {}, { branch, product, kind = "expense", asOfDate = new Date() } = {}) {
   const expense = kind === "expense";
-  const matchesGroup = expense ? equals : (left,right) => scalar(left) === scalar(right);
+  const matchesGroup = matchesProductGroup(kind);
   function detailRows(selected) {
     const source = expense ? selectedExpenses(snapshot, selected) : selectedRows(snapshot?.launches, selected);
     return source.filter(row => matchesGroup(scalar(row.branch) || "-", branch)
@@ -411,7 +439,7 @@ export function buildManagementProductDetail(snapshot, filters = {}, { branch, p
     const period = filters.year ? `Ano de ${filters.year}` : "Todos os períodos";
     sections.push(Object.freeze({ period, previous: false, rows: Object.freeze(rows), subtotal: null }));
   }
-  const analytics = buildManagementProductPurchaseAnalytics(snapshot, { branch, product, matchesGroup, asOfDate });
+  const analytics = buildManagementProductPurchaseAnalytics(snapshot, { branch, product, kind, asOfDate });
   return Object.freeze({ product, branch, sections:Object.freeze(sections), analytics });
 }
 

@@ -94,6 +94,11 @@
 .gm-product-chart-bar--incomplete { fill:#b1bbc5; stroke:#718096; stroke-width:1; stroke-dasharray:3 2; }
 .gm-product-chart-label,.gm-product-chart-value { fill:#263746; font-size:11px; }
 .gm-product-chart-empty { margin:8px 0 0; color:#536678; font:11px Arial,sans-serif; }
+.gm-product-chart-svg [role=button] { cursor:pointer; }
+.gm-product-chart-hit { fill:transparent; }
+.gm-product-chart-svg [aria-pressed=true] .gm-product-chart-hit { fill:#b5d2ec66; }
+.gm-product-chart-svg [role=button]:focus-visible { outline:none; }
+.gm-product-chart-svg [role=button]:focus-visible .gm-product-chart-hit { stroke:#2188c1; stroke-width:2; }
 .gm-product-dialog :focus-visible { outline:2px solid #2188c1; outline-offset:1px; }
 .gm-expense-dashboard-backdrop { position:absolute; inset:0; z-index:22; display:grid; grid-template:minmax(0,1fr)/minmax(0,1fr); box-sizing:border-box; padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left)); background:rgb(5 32 46 / 72%); }
 .report-landscape-viewport[data-report-portrait=true] .gm-expense-dashboard-backdrop { padding:max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left)) max(10px,env(safe-area-inset-top)); }
@@ -135,7 +140,10 @@
 .gm-expense-dashboard-series.is-total { --gm-chart-total:#305496; }
 .gm-expense-dashboard-series.is-paid { --gm-chart-paid:#198754; }
 .gm-expense-dashboard-series.is-forecast { --gm-chart-forecast:#d08a16; }
-.gm-expense-dashboard-series circle { stroke:#fff; stroke-width:2; vector-effect:non-scaling-stroke; cursor:help; }
+.gm-expense-dashboard-trend { cursor:pointer; }
+.gm-dashboard-selected-month { stroke:#1474a2; stroke-width:2; stroke-dasharray:4 3; }
+.gm-expense-dashboard-series circle { stroke:#fff; stroke-width:2; vector-effect:non-scaling-stroke; }
+.gm-expense-dashboard-series circle[aria-pressed=true] { stroke:#173b64; }
 .gm-expense-dashboard-series circle:focus-visible { outline:2px solid #173b64; }
 .gm-dashboard-value-label { font:700 15px Arial,sans-serif; paint-order:stroke; stroke:#fff; stroke-width:3px; stroke-linejoin:round; pointer-events:none; }
 .gm-dashboard-value-label[hidden],.gm-expense-dashboard-series[hidden] { display:none; }
@@ -156,7 +164,12 @@
 .gm-expense-dashboard-ranking.is-products h3 { color:#256b4b; }
 .gm-expense-dashboard-ranking.is-suppliers h3 { color:#9a6b0d; }
 .gm-expense-dashboard-ranking.is-stages h3 { color:#644691; }
-.gm-dashboard-rank-row { display:grid; grid-template-columns:21px minmax(45px,1fr) minmax(26px,.8fr) auto auto; align-items:center; gap:5px; min-width:0; padding:5px 0; border-bottom:1px solid #f0f3f6; }
+.gm-dashboard-rank-row { display:grid; grid-template-columns:21px minmax(45px,1fr) minmax(26px,.8fr) auto auto; align-items:center; gap:5px; min-width:0; width:100%; padding:5px 0; border:0; border-bottom:1px solid #f0f3f6; border-radius:3px; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+.gm-dashboard-rank-row[aria-pressed=true] { background:#e1effb; box-shadow:inset 0 0 0 1px #5593c2; }
+@media (hover:hover) {
+  .gm-dashboard-rank-row[aria-pressed=false]:hover { background:#f1f6fb; }
+  .gm-product-chart-svg [aria-pressed=false]:hover .gm-product-chart-hit { fill:#b5d2ec33; }
+}
 .gm-dashboard-rank-number { color:#52677d; font:700 11px Arial,sans-serif; }
 .gm-dashboard-rank-name { min-width:0; overflow:hidden; color:#334c62; font-size:clamp(8px,.95vw,11px); text-overflow:ellipsis; white-space:nowrap; }
 .gm-dashboard-rank-track { height:7px; overflow:hidden; border-radius:8px; background:#eef2f6; }

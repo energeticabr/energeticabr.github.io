@@ -23,12 +23,14 @@
       paid: value, forecast, total: value + forecast };
   });
   const rank = [{ name: 'CONCRETO USINADO', total: 97500, percentage: 24.7 }];
+  const annualTotals = months => Object.fromEntries(['total', 'paid', 'forecast'].map(field =>
+    [field, months.reduce((sum, month) => sum + month[field], 0)]));
   const dashboard = createManagementExpenseTypeDashboardView({ root });
   dashboard.open((year = 2026) => {
     const months = monthsFor(year);
     return {
       year, years: [2026, 2024], expenseType: 'MATERIAL', branch: '004 - EDIFÍCIO XAVANTE', months,
-      total: months.reduce((sum, month) => sum + month.total, 0),
+      ...annualTotals(months),
       products: rank, suppliers: rank, stages: rank,
     };
   });
@@ -101,7 +103,7 @@
   }));
   dashboard.open(() => ({
     year: 2026, years: [2026], expenseType: 'MATERIAL', branch: '004 - EDIFÍCIO XAVANTE', months: crowdedMonths,
-    total: crowdedMonths.reduce((sum, month) => sum + month.total, 0),
+    ...annualTotals(crowdedMonths),
     products: rank, suppliers: rank, stages: rank,
   }));
   const crowdedChart = root.querySelector('svg');
