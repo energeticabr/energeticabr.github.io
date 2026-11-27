@@ -90,14 +90,23 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
       assert.ok(layout.tiles.every(tile => tile.width > 100 && tile.height > minimumTileHeight
         && tile.left >= 0 && tile.right <= width && tile.top >= 0 && tile.bottom <= height));
       if (mode === 'player') {
-        const { tile, button, label, ribbon, clickable, noSpinner } = layout.playerOffline;
-        assert.ok(clickable && noSpinner);
-        assert.equal(button.width, 44);
-        assert.equal(button.height, 44);
-        assert.ok(label.right <= button.left);
-        for (const bounds of [button, ribbon]) {
-          assert.ok(bounds.left >= tile.left && bounds.right <= tile.right
-            && bounds.top >= tile.top && bounds.bottom <= tile.bottom);
+        const { tile, ribbon, noSpinner } = layout.playerOffline;
+        assert.ok(noSpinner);
+        assert.ok(ribbon.left >= tile.left && ribbon.right <= tile.right
+          && ribbon.top >= tile.top && ribbon.bottom <= tile.bottom);
+        assert.equal(layout.closeButtons.length, 8);
+        assert.equal(layout.closeButtons.filter(({ badge }) => badge).length, 1);
+        for (const { tile, button, label, badge, clickable } of layout.closeButtons) {
+          assert.ok(clickable, `Close button is covered at ${width}x${height}`);
+          assert.equal(button.width, 44);
+          assert.equal(button.height, 44);
+          assert.ok(button.left >= tile.left && button.right <= tile.right
+            && button.top >= tile.top && button.bottom <= tile.bottom);
+          assert.ok(label.right <= button.left);
+          if (badge) {
+            assert.ok(badge.width > 0 && badge.top >= label.bottom
+              && badge.right <= button.left && badge.bottom <= tile.bottom);
+          }
         }
         for (const [view, count] of [[layout.seven, 7], [layout.six, 6]]) {
           assert.equal(view.videos.length, count);

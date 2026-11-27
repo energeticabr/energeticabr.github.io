@@ -1061,7 +1061,11 @@ export function createChatClient({
     });
     return async (channelId, { signal } = {}) => {
       let result = await opened;
-      if (result?.busy?.includes(channelId)) result = await retry(result.retryAfterMs);
+      signal?.throwIfAborted();
+      if (result?.busy?.includes(channelId)) {
+        result = await retry(result.retryAfterMs);
+        signal?.throwIfAborted();
+      }
       if (result?.busy?.includes(channelId)) {
         throw Object.assign(new Error("O serviço de câmeras está ocupado. Tente novamente em instantes."), { status: 429 });
       }

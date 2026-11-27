@@ -880,12 +880,9 @@ export function createCamerasView(documentRef) {
       clearOfflineDeadline(item);
       item.offline = offline;
       item.status.toggleAttribute('data-offline', offline);
-      item.dismiss.hidden = !offline;
       if (offline) {
         item.status.textContent = 'OFF-LINE';
         item.status.dataset.loading = 'false';
-      } else if (documentRef.activeElement === item.dismiss) {
-        player?.querySelector('[data-camera-player-back]')?.focus({ preventScroll: true });
       }
     }
     function showWaiting(item, reconnecting) {
@@ -1160,10 +1157,10 @@ export function createCamerasView(documentRef) {
         }
       }
       function dismissCamera(item, slot) {
-        if (!item.offline) return;
         const index = playback.indexOf(item);
         if (index < 0) return;
         if (playback.length === 1) { stopPlayer(); return; }
+        saveThumbnail(item);
         clearOfflineDeadline(item);
         item.controller.abort();
         detachVideo(item);
@@ -1211,10 +1208,10 @@ export function createCamerasView(documentRef) {
         const retry = make('button', 'cameras-player__retry', 'Tentar reproduzir'); retry.type = 'button';
         retry.dataset.cameraPlayRetry = ''; retry.hidden = true;
         const dismiss = make('button', 'cameras-player__dismiss', '×'); dismiss.type = 'button';
-        dismiss.dataset.cameraDismiss = ''; dismiss.hidden = true;
+        dismiss.dataset.cameraDismiss = '';
         dismiss.setAttribute('aria-label', `Ocultar ${channel.label} desta visualização`);
         const slot = make('div', 'cameras-player__slot');
-        const item = { controller: new AbortController(), video, status: notice, retry, dismiss, liveBadge,
+        const item = { controller: new AbortController(), video, status: notice, retry, liveBadge,
           savedFrame, savedFrameImage, hls: null,
           mode: 'live', connected: false, connectionState: 'connecting', failureLabel: '', playAttempted: false,
           preview, channelId: channel.id, recordingId: null, searchButton: null, searchResults: null,
