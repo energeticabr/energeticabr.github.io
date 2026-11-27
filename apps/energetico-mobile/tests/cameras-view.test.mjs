@@ -148,7 +148,7 @@ test('identifica um canal sem sinal quando outro canal da câmera está on-line,
   assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Falha ao conectar');
 });
 
-test('reclassifica a queda da câmera física na grade conforme seus canais falham e voltam ao vivo', async t => {
+test('o vídeo de um canal atualiza o estado da câmera mesmo durante uma interrupção breve', async t => {
   const { document } = setup(t, { accountKey: 'conta', catalog: [
     { id: 'cam-1', label: 'Portão', cameraGroup: 'cam-1', status: 'offline' },
     { id: 'cam-2', label: 'Pátio', cameraGroup: 'cam-1', status: 'offline' },
@@ -185,7 +185,7 @@ test('reclassifica a queda da câmera física na grade conforme seus canais falh
   elapse(2_000);
   assert.equal(firstStatus.textContent, 'Canal sem sinal');
   elapse(45_000);
-  assert.equal(firstStatus.textContent, 'OFF-LINE');
+  assert.equal(firstStatus.textContent, 'Canal sem sinal');
   second.dispatchEvent(new window.Event('playing'));
   assert.equal(firstStatus.textContent, 'Canal sem sinal');
 
@@ -232,6 +232,45 @@ test('atualiza a lista e o visual quando vence a evidência de um canal fora da 
   now += 60_001;
   timerControl.callback();
   assert.equal(header.textContent, 'OFF-LINE');
+});
+
+test('uma câmera registrada on-line sem vídeo só aparece off-line após a confirmação do catálogo', async t => {
+  const timerControl = { cleared: [] };
+  let cameraStatus = 'online';
+  const { document, starts } = setup(t, { timerControl,
+    cameraList: async () => [{ id: 'cam-1', label: 'Câmera 2rp6', status: cameraStatus }],
+  });
+  const { defaultView: window } = document;
+  Object.defineProperty(document, 'hidden', { value: false });
+  await flush();
+  const timers = new Map();
+  let nextTimer = 0;
+  window.setTimeout = (callback, delay) => { timers.set(++nextTimer, { callback, delay }); return nextTimer; };
+  window.clearTimeout = id => timers.delete(id);
+  document.querySelector('[data-camera-open="cam-1"]').click();
+  await flush();
+  const video = document.querySelector('[data-camera-video="cam-1"]');
+  const notice = document.querySelector('.cameras-player__status');
+  const header = document.querySelector('.cameras-player__live-state');
+  const [, deadline] = [...timers].find(([, { delay }]) => delay === 45_000);
+  deadline.callback();
+  assert.equal(notice.textContent, 'Sem vídeo');
+  assert.equal(notice.hasAttribute('data-offline'), false);
+  assert.equal(header.textContent, 'Sem vídeo');
+
+  for (const [status, label] of [['offline', 'OFF-LINE'], ['unknown', 'Sem vídeo'], ['online', 'Sem vídeo']]) {
+    cameraStatus = status;
+    timerControl.callback();
+    await flush();
+    assert.equal(notice.textContent, label);
+    assert.equal(header.textContent, label);
+    assert.equal(notice.hasAttribute('data-offline'), status === 'offline');
+  }
+  assert.equal(document.querySelector('[data-camera-video="cam-1"]'), video);
+  assert.equal(starts.length, 1);
+  video.dispatchEvent(new window.Event('playing'));
+  assert.equal(notice.textContent, '');
+  assert.equal(header.textContent, 'AO VIVO');
 });
 
 test('oculta câmeras off-line e ao vivo sem reabrir os outros vídeos ou editar o visual salvo', async t => {
@@ -290,7 +329,7 @@ test('oculta câmeras off-line e ao vivo sem reabrir os outros vídeos ou editar
   assert.deepEqual([...document.querySelectorAll('[data-camera-video]')].map(video => video.dataset.cameraVideo), ids);
 });
 
-test('exibe off-line quando a abertura não entrega vídeo e retira a tarja se recuperar', async t => {
+test('exibe Sem vídeo quando a abertura não entrega imagem e retira o aviso ao recuperar', async t => {
   const { document } = setup(t);
   await flush();
   const { defaultView: window } = document;
@@ -311,7 +350,8 @@ test('exibe off-line quando a abertura não entrega vídeo e retira a tarja se r
   };
   assert.equal(status.dataset.loading, 'true');
   elapseDeadline();
-  assert.equal(status.textContent, 'OFF-LINE');
+  assert.equal(status.textContent, 'Sem vídeo');
+  assert.equal(status.hasAttribute('data-offline'), false);
   assert.equal(status.dataset.loading, 'false');
   assert.equal(dismiss.hidden, false);
   dismiss.focus();
@@ -323,7 +363,7 @@ test('exibe off-line quando a abertura não entrega vídeo e retira a tarja se r
 
   dismiss.click();
   assert.equal(document.querySelector('.cameras-player'), null);
-  assert.equal(document.activeElement, open);
+  assert.equal(document.activeElement, document.querySelector('[data-camera-open]'));
 });
 
 test('atualiza status a cada minuto enquanto a lista está aberta e cancela ao fechar', async t => {
@@ -602,7 +642,7 @@ test('preserva o codec direto quando o serviço fica indisponível durante a rec
   retry();
   await flush();
   assert.deepEqual(starts.map(item => item.codecs), [['h264', 'hevc'], ['h264', 'hevc'], ['h264', 'hevc']]);
-  assert.equal(document.querySelector('.cameras-player__status').textContent, 'OFF-LINE');
+  assert.equal(document.querySelector('.cameras-player__status').textContent, 'Sem vídeo');
   assert.equal(document.querySelector('[data-camera-play-retry]').hidden, false);
 });
 
@@ -757,11 +797,11 @@ test('a grade reconecta uma transmissão interrompida sem reabrir os demais cana
   Object.defineProperty(video, 'error', { value: { code: 2 } });
   video.dispatchEvent(new Event('error'));
   assert.equal(elapse(delay => delay === 45_000), 45_000);
-  assert.equal(notice.textContent, 'OFF-LINE');
+  assert.equal(notice.textContent, 'Sem vídeo');
   assert.equal(notice.dataset.loading, 'false');
   elapse();
   await flush();
-  assert.equal(notice.textContent, 'OFF-LINE');
+  assert.equal(notice.textContent, 'Sem vídeo');
   video.dispatchEvent(new Event('playing'));
   assert.equal(notice.textContent, '');
   video.dispatchEvent(new Event('error'));

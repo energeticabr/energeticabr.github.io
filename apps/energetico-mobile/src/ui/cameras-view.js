@@ -13,7 +13,7 @@ const CAMERA_STATUS_REFRESH_MS = 60_000;
 const LIVE_RENEWAL_INTERVAL_MS = 5 * 60_000;
 const LIVE_WAIT_NOTICE_MS = 2_000;
 const LIVE_STALL_MS = 20_000;
-const LIVE_OFFLINE_MS = 45_000;
+const LIVE_VIDEO_UNAVAILABLE_MS = 45_000;
 const LIVE_STABLE_MS = 30_000;
 const LIVE_RETRY_DELAY_MS = 4_000;
 const LIVE_NETWORK_RETRIES = 2;
@@ -108,7 +108,7 @@ export function createCamerasView(documentRef) {
     const windowRef = documentRef.defaultView;
 
     function rememberLiveVideo(item) {
-      if (item.cameraGroup && item.mode === 'live' && item.connected) {
+      if (item.mode === 'live' && item.connected) {
         liveChannelSeenAt.set(item.channelId, windowRef.Date.now());
       }
     }
@@ -691,7 +691,7 @@ export function createCamerasView(documentRef) {
     }
 
     async function refreshChannels({ initial = false } = {}) {
-      if (page.signal.aborted || player || (!initial && documentRef.hidden) || refreshing) return;
+      if (page.signal.aborted || (!initial && documentRef.hidden) || refreshing) return;
       refreshing = true;
       try {
         const result = await list({ signal: page.signal });
@@ -706,6 +706,7 @@ export function createCamerasView(documentRef) {
         if (changed) {
           cameraGroups = nextGroups;
           channels = flatNextChannels;
+          playback[0]?.updateHeader?.();
           for (const id of selected) if (!channels.some(channel => channel.id === id)) selected.delete(id);
           loadThumbnails();
           if (!initial && activeTab === 'visuals' && !creatingVisual) {
@@ -767,7 +768,7 @@ export function createCamerasView(documentRef) {
       gridRequest?.abort(); gridRequest = null;
       for (const item of playback) {
         rememberLiveVideo(item);
-        clearOfflineDeadline(item);
+        clearUnavailableDeadline(item);
         item.controller.abort();
         item.searchController?.abort();
         detachVideo(item);
@@ -799,7 +800,7 @@ export function createCamerasView(documentRef) {
       gridRequest?.abort(); gridRequest = null;
       for (const item of playback) {
         rememberLiveVideo(item);
-        clearOfflineDeadline(item);
+        clearUnavailableDeadline(item);
         item.controller.abort();
         if (item.searchController) {
           item.searchController.abort(); item.searchController = null;
@@ -812,7 +813,7 @@ export function createCamerasView(documentRef) {
         item.networkRetries = 0;
         item.connectionState = 'connecting'; item.failureLabel = '';
         item.liveBadge.hidden = true;
-        if (!item.offline) {
+        if (!item.streamUnavailable) {
           item.status.dataset.loading = 'true';
           item.status.textContent = 'Retomando transmissão…';
         }
@@ -913,18 +914,15 @@ export function createCamerasView(documentRef) {
         item.onPlaybackError?.(true, { stalled: true });
       }, delay);
     }
-    function clearOfflineDeadline(item) {
-      if (item.offlineTimer === null) return;
-      windowRef.clearTimeout(item.offlineTimer);
-      item.offlineTimer = null;
+    function clearUnavailableDeadline(item) {
+      if (item.unavailableTimer === null) return;
+      windowRef.clearTimeout(item.unavailableTimer);
+      item.unavailableTimer = null;
     }
-    function setOffline(item, offline) {
-      clearOfflineDeadline(item);
-      item.offline = offline;
-      if (offline) {
-        liveChannelSeenAt.delete(item.channelId);
-        item.status.dataset.loading = 'false';
-      }
+    function setStreamUnavailable(item, unavailable) {
+      clearUnavailableDeadline(item);
+      item.streamUnavailable = unavailable;
+      if (unavailable) item.status.dataset.loading = 'false';
     }
     function showWaiting(item, reconnecting) {
       if (item.played) rememberLiveVideo(item);
@@ -932,16 +930,16 @@ export function createCamerasView(documentRef) {
       item.connectionState = reconnecting ? 'waiting' : 'connecting';
       item.failureLabel = '';
       item.liveBadge.hidden = true;
-      if (!item.offline) {
+      if (!item.streamUnavailable) {
         item.status.textContent = reconnecting ? 'Reconectando…'
           : item.mode === 'playback' ? 'Abrindo gravação…' : 'Conectando…';
         item.status.dataset.loading = 'true';
-        if (item.mode === 'live' && item.offlineTimer === null) {
+        if (item.mode === 'live' && item.unavailableTimer === null) {
           // Keep one deadline across attempts until there is live video again.
-          item.offlineTimer = windowRef.setTimeout(() => {
-            setOffline(item, true);
+          item.unavailableTimer = windowRef.setTimeout(() => {
+            setStreamUnavailable(item, true);
             item.updateHeader?.();
-          }, LIVE_OFFLINE_MS);
+          }, LIVE_VIDEO_UNAVAILABLE_MS);
         }
       }
       item.updateControls?.(); item.updateHeader?.();
@@ -955,7 +953,7 @@ export function createCamerasView(documentRef) {
       if (Boolean(item.recordingId) !== Boolean(recordingId)) item.networkRetries = 0;
       item.recordingId = recordingId;
       item.mode = recordingId ? 'playback' : 'live';
-      if (recordingId) setOffline(item, false);
+      if (recordingId) setStreamUnavailable(item, false);
       item.liveUrl = null;
       updateSavedFrame(item);
       item.thumbnailTime = null;
@@ -996,7 +994,7 @@ export function createCamerasView(documentRef) {
       function playbackRejected(error) {
         if (signal.aborted || item.cancelRecovery) return;
         clearWaiting(item);
-        setOffline(item, false);
+        setStreamUnavailable(item, false);
         item.connected = false; item.connectionState = 'error';
         item.failureLabel = error?.name === 'NotAllowedError' ? 'Autoplay bloqueado' : 'Falha na reprodução';
         item.liveBadge.hidden = true;
@@ -1071,7 +1069,7 @@ export function createCamerasView(documentRef) {
         item.retry.textContent = 'Tentar novamente';
         item.retry.onclick = item.reconnect;
         if (!item.preview) item.retry.hidden = false;
-        else if (!item.offline) item.status.textContent += ' Toque no vídeo para tentar novamente.';
+        else if (!item.streamUnavailable) item.status.textContent += ' Toque no vídeo para tentar novamente.';
       }
       const showDisconnected = (message, network) => {
         item.cancelRecovery?.();
@@ -1079,14 +1077,15 @@ export function createCamerasView(documentRef) {
         item.connected = false;
         item.connectionState = 'error'; item.failureLabel = 'Transmissão interrompida';
         item.onPlaybackError = null;
-        setOffline(item, !recordingId && (item.offline || (network && item.networkRetries >= LIVE_NETWORK_RETRIES)));
+        setStreamUnavailable(item, !recordingId
+          && (item.streamUnavailable || (network && item.networkRetries >= LIVE_NETWORK_RETRIES)));
         detachVideo(item);
         updateSavedFrame(item);
         item.liveBadge.hidden = true;
         item.status.dataset.loading = 'false'; item.retry.hidden = true;
         item.updateControls?.();
         item.updateHeader?.();
-        if (!item.offline) item.status.textContent = message;
+        if (!item.streamUnavailable) item.status.textContent = message;
         if (!recordingId) offerLiveRetry();
       };
       try {
@@ -1138,10 +1137,11 @@ export function createCamerasView(documentRef) {
         if (!recordingId && recoverable && retryNetwork({ resumeOfflineAttempt: deviceOffline && item.networkRetries > 0 })) return;
         item.connected = false; item.connectionState = 'error'; item.failureLabel = 'Falha ao conectar';
         const retriesExhausted = recoverable && status !== 429 && item.networkRetries >= LIVE_NETWORK_RETRIES;
-        setOffline(item, !recordingId && status !== 401 && status !== 403 && (item.offline || retriesExhausted));
+        setStreamUnavailable(item, !recordingId && status !== 401 && status !== 403
+          && (item.streamUnavailable || retriesExhausted));
         item.liveBadge.hidden = true; item.status.dataset.loading = 'false';
         item.retry.hidden = true; item.updateControls?.(); item.updateHeader?.();
-        if (!item.offline) item.status.textContent = error?.message || 'Não foi possível abrir esta câmera.';
+        if (!item.streamUnavailable) item.status.textContent = error?.message || 'Não foi possível abrir esta câmera.';
         if (!recordingId) offerLiveRetry();
       }
     }
@@ -1204,7 +1204,7 @@ export function createCamerasView(documentRef) {
         if (playback.length === 1) { stopPlayer(); return; }
         saveThumbnail(item);
         rememberLiveVideo(item);
-        clearOfflineDeadline(item);
+        clearUnavailableDeadline(item);
         item.controller.abort();
         detachVideo(item);
         playback.splice(index, 1);
@@ -1258,10 +1258,11 @@ export function createCamerasView(documentRef) {
           savedFrame, savedFrameImage, hls: null,
           mode: 'live', connected: false, connectionState: 'connecting', failureLabel: '', playAttempted: false,
           preview, channelId: channel.id, cameraGroup: channel.cameraGroup, recordingId: null, searchButton: null, searchResults: null,
+          noVideoLabel: channel.cameraGroup ? CHANNEL_NO_SIGNAL : 'Sem vídeo',
           thumbnailTime: null, played: false, networkRetries: 0, playingSince: null, waitStartedAt: null,
-          waitingTimer: null, offlineTimer: null, offline: false, cancelRecovery: null, reconnect: null,
+          waitingTimer: null, unavailableTimer: null, streamUnavailable: false, cancelRecovery: null, reconnect: null,
           codecs: canPlayHevc(video) ? ['h264', 'hevc'] : ['h264'] };
-        if (channel.status === 'offline' && !hasRecentLiveVideo(channel.id)) setOffline(item, true);
+        if (channel.status === 'offline' && !hasRecentLiveVideo(channel.id)) setStreamUnavailable(item, true);
         dismiss.addEventListener('click', () => dismissCamera(item, slot));
         video.addEventListener('playing', () => {
           if (item.controller.signal.aborted || item.connectionState === 'error') return;
@@ -1271,7 +1272,7 @@ export function createCamerasView(documentRef) {
           item.waitStartedAt = null;
           item.played = true; item.connected = true; item.connectionState = 'playing'; item.failureLabel = '';
           rememberLiveVideo(item);
-          setOffline(item, false);
+          setStreamUnavailable(item, false);
           item.status.textContent = ''; item.status.dataset.loading = 'false'; item.retry.hidden = true;
           item.savedFrame.hidden = true;
           item.liveBadge.hidden = item.mode !== 'live';
@@ -1341,38 +1342,39 @@ export function createCamerasView(documentRef) {
       function updateHeader() {
         const count = playback.length;
         const first = playback[0];
-        const connected = playback.filter(item => item.connectionState === 'playing' && item.mode === 'live').length;
-        const itemsById = new Map(playback.map(item => [item.channelId, item]));
+        const playingChannels = new Set(playback.filter(item => item.connectionState === 'playing' && item.mode === 'live')
+          .map(item => item.channelId));
+        const connected = playingChannels.size;
+        const confirmedOfflineChannels = new Set();
+        for (const group of cameraGroups) {
+          if (group.every(channel => channel.status === 'offline'
+            && !playingChannels.has(channel.id) && !hasRecentLiveVideo(channel.id))) {
+            for (const channel of group) confirmedOfflineChannels.add(channel.id);
+          }
+        }
         let allOffline = true;
         for (const item of playback) {
-          const members = item.cameraGroup && cameraGroups.find(group => group[0].cameraGroup === item.cameraGroup);
-          const offline = item.offline && (!members || members.every(channel => {
-            const current = itemsById.get(channel.id);
-            if (current?.mode === 'live') {
-              return current.offline || (channel.status === 'offline' && !current.connected && !hasRecentLiveVideo(channel.id));
-            }
-            return channel.status === 'offline' && !hasRecentLiveVideo(channel.id);
-          }));
+          const offline = item.streamUnavailable && confirmedOfflineChannels.has(item.channelId);
           item.status.toggleAttribute('data-offline', offline);
-          if (item.offline) {
-            const label = offline ? 'OFF-LINE' : CHANNEL_NO_SIGNAL;
+          if (item.streamUnavailable) {
+            const label = offline ? 'OFF-LINE' : item.noVideoLabel;
             if (item.status.textContent !== label) item.status.textContent = label;
           }
           allOffline &&= offline;
         }
         liveState.textContent = count === 1
-          ? (first.offline ? (allOffline ? 'OFF-LINE' : CHANNEL_NO_SIGNAL) : first.connectionState === 'playing'
+          ? (first.streamUnavailable ? (allOffline ? 'OFF-LINE' : first.noVideoLabel) : first.connectionState === 'playing'
             ? (first.mode === 'live' ? 'AO VIVO' : 'GRAVAÇÃO')
             : first.connectionState === 'error' ? (first.failureLabel || 'Falha ao reproduzir')
               : first.connectionState === 'waiting' ? 'Reconectando…'
                 : first.mode === 'playback' ? 'Abrindo gravação…' : 'Conectando…')
           : (connected === count ? 'AO VIVO' : connected ? `${connected}/${count} ao vivo`
             : allOffline ? 'OFF-LINE'
-              : playback.every(item => item.offline || item.connectionState === 'error') ? 'Falha ao conectar'
-                : playback.some(item => !item.offline && item.connectionState === 'waiting') ? 'Reconectando…' : 'Conectando…');
+              : playback.every(item => item.streamUnavailable || item.connectionState === 'error') ? 'Falha ao conectar'
+                : playback.some(item => !item.streamUnavailable && item.connectionState === 'waiting') ? 'Reconectando…' : 'Conectando…');
         liveState.dataset.mode = count === 1 && first.mode === 'playback' ? 'playback' : 'live';
         liveState.dataset.connected = String(playback.every(item => item.connectionState === 'playing'));
-        liveState.dataset.state = allOffline ? 'error' : count === 1 && !first.offline ? first.connectionState : 'group';
+        liveState.dataset.state = allOffline ? 'error' : count === 1 && !first.streamUnavailable ? first.connectionState : 'group';
       }
       playback.forEach(item => { item.updateHeader = updateHeader; });
 
