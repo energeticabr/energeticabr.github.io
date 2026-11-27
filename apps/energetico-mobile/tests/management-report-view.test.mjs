@@ -145,7 +145,8 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   let loads=0;
   const launch={...row,date:'2026-10-02',paymentDate:'2026-10-03'};
   const {view,root,dom}=setup(t,async()=>{loads++;return {
-    launches:[launch,{...launch,id:'2',product:'Brita',supplier:'Beta',stage:'Estrutura',total:40}],
+    launches:[launch,{...launch,id:'2',product:'Brita',supplier:'Beta',stage:'Estrutura',total:40},
+      {...launch,id:'3',paymentDate:'2026-09-03'}],
     provisions:[{id:'p1',branch:row.branch,product:'Cimento',supplier:'Beta',stage:'Estrutura',dueDate:'2026-10-20',total:30}],
     productTypes:[{product:'Cimento',expenseType:'MATERIAL'},{product:'Brita',expenseType:'MATERIAL'}],
   };});
@@ -161,7 +162,16 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   assert.match(dashboard.textContent,/MATERIAL/);
   assert.match(dashboard.textContent,/004 - EDIFÍCIO XAVANTE/);
   assert.equal(dashboard.querySelectorAll('.gm-expense-dashboard-series.is-total circle').length,12);
-  assert.equal(dashboard.querySelectorAll('.gm-dashboard-value-label').length,36);
+  const visibleValues=field=>[...dashboard.querySelectorAll(
+    `.gm-expense-dashboard-series.is-${field}:not([hidden]) .gm-dashboard-value-label:not([hidden])`
+  )].map(label=>label.textContent);
+  assert.deepEqual(visibleValues('total'),['95']);
+  assert.deepEqual(visibleValues('paid').slice(-2),['25','65']);
+  const paidLegend=dashboard.querySelector('.gm-dashboard-legend-item.is-paid');
+  paidLegend.click();
+  assert.deepEqual(visibleValues('total').slice(-2),['25','95']);
+  paidLegend.click();
+  assert.deepEqual(visibleValues('total'),['95']);
   const monthDetail=dashboard.querySelector('.gm-expense-dashboard-month-detail');
   assert.ok(monthDetail);
   const trend=dashboard.querySelector('.gm-expense-dashboard-trend');
@@ -175,7 +185,7 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   assert.match(monthDetail.textContent.replace(/\u00a0/g,' '),/Pago.*R\$ 65,00/s);
   assert.deepEqual([...dashboard.querySelectorAll('.gm-expense-dashboard-ranking h3')].map(node=>node.textContent),
     ['Principais produtos','Principais fornecedores','Principais etapas']);
-  assert.equal(dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent.replace(/\u00a0/g,' '),'R$ 95,00');
+  assert.equal(dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent.replace(/\u00a0/g,' '),'R$ 120,00');
   dashboard.querySelector('.gm-expense-dashboard-close').click();
   assert.equal(root.querySelector('.gm-expense-dashboard-backdrop').hidden,true);
   assert.equal(root.querySelector('.gm-dialog').inert,false);
