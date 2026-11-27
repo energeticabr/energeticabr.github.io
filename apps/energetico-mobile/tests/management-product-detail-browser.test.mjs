@@ -26,6 +26,7 @@ test('popup do produto e detalhes dos rankings cabem no celular e PC',{timeout:1
           inside:true,fillsReportHeight:true,closeHit:true,scrolls:true,overflow:false,
           backgroundInert:true,preciseUnit:true,returned:true,sameDOM:true,sameScroll:true,focus:true,
           charts:{smoothValueLine:true,monthlyValues:12,supplierBars:2,monthlyQuantities:12},
+          chartFilter:true,chartFilterCleared:true,
           rankings:Array.from({length:3},()=>({leftOfLabel:true,fitsWidth:true,count:30,collapsed:true}))},
           `${width}×${height}: ${dom.window.document.documentElement.dataset.geometry}`);
         const {close}=JSON.parse(dom.window.document.documentElement.dataset.geometry);

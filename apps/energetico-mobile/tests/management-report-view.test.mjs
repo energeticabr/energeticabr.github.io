@@ -186,12 +186,13 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   const octoberPaid=[...dashboard.querySelectorAll('.gm-expense-dashboard-series.is-paid circle')]
     .find(point=>point.getAttribute('aria-label').includes('out/26'));
   octoberPaid.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true}));
-  assert.match(monthDetail.textContent,/out\/26/i);
-  assert.match(monthDetail.textContent.replace(/\u00a0/g,' '),/Pago.*R\$ 65,00/s);
+  const selectedDetail=dashboard.querySelector('.gm-expense-dashboard-month-detail');
+  assert.match(selectedDetail.textContent,/out\/26/i);
+  assert.match(selectedDetail.textContent.replace(/\u00a0/g,' '),/Pago.*R\$ 65,00/s);
   assert.deepEqual([...dashboard.querySelectorAll('.gm-expense-dashboard-ranking h3')].map(node=>node.textContent),
     ['Principais produtos','Principais fornecedores','Principais etapas']);
-  assert.equal(dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent.replace(/\u00a0/g,' '),'R$ 120,00');
-  paidLegend.click();
+  assert.equal(dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent.replace(/\u00a0/g,' '),'R$ 95,00');
+  dashboard.querySelector('.gm-dashboard-legend-item.is-paid').click();
   year.focus();
   year.value='2024';
   year.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
@@ -203,7 +204,7 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   assert.deepEqual([...dashboard.querySelectorAll('.is-suppliers .gm-dashboard-rank-name')].map(node=>node.textContent),['Histórico']);
   assert.equal(dashboard.querySelector('.gm-dashboard-legend-item.is-paid').getAttribute('aria-pressed'),'false');
   assert.deepEqual(visibleValues('total').filter(value=>value!=='0'),['70']);
-  const lastControl=dashboard.querySelector('.gm-dashboard-legend-item.is-forecast');
+  const lastControl=[...dashboard.querySelectorAll('.gm-dashboard-rank-row')].at(-1);
   year.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
   assert.equal(dom.window.document.activeElement,lastControl);
   lastControl.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));
@@ -398,7 +399,7 @@ test('ranking de produtos abre o próprio período; fechar relatório e atualiza
   const close=popup.querySelector('button');
   close.focus();
   close.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
-  assert.equal(dom.window.document.activeElement,popup.querySelector('.gm-product-scroll'));
+  assert.equal(dom.window.document.activeElement,[...popup.querySelectorAll('[data-chart-option]')].at(-1));
   popup.click();
   assert.equal(popup.hidden,true);assert.equal(root.hidden,false);
   product.click();
@@ -495,6 +496,118 @@ test('análise inicia no ano atual vazio e só permite escolher o ano com dispê
   year.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
   assert.equal(total(), 'R$25,00');
   assert.equal(reportYear.value, '2024');
+});
+
+test('os gráficos de uma etapa cruzam produto, fornecedor e mês sem mudar o escopo da filial', async t => {
+  const october = { ...row, paymentDate: '2026-10-03' };
+  const { view, root } = setup(t, async () => ({
+    launches: [
+      october,
+      { ...october, id: '2', supplier: 'Beta', product: 'Areia', total: 40 },
+      { ...october, id: '3', paymentDate: '2026-09-03', total: 10 },
+      { ...october, id: '4', stage: 'Outra etapa', total: 500 },
+    ],
+    provisions: [{ ...october, id: 'p1', paymentDate: '', dueDate: '2026-10-20', supplier: 'Beta', total: 30 }],
+    productTypes: [],
+  }));
+  await view.open();
+  [...root.querySelectorAll('[data-section=stages] button[aria-haspopup=dialog]')]
+    .find(button => button.textContent === row.stage).click();
+  const dashboard = root.querySelector('.gm-expense-dashboard');
+  const scroll = dashboard.querySelector('.gm-expense-dashboard-scroll');
+  const bars = section => [...dashboard.querySelectorAll(`.is-${section} .gm-dashboard-rank-row`)];
+  const bar = (section, name) => bars(section).find(item => item.querySelector('.gm-dashboard-rank-name').textContent === name);
+  const names = section => bars(section).map(item => item.querySelector('.gm-dashboard-rank-name').textContent);
+  const total = () => dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent.replace(/\s/g, '');
+  const point = index => dashboard.querySelector(`.gm-expense-dashboard-series.is-total circle[data-month-index="${index}"]`);
+  assert.equal(total(), 'R$105,00');
+  scroll.scrollTop = 120;
+  bar('products', 'Areia').click();
+  assert.equal(total(), 'R$40,00');
+  assert.deepEqual(names('suppliers'), ['Beta']);
+  assert.deepEqual(names('products'), ['Cimento', 'Areia']);
+  assert.equal(bar('products', 'Areia').getAttribute('aria-pressed'), 'true');
+  assert.equal(root.ownerDocument.activeElement, bar('products', 'Areia'));
+  assert.equal(scroll.scrollTop, 120);
+  assert.match(point(8).getAttribute('aria-label'), /0,00/);
+  bar('products', 'Areia').click();
+  assert.equal(total(), 'R$105,00');
+  bar('suppliers', 'Beta').click();
+  assert.equal(total(), 'R$70,00');
+  assert.deepEqual(names('products'), ['Areia', 'Cimento']);
+  point(8).dispatchEvent(new root.ownerDocument.defaultView.MouseEvent('click', { bubbles: true }));
+  assert.equal(total(), 'R$10,00');
+  assert.deepEqual(names('products'), ['Cimento']);
+  assert.deepEqual(names('suppliers'), ['Alfa']);
+  assert.equal(point(8).getAttribute('aria-pressed'), 'true');
+  point(8).dispatchEvent(new root.ownerDocument.defaultView.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert.equal(total(), 'R$105,00');
+  point(9).focus();
+  point(9).dispatchEvent(new root.ownerDocument.defaultView.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+  const focusedPoint = root.ownerDocument.activeElement;
+  focusedPoint.dispatchEvent(new root.ownerDocument.defaultView.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert.equal(total(), 'R$10,00');
+});
+
+test('um fornecedor revelado pelo mês fica selecionável mesmo fora dos oito maiores do ano', async t => {
+  const october = { ...row, paymentDate: '2026-10-03' };
+  const { view, root, dom } = setup(t, async () => ({
+    launches: [october, ...Array.from({ length: 8 }, (_, index) => ({
+      ...october, id: String(index + 2), supplier: `Fornecedor ${index}`, paymentDate: '2026-09-03', total: 100 + index,
+    }))],
+    provisions: [],
+    productTypes: [],
+  }));
+  await view.open();
+  root.querySelector('[data-section=stages] button[aria-haspopup=dialog]').click();
+  const dashboard = root.querySelector('.gm-expense-dashboard');
+  const supplier = () => [...dashboard.querySelectorAll('.is-suppliers .gm-dashboard-rank-row')]
+    .find(button => button.querySelector('.gm-dashboard-rank-name').textContent === 'Alfa');
+  assert.equal(supplier(), undefined);
+  dashboard.querySelector('.gm-expense-dashboard-series.is-total circle[data-month-index="9"]')
+    .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  supplier().click();
+  assert.equal(supplier()?.getAttribute('aria-pressed'), 'true');
+  assert.equal(dom.window.document.activeElement, supplier());
+  assert.equal(supplier().querySelector('.gm-dashboard-rank-number').textContent, '09');
+  supplier().click();
+  assert.equal(supplier(), undefined);
+  assert.match(dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent, /853,00/);
+});
+
+test('gráficos de compra de um produto cruzam fornecedor, quantidade e valor mensal', async t => {
+  const october = { ...row, paymentDate: '2026-10-03' };
+  const { view, root, dom } = setup(t, async () => ({
+    launches: [
+      october,
+      { ...october, id: '2', supplier: 'Beta', total: 40, quantity: 4 },
+      { ...october, id: '3', date: '2026-09-03', total: 10, quantity: 1 },
+    ],
+    provisions: [],
+    productTypes: [],
+  }));
+  await view.open();
+  root.querySelector('[data-section=products] .gm-product-link').click();
+  const popup = root.querySelector('.gm-product-dialog');
+  const supplier = name => popup.querySelector(`[data-supplier-bar="${name}"]`);
+  const amount = month => popup.querySelector(`[data-month-point="2026-${month}"]`);
+  const quantity = month => popup.querySelector(`[data-month-bar="2026-${month}"]`);
+  const click = node => node.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  assert.match(amount('10').textContent, /65,00/);
+  click(supplier('Beta'));
+  assert.match(amount('10').textContent, /40,00/);
+  assert.match(quantity('10').textContent, /: 4$/);
+  assert.match(amount('09').textContent, /0,00/);
+  click(quantity('09'));
+  assert.equal(supplier('Beta'), null);
+  assert.match(supplier('Alfa').textContent, /10,00/);
+  assert.match(amount('10').textContent, /0,00/);
+  click(quantity('09'));
+  assert.match(amount('10').textContent, /65,00/);
+  click(amount('09'));
+  assert.equal(supplier('Beta'), null);
+  assert.match(quantity('10').textContent, /: 0$/);
+  assert.equal(popup.querySelectorAll('[data-entry-id]').length, 2);
 });
 
 for (const [section, field, subject, breakdown, totals, september] of [
