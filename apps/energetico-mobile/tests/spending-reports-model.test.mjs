@@ -257,6 +257,19 @@ test("total geral soma os centavos apresentados em Pago e Previsto", () => {
   assert.deepEqual({ paid, forecast, total }, { paid: .12, forecast: .12, total: .24 });
 });
 
+test("análise da filial usa os centavos de Pago e Previsto do resumo, inclusive ao filtrar", () => {
+  const launch = row(1, { total: -.005 });
+  const provision = { ...launch, id: 'p1', paymentDate: '', dueDate: '2026-09-01', total: .01 };
+  const snapshot = { launches: [launch], provisions: [provision] };
+  const scope = { branch: 'Filial A', year: 2026 };
+  for (const chartFilter of [undefined, { field: 'month', value: '2026-09' }, { field: 'product', value: 'Cimento' }]) {
+    const analysis = model.buildManagementBranchDashboard(snapshot, {}, { ...scope, chartFilter });
+    assert.deepEqual([analysis.paid, analysis.forecast, analysis.total], [-.01, .01, 0]);
+    assert.deepEqual(analysis.months[8], { period: '2026-09', paid: -.01, forecast: .01, total: 0 });
+    assert.deepEqual(analysis.products.map(({ total, percentage }) => [total, percentage]), [[0, 0]]);
+  }
+});
+
 test("centavos exibidos por produto reconciliam com Pago e Previsto do tipo sem mudar o subtotal", () => {
   const sample = (product, total, id) => row(id, { product, total });
   const launches = [sample("A", .005, 1), sample("B", .005, 2), sample("C", .09, 3)];

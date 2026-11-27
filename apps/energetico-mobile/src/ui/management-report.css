@@ -30,9 +30,10 @@
 .gm-month-change[data-direction=incomplete] { color:#555; }
 .gm-expense-label { display:flex; align-items:center; gap:6px; text-align:left; }
 .gm-expense-label > span { min-width:0; }
-.gm-expense-type-link, .gm-ranking-link { min-width:0; padding:3px 0; border:0; background:transparent; color:#111; font:inherit; font-weight:700; text-align:left; text-decoration:underline; text-decoration-color:#9db1c7; text-underline-offset:2px; overflow-wrap:anywhere; cursor:pointer; }
-:is(.gm-expense-type-link, .gm-ranking-link):hover { color:#174c86; text-decoration-color:currentColor; }
-:is(.gm-expense-type-link, .gm-ranking-link):focus-visible { outline:2px solid #305496; outline-offset:2px; }
+.gm-expense-type-link, .gm-ranking-link, .gm-branch-link { min-width:0; padding:3px 0; border:0; background:transparent; color:#111; font:inherit; font-weight:700; text-align:left; text-decoration:underline; text-decoration-color:#9db1c7; text-underline-offset:2px; overflow-wrap:anywhere; cursor:pointer; }
+:is(.gm-expense-type-link, .gm-ranking-link, .gm-branch-link):hover { color:#174c86; text-decoration-color:currentColor; }
+:is(.gm-expense-type-link, .gm-ranking-link, .gm-branch-link):focus-visible { outline:2px solid #305496; outline-offset:2px; }
+.gm-branch-link { width:100%; min-height:24px; text-align:center; }
 .gm-expense-toggle {
   display:inline-grid; place-items:center; flex:none; width:26px; height:26px; min-height:0; padding:0;
   border:1px solid currentColor; border-radius:5px; background:#fff; color:#075e30;

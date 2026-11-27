@@ -22,6 +22,17 @@ try {
     now:()=>new Date('2026-10-05T12:00:00Z')});
   await view.open();
   const root=view.element,report=root.querySelector('.gm-content'),table=root.querySelector('[data-section=expense]');
+  const branch=report.querySelector('[data-section=branches] .gm-branch-link');
+  branch.scrollIntoView({block:'center',behavior:'instant'});
+  const branchBounds=branch.getBoundingClientRect();
+  const branchHit=document.elementFromPoint(branchBounds.left+branchBounds.width/2,branchBounds.top+branchBounds.height/2)===branch;
+  if(branchHit)branch.click();
+  const branchDashboard=root.querySelector('.gm-expense-dashboard-backdrop');
+  const branchAnalysis=branchHit&&!branchDashboard.hidden
+    &&branchDashboard.querySelector('h2').textContent===branch.textContent
+    &&branchDashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent.includes('897,65');
+  branchDashboard.querySelector('.gm-expense-dashboard-close').click();
+  const branchFocus=document.activeElement===branch;
   table.querySelector('.gm-expense-toggle').click();
   const product=table.querySelector('.gm-product-link');
   product.scrollIntoView({block:'center',behavior:'instant'});
@@ -43,7 +54,7 @@ try {
       &&Math.abs(rect.bottom-(popup.getBoundingClientRect().bottom-safeBottom))<=1});
   const forecast=popup.querySelector('[data-source=forecast]');
   const paid=popup.querySelector('[data-source=paid]');
-  const results={rows:popup.querySelectorAll('[data-entry-id]').length,
+  const results={rows:popup.querySelectorAll('[data-entry-id]').length,branchAnalysis,branchFocus,
     forecastOrange:[...forecast.cells].every(cell=>getComputedStyle(cell).backgroundColor==='rgb(255, 224, 178)'),
     paidOrange:[...paid.cells].some(cell=>getComputedStyle(cell).backgroundColor==='rgb(255, 224, 178)'),
     subtotals:[...popup.querySelectorAll('tbody')].map(body=>

@@ -150,9 +150,11 @@ function groupRows(rows, nameOf, keyOf = name => name) {
   return [...groups.values()];
 }
 
-function grouped(rows, field, whole, limit = Infinity) {
+const sumTotals = rows => completeSum(rows, "total");
+
+function grouped(rows, field, whole, limit = Infinity, totalFor = sumTotals) {
   return groupRows(rows, row => row[field]).map(([name, values]) => {
-    const total = completeSum(values, "total");
+    const total = totalFor(values);
     return Object.freeze({ name, count: values.length, quantity: completeSum(values, "quantity"), total,
       percentage: percentage(total, whole), rows: Object.freeze(values) });
   }).sort(byValue).slice(0, limit);
@@ -367,12 +369,25 @@ export function buildManagementRankingDashboard(snapshot, filters = {},
   return Object.freeze({ branch, field, name, ...buildManagementSpendingDashboard(rows, year, chartFilter, field) });
 }
 
+export function buildManagementBranchDashboard(snapshot, filters = {},
+  { branch, exactBranch = false, now = new Date(), year = now.getFullYear(), chartFilter } = {}) {
+  const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "" })
+    .filter(row => {
+      const name = scalar(row.branch) || "-";
+      return exactBranch ? name === branch : equals(name, branch);
+    });
+  return Object.freeze({ branch, field: "branch", name: branch, ...buildManagementSpendingDashboard(rows, year, chartFilter, "branch") });
+}
+
 function buildManagementSpendingDashboard(rows, year, chartFilter, selectedField) {
   const availableYears = new Set();
   const yearRows = [];
   const filteredRows = [];
   const rowsByMonth = Array.from({ length: 12 }, () => []);
   const monthSelected = chartFilter?.field === "month";
+  const branchAnalysis = selectedField === "branch";
+  const monthlyTotals = branchAnalysis ? paymentTotals : rows => withPaymentTotal(paymentAmounts(rows));
+  const totalFor = branchAnalysis ? rows => paymentTotals(rows).total : sumTotals;
   for (const row of rows) {
     const date = row.paymentDate || row.dueDate;
     const rowYear = Number(date.slice(0, 4));
@@ -389,16 +404,14 @@ function buildManagementSpendingDashboard(rows, year, chartFilter, selectedField
   }
   const months = rowsByMonth.map((monthRows, index) => {
     const period = `${year}-${String(index + 1).padStart(2, "0")}`;
-    const paid = completeSum(monthRows.filter(row => row.paymentDate), "total");
-    const forecast = completeSum(monthRows.filter(row => !row.paymentDate), "total");
-    return Object.freeze({ period, paid, forecast,
-      total: paid == null || forecast == null ? null : new Decimal(paid).plus(forecast).toNumber() });
+    return Object.freeze({ period, ...monthlyTotals(monthRows) });
   });
-  const { paid, forecast } = paymentAmounts(filteredRows);
-  const total = completeSum(filteredRows, "total");
+  const { paid, forecast, total } = branchAnalysis ? paymentTotals(filteredRows) : {
+    ...paymentAmounts(filteredRows), total: sumTotals(filteredRows),
+  };
   const breakdown = field => {
-    if (field !== chartFilter?.field) return Object.freeze(grouped(filteredRows, field, total, 8));
-    const annual = grouped(yearRows, field, completeSum(yearRows, "total"));
+    if (field !== chartFilter?.field) return Object.freeze(grouped(filteredRows, field, total, 8, totalFor));
+    const annual = grouped(yearRows, field, totalFor(yearRows), Infinity, totalFor);
     const items = annual.slice(0, 8);
     // A month or another ranking can reveal a category outside the annual top eight.
     const selectedRank = annual.findIndex(item => item.name === chartFilter.value);

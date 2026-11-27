@@ -38,6 +38,61 @@ test('management tables match reference sections with totals, rowspans, safe lab
   const year=root.querySelector('[name=year]');year.value='';year.dispatchEvent(new dom.window.Event('change'));
   assert.equal(root.querySelector('[data-metric=period]').textContent,'Todos os períodos');
 });
+test('o nome da filial abre sua análise anual a partir do acumulado e dos rankings', async t => {
+  const launch = { ...row, paymentDate: '2026-10-05' };
+  let loads = 0;
+  const { view, root, dom } = setup(t, async () => {
+    loads++;
+    return {
+      launches: [
+        launch,
+        { ...launch, id: '2', paymentDate: '2026-09-05', supplier: 'Beta', product: 'Areia', total: 30 },
+        { ...launch, id: '3', branch: 'Central', total: 500 },
+        { ...launch, id: '4', paymentDate: '2024-10-05', total: 80 },
+      ],
+      provisions: [{ ...launch, id: '5', branch: row.branch.toLowerCase(), paymentDate: '',
+        dueDate: '2026-10-20', total: 20 }],
+      productTypes: [{ product: row.product, expenseType: 'MATERIAL' }],
+    };
+  });
+  await view.open();
+  const content = root.querySelector('.gm-content');
+  const table = root.querySelector('[data-section=branches]');
+  const dashboard = root.querySelector('.gm-expense-dashboard-backdrop');
+  const totals = () => [...dashboard.querySelectorAll('.gm-expense-dashboard-metric strong')]
+    .map(metric => metric.textContent.replace(/\s/g, ''));
+  const branch = section => [...root.querySelectorAll(`[data-section=${section}] [data-column=branch] button`)]
+    .find(button => button.textContent === row.branch);
+
+  content.scrollTop = 120;
+  branch('branches').click();
+  assert.equal(dashboard.hidden, false);
+  assert.equal(dashboard.querySelector('h2').textContent, row.branch);
+  assert.equal(dashboard.querySelector('[role=dialog]').getAttribute('aria-label'), 'Análise da filial');
+  assert.deepEqual(totals(), ['R$75,00', 'R$55,00', 'R$20,00']);
+  dashboard.querySelector('.is-suppliers .gm-dashboard-rank-row').click();
+  assert.deepEqual(totals(), ['R$45,00', 'R$25,00', 'R$20,00']);
+  const year = dashboard.querySelector('[name=analysis-year]');
+  year.value = '2024';
+  year.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.deepEqual(totals(), ['R$80,00', 'R$80,00', 'R$0,00']);
+  dashboard.querySelector('.gm-expense-dashboard-close').click();
+  assert.equal(dom.window.document.activeElement, branch('branches'));
+  assert.equal(root.querySelector('[data-section=branches]'), table);
+  assert.equal(content.scrollTop, 120);
+
+  for (const section of ['expense', 'products', 'stages', 'suppliers', 'accounts']) {
+    branch(section).click();
+    assert.equal(dashboard.hidden, false, section);
+    assert.equal(root.querySelector('.gm-product-backdrop').hidden, true, section);
+    assert.deepEqual(totals(), section === 'expense' ? ['R$75,00', 'R$55,00', 'R$20,00']
+      : ['R$55,00', 'R$55,00', 'R$0,00'], section);
+    dashboard.querySelector('.gm-expense-dashboard-close').click();
+    assert.equal(dom.window.document.activeElement, branch(section), section);
+  }
+  assert.equal(loads, 1);
+});
+
 test('management cancellation and partial data never expose stale definitive totals',async t=>{
   let finish,signal;const {view,root}=setup(t,options=>{signal=options.signal;return new Promise(r=>finish=r);});
   const opening=view.open();view.close();assert.equal(signal.aborted,true);finish({launches:[row],provisions:[],productTypes:[]});await opening;
@@ -317,12 +372,12 @@ test('Total Geral exibe a variação mensal após o valor em cada tipo, subtotal
   assert.equal(badge(type).dataset.direction,'down');
   assert.match(badge(type).title,/setembro\/2026/);
   assert.equal(badge(table.querySelector('.gm-total')).textContent,'(- 11,11%)');
-  type.querySelector('button').click();
+  type.querySelector('.gm-expense-toggle').click();
   const details=[...table.querySelectorAll('.gm-expense-product')];
   assert.deepEqual(details.map(tr=>tr.querySelector('[data-column=name]').textContent),['Cimento','Novo','Antigo']);
   assert.deepEqual(details.map(tr=>badge(tr).textContent),['(+ 50%)','(+ ∞%)','(- 100%)']);
   assert.deepEqual(details.map(tr=>badge(tr).dataset.direction),['up','up','down']);
-  type.querySelector('button').click();
+  type.querySelector('.gm-expense-toggle').click();
   assert.equal(table.querySelectorAll('.gm-expense-product').length,0);
   const month=root.querySelector('[name=month]');month.value='';month.dispatchEvent(new dom.window.Event('change'));
   table=root.querySelector('[data-section=expense]');
@@ -439,7 +494,7 @@ test('nome do fornecedor abre o gráfico da filial e preserva a expansão de lan
 
   const ranking = root.querySelector('[data-section=suppliers]');
   const dashboard = root.querySelector('.gm-expense-dashboard-backdrop');
-  const supplier = [...ranking.querySelectorAll('button[aria-haspopup=dialog]')]
+  const supplier = [...ranking.querySelectorAll('.gm-ranking-link')]
     .find(button => button.textContent === row.supplier && button.getAttribute('aria-label').includes(row.branch));
   assert.ok(supplier, 'o nome do fornecedor deve abrir o gráfico');
   const toggle = supplier.closest('tr').querySelector('.gm-expense-toggle');
@@ -511,7 +566,7 @@ test('os gráficos de uma etapa cruzam produto, fornecedor e mês sem mudar o es
     productTypes: [],
   }));
   await view.open();
-  [...root.querySelectorAll('[data-section=stages] button[aria-haspopup=dialog]')]
+  [...root.querySelectorAll('[data-section=stages] .gm-ranking-link')]
     .find(button => button.textContent === row.stage).click();
   const dashboard = root.querySelector('.gm-expense-dashboard');
   const scroll = dashboard.querySelector('.gm-expense-dashboard-scroll');
@@ -559,7 +614,7 @@ test('um fornecedor revelado pelo mês fica selecionável mesmo fora dos oito ma
     productTypes: [],
   }));
   await view.open();
-  root.querySelector('[data-section=stages] button[aria-haspopup=dialog]').click();
+  root.querySelector('[data-section=stages] .gm-ranking-link').click();
   const dashboard = root.querySelector('.gm-expense-dashboard');
   const supplier = () => [...dashboard.querySelectorAll('.is-suppliers .gm-dashboard-rank-row')]
     .find(button => button.querySelector('.gm-dashboard-rank-name').textContent === 'Alfa');
@@ -647,7 +702,7 @@ for (const [section, field, subject, breakdown, totals, september] of [
 
     const ranking = root.querySelector(`[data-section=${section}]`);
     const dashboard = root.querySelector('.gm-expense-dashboard-backdrop');
-    const button = [...ranking.querySelectorAll('button[aria-haspopup=dialog]')]
+    const button = [...ranking.querySelectorAll('.gm-ranking-link')]
       .find(button => button.textContent === row[field] && button.getAttribute('aria-label').includes(row.branch));
     assert.ok(button, `o nome ${subject} deve abrir o gráfico`);
     const toggle = button.closest('tr').querySelector('.gm-expense-toggle');
