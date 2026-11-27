@@ -912,7 +912,7 @@ export function createChatClient({
   async function cameraRequest(payload, signal) {
     if (apiPrefix !== "/api") return payload.action === "status-events"
       ? { events: [], cursor: 0, generation: "00000000000000000000000000000000" }
-      : { channels: [] };
+      : { channels: [], visuals: [] };
     const token = await cancellableToken(tokenProvider, signal);
     return request(new URL("/api/portal-cameras", baseUrl).href, {
       method: "POST",
@@ -973,6 +973,28 @@ export function createChatClient({
       }));
     if (events.length !== result.events.length) throw new Error("O serviço retornou uma mudança de câmera inválida.");
     return { events, cursor: result.cursor, generation: result.generation };
+  }
+
+  function readCameraVisual(visual) {
+    if (typeof visual?.id !== "string" || !/^(?:[a-f0-9]{32}|[a-f0-9]{64})$/.test(visual.id)
+        || typeof visual.name !== "string" || !visual.name.trim() || visual.name.length > 120
+        || !Array.isArray(visual.cameraIds) || visual.cameraIds.length < 1 || visual.cameraIds.length > 8
+        || visual.cameraIds.some(id => typeof id !== "string" || !/^[a-z0-9-]{1,48}$/.test(id))
+        || new Set(visual.cameraIds).size !== visual.cameraIds.length) {
+      throw new Error("O serviço retornou um visual inválido.");
+    }
+    return { id: visual.id, name: visual.name, cameraIds: visual.cameraIds };
+  }
+
+  async function listCameraVisuals({ signal } = {}) {
+    const result = await cameraRequest({ action: "list-visuals" }, signal);
+    if (!Array.isArray(result?.visuals)) throw new Error("Não foi possível carregar os visuais.");
+    return result.visuals.map(readCameraVisual);
+  }
+
+  async function writeCameraVisual(action, visual, { signal } = {}) {
+    const result = await cameraRequest({ action, ...visual }, signal);
+    return readCameraVisual(result?.visual);
   }
 
   function cameraPlaylistUrl(path) {
@@ -1092,5 +1114,11 @@ export function createChatClient({
     }, true);
   }
 
-  return Object.freeze({ listCameraChannels, listCameraStatusEvents, startCameraPlayback, prepareCameraGrid, moveCamera, listCameraRecordings, playCameraRecording, swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence });
+  return Object.freeze({
+    listCameraVisuals,
+    createCameraVisual: writeCameraVisual.bind(null, "create-visual"),
+    importCameraVisual: writeCameraVisual.bind(null, "import-visual"),
+    renameCameraVisual: writeCameraVisual.bind(null, "rename-visual"),
+    listCameraChannels, listCameraStatusEvents, startCameraPlayback, prepareCameraGrid, moveCamera, listCameraRecordings, playCameraRecording, swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence,
+  });
 }

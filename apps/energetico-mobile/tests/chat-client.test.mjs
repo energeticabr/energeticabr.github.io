@@ -21,6 +21,32 @@ test('normaliza status e última conexão no catálogo de câmeras', async () =>
   ]);
 });
 
+test('sincroniza visuais no gateway autenticado e mantém a ordem dos canais', async () => {
+  const visual = { id: 'a'.repeat(32), name: 'Garagem', cameraIds: ['ch-2', 'ch-1'] };
+  const imported = { ...visual, id: 'b'.repeat(64) };
+  const renamed = { ...visual, name: 'Portão' };
+  const requests = [
+    [{ action: 'create-visual', ...visual }, { visual }],
+    [{ action: 'import-visual', name: visual.name, cameraIds: visual.cameraIds, occurrence: 0 }, { visual: imported }],
+    [{ action: 'rename-visual', id: visual.id, name: renamed.name, previousName: visual.name }, { visual: renamed }],
+    [{ action: 'list-visuals' }, { visuals: [renamed, imported] }],
+  ];
+  const { signal } = new AbortController();
+  const client = clientWith(async (url, options) => {
+    const [expected, result] = requests.shift();
+    assert.equal(url, API_BASE + '/api/portal-cameras');
+    assert.equal(options.headers.Authorization, 'Bearer graph-token');
+    assert.equal(options.signal, signal);
+    assert.deepEqual(JSON.parse(options.body), expected);
+    return jsonResponse(result);
+  });
+  assert.deepEqual(await client.createCameraVisual(visual, { signal }), visual);
+  assert.deepEqual(await client.importCameraVisual({ name: visual.name, cameraIds: visual.cameraIds, occurrence: 0 }, { signal }), imported);
+  assert.deepEqual(await client.renameCameraVisual({ id: visual.id, name: renamed.name, previousName: visual.name }, { signal }), renamed);
+  assert.deepEqual(await client.listCameraVisuals({ signal }), [renamed, imported]);
+  assert.equal(requests.length, 0);
+});
+
 test('live HEVC is opt-in and uses the same scoped media URL', async () => {
   const path = `/api/portal-camera-media/${'q'.repeat(43)}/hevc.m3u8`;
   const client = clientWith(async (_url, options) => {

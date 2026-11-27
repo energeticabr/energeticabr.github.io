@@ -11796,6 +11796,10 @@ export function createAppController({
       opened = view.openCameras?.({
         accountKey,
         list: client.listCameraChannels,
+        listVisuals: client.listCameraVisuals,
+        createVisual: client.createCameraVisual,
+        importVisual: client.importCameraVisual,
+        renameVisual: client.renameCameraVisual,
         start: client.startCameraPlayback,
         prepareGrid: client.prepareCameraGrid,
         move: client.moveCamera,

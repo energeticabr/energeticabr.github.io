@@ -6,7 +6,7 @@ import { createCamerasView } from '../src/ui/cameras-view.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false,
-  cameraList, timerControl, catalog, startError } = {}) {
+  cameraList, timerControl, catalog, startError, visualService } = {}) {
   const dom = new JSDOM('<button>Menu</button>', { url: 'https://example.com' });
   t.after(() => dom.window.close());
   const { document, HTMLMediaElement, HTMLDialogElement } = dom.window;
@@ -32,6 +32,7 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false,
   view.open({ accountKey, list: cameraList ?? (async () => catalog ?? Array.from({ length: 10 }, (_, index) => ({
     id: `site-${index + 1}`, label: `Obra ${index + 1}`,
   }))),
+    ...visualService,
     start,
     prepareGrid: useGrid ? (ids, { signal, previousUrl, codecs }) => {
       grids.push({ ids, signal, previousUrl, codecs });
@@ -42,6 +43,45 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false,
     playRecording: async (id, record, {signal}) => { archives.push({id,record,signal}); return 'https://video.example/archive.m3u8'; } });
   return { document, starts, grids, moves, searches, archives, view };
 }
+
+test('importa o visual do aparelho de origem e o exibe em outro sem armazenamento compartilhado', async t => {
+  const key = 'energetico:camera-visual:v1:conta';
+  const localVisual = { name: 'Portão e pátio', cameraIds: ['site-4', 'site-2'] };
+  const imported = { ...localVisual, id: 'a'.repeat(64) };
+  let online = false;
+  let saved = [];
+  let imports = 0;
+  const visualService = {
+    listVisuals: async () => saved,
+    importVisual: async (visual, options) => {
+      imports++;
+      assert.deepEqual(visual, { ...localVisual, occurrence: 0 });
+      assert.ok(options.signal);
+      if (!online) throw new Error('Sem conexão');
+      saved = [imported];
+      return imported;
+    },
+  };
+  const origin = setup(t, { accountKey: 'conta', visualService });
+  const storage = origin.document.defaultView.localStorage;
+  storage.setItem(key, JSON.stringify([localVisual]));
+  await flush();
+  assert.equal(imports, 1);
+  assert.ok(storage.getItem(key), 'preserva o visual se a importação falhar');
+  online = true;
+  origin.document.querySelector('[data-camera-tab="visuals"]').click();
+  await flush();
+  assert.equal(imports, 2);
+  assert.equal(storage.getItem(key), null);
+  const destination = setup(t, { accountKey: 'conta', visualService, useGrid: true });
+  await flush();
+  destination.document.querySelector('[data-camera-tab="visuals"]').click();
+  await flush();
+  assert.equal(destination.document.querySelector('[data-camera-visual-card] strong')?.textContent, localVisual.name);
+  destination.document.querySelector('[data-camera-visual-open]').click();
+  assert.deepEqual(destination.grids[0].ids, localVisual.cameraIds);
+  assert.equal(imports, 2);
+});
 
 test('exibe tarja off-line e a data local da última conexão', async t => {
   const { document } = setup(t, { cameraList: async () => [{ id: 'cam-1', label: 'Obra', status: 'offline',
@@ -758,11 +798,16 @@ test('recusa nome vazio, cancela e informa erro quando o armazenamento falha', a
 });
 
 test('cria visual a partir das câmeras escolhidas, pede o nome e persiste por conta', async t => {
-  const storageWindow = new JSDOM('', { url: 'https://storage.example.com' });
-  t.after(() => storageWindow.window.close());
-  const storage = storageWindow.window.localStorage;
   const accountKey = 'bernardo@example.com';
-  const first = setup(t, { accountKey, storage, useGrid: true });
+  const saved = [];
+  const visualService = {
+    listVisuals: async () => [...saved],
+    createVisual: async visual => {
+      saved.push(visual);
+      return visual;
+    },
+  };
+  const first = setup(t, { accountKey, visualService, useGrid: true });
   await flush();
 
   const visualsTab = first.document.querySelector('[data-camera-tab="visuals"]');
@@ -784,48 +829,54 @@ test('cria visual a partir das câmeras escolhidas, pede o nome e persiste por c
   editor.querySelector('[data-camera-visual-form]').dispatchEvent(new first.document.defaultView.Event('submit', {
     bubbles: true, cancelable: true,
   }));
+  await flush();
 
   const key = 'energetico:camera-visual:v1:bernardo%40example.com';
-  assert.deepEqual(JSON.parse(storage.getItem(key)), [{
-    name: 'Portão e pátio', cameraIds: ['site-2', 'site-4'],
-  }], 'deve salvar os IDs estáveis das câmeras na ordem da lista');
+  assert.equal(first.document.defaultView.localStorage.getItem(key), null);
+  assert.match(saved[0]?.id ?? '', /^[a-f0-9]{32}$/);
+  assert.deepEqual(saved, [{ id: saved[0].id, name: 'Portão e pátio', cameraIds: ['site-2', 'site-4'] }]);
   assert.equal(first.document.querySelector('[data-camera-tab="visuals"]').getAttribute('aria-selected'), 'true');
   assert.equal(first.document.querySelector('[data-camera-visual-card] strong').textContent, 'Portão e pátio');
   assert.equal(first.document.querySelector('.cameras-player'), null, 'salvar o visual não deve abrir uma câmera');
   first.view.close();
 
-  const reopened = setup(t, { accountKey, storage });
+  const reopened = setup(t, { accountKey, visualService });
   await flush();
   reopened.document.querySelector('[data-camera-tab="visuals"]').click();
+  await flush();
   assert.equal(reopened.document.querySelector('[data-camera-visual-card] strong').textContent, 'Portão e pátio');
   reopened.view.close();
 
-  const otherAccount = setup(t, { accountKey: 'outra-conta@example.com', storage });
+  const otherAccount = setup(t, { accountKey: 'outra-conta@example.com', visualService: { listVisuals: async () => [] } });
   await flush();
   otherAccount.document.querySelector('[data-camera-tab="visuals"]').click();
+  await flush();
   assert.equal(otherAccount.document.querySelectorAll('[data-camera-visual-card]').length, 0);
   assert.match(otherAccount.document.querySelector('[role="status"]').textContent, /nenhum visual/i);
 });
 
 test('renomeia o visual escolhido pelo lápis e preserva as câmeras e os demais visuais', async t => {
-  const key = 'energetico:camera-visual:v1:conta';
   const saved = [
-    { name: 'VISUAL 1', cameraIds: ['site-1'] },
-    { name: 'VISUAL 1', cameraIds: ['site-3', 'site-2'] },
+    { id: 'a'.repeat(32), name: 'VISUAL 1', cameraIds: ['site-1'] },
+    { id: 'b'.repeat(32), name: 'VISUAL 1', cameraIds: ['site-3', 'site-2'] },
   ];
-  let serialized = JSON.stringify(saved);
+  let server = [...saved];
   let failWrite = false;
-  const storage = {
-    getItem: itemKey => itemKey === key ? serialized : null,
-    setItem: (itemKey, value) => {
-      if (itemKey !== key) return;
-      if (failWrite) throw new Error('storage full');
-      serialized = value;
+  const visualService = {
+    listVisuals: async () => [...server],
+    renameVisual: async ({ id, name, previousName }) => {
+      assert.equal(id, saved[1].id);
+      assert.equal(previousName, saved[1].name);
+      if (failWrite) throw new Error('Serviço indisponível');
+      const next = { ...server.find(visual => visual.id === id), name };
+      server = server.map(visual => visual.id === id ? next : visual);
+      return next;
     },
   };
-  const { document, grids, starts } = setup(t, { storage, accountKey: 'conta', useGrid: true });
+  const { document, grids, starts } = setup(t, { visualService, accountKey: 'conta', useGrid: true });
   await flush();
   document.querySelector('[data-camera-tab="visuals"]').click();
+  await flush();
   const pencil = () => document.querySelector('[data-camera-visual-rename="1"]');
   const title = () => document.querySelector('[data-camera-visual-card="1"] strong').textContent;
   const editor = () => document.querySelector('[data-camera-visual-editor]');
@@ -842,7 +893,7 @@ test('renomeia o visual escolhido pelo lápis e preserva as câmeras e os demais
   editor().querySelector('[data-camera-visual-cancel]').click();
   assert.equal(editor(), null);
   assert.equal(document.activeElement, pencil());
-  assert.deepEqual(JSON.parse(serialized), saved);
+  assert.deepEqual(server, saved);
 
   pencil().click();
   input().value = '  ';
@@ -852,25 +903,26 @@ test('renomeia o visual escolhido pelo lápis e preserva as câmeras e os demais
   input().value = '  Portão e pátio  ';
   failWrite = true;
   submit();
+  await flush();
   assert.match(editor().querySelector('[role="alert"]').textContent, /não foi possível salvar/i);
   assert.equal(title(), 'VISUAL 1');
-  assert.deepEqual(JSON.parse(serialized), saved);
+  assert.deepEqual(server, saved);
 
   failWrite = false;
-  const addedElsewhere = { name: 'Entrada', cameraIds: ['site-4'] };
-  serialized = JSON.stringify([...saved, addedElsewhere]);
+  const addedElsewhere = { id: 'c'.repeat(32), name: 'Entrada', cameraIds: ['site-4'] };
+  server = [...saved, addedElsewhere];
   submit();
+  await flush();
   assert.equal(editor(), null);
   assert.equal(document.activeElement, pencil());
   assert.equal(title(), 'Portão e pátio');
-  assert.deepEqual(JSON.parse(serialized), [
-    saved[0], { name: 'Portão e pátio', cameraIds: saved[1].cameraIds }, addedElsewhere,
-  ]);
+  assert.deepEqual(server, [saved[0], { ...saved[1], name: 'Portão e pátio' }, addedElsewhere]);
   assert.equal(starts.length, 0);
 
-  const reopened = setup(t, { storage, accountKey: 'conta', useGrid: true });
+  const reopened = setup(t, { visualService, accountKey: 'conta', useGrid: true });
   await flush();
   reopened.document.querySelector('[data-camera-tab="visuals"]').click();
+  await flush();
   const open = reopened.document.querySelector('[data-camera-visual-open="1"]');
   assert.equal(open.getAttribute('aria-label'), 'Abrir visual Portão e pátio');
   open.click();
@@ -901,16 +953,16 @@ test('abre as câmeras de um visual pela grade na ordem salva', async t => {
   assert.equal(document.querySelectorAll('.cameras-player__stage video').length, 2);
 });
 
-test('não salva nome vazio nem confirma quando o armazenamento do visual falha', async t => {
-  const values = new Map();
-  const storage = {
-    getItem: name => values.get(name) ?? null,
-    setItem() { throw new Error('storage denied'); },
-    get length() { return values.size; },
-    key(index) { return [...values.keys()][index] ?? null; },
-    removeItem(name) { values.delete(name); },
+test('não salva nome vazio nem confirma quando o servidor rejeita o visual', async t => {
+  const attempts = [];
+  const visualService = {
+    listVisuals: async () => [],
+    createVisual: async visual => {
+      attempts.push(visual);
+      throw new Error('Serviço indisponível');
+    },
   };
-  const { document } = setup(t, { accountKey: 'conta', storage });
+  const { document } = setup(t, { accountKey: 'conta', visualService });
   await flush();
   document.querySelector('[data-camera-tab="visuals"]').click();
   document.querySelector('[data-camera-create-visual]').click();
@@ -925,13 +977,15 @@ test('não salva nome vazio nem confirma quando o armazenamento do visual falha'
   }));
   assert.equal(editor.open, true);
   assert.match(editor.querySelector('[role="alert"]').textContent, /digite um nome para o visual/i);
-  assert.equal(values.size, 0);
+  assert.equal(attempts.length, 0);
 
   input.value = 'Entrada';
   editor.querySelector('[data-camera-visual-form]').dispatchEvent(new document.defaultView.Event('submit', {
     bubbles: true, cancelable: true,
   }));
+  await flush();
   assert.equal(editor.open, true);
+  assert.equal(attempts.length, 1);
   assert.match(editor.querySelector('[role="alert"]').textContent, /não foi possível salvar/i);
   assert.equal(document.querySelectorAll('[data-camera-visual-card]').length, 0);
 });

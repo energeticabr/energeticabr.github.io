@@ -8,6 +8,7 @@ import math
 import os
 import re
 import secrets
+import sqlite3
 import subprocess
 import tempfile
 import threading
@@ -25,6 +26,8 @@ MEDIA = "/api/portal-camera-media"
 MEDIA_FILE = re.compile(r"(?:index|h264|hevc)\.m3u8|init\.mp4|segment-[0-9]+\.(?:ts|m4s)")
 MEDIA_ROUTE = re.compile(rf"{MEDIA}/([A-Za-z0-9_-]{{43}})/({MEDIA_FILE.pattern})")
 CHANNEL_ID = re.compile(r"[a-z0-9-]{1,48}")
+VISUAL_ID = re.compile(r"(?:[a-f0-9]{32}|[a-f0-9]{64})")
+VISUAL_ACTIONS = {"list-visuals", "create-visual", "import-visual", "rename-visual"}
 CHANNEL_LABEL_SUFFIX = re.compile(r"\s*[·•–—-]\s*canal\s+\d+\s*$", re.IGNORECASE)
 GRAPH_ME = "https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,userType"
 MAX_STREAMS = 8
@@ -46,6 +49,12 @@ STATUS_PROBE_VIEWER = "__camera-status-probe__"
 class PlaybackError(Exception):
     def __init__(self, status):
         self.status = status
+
+
+def visual_name(value):
+    if not isinstance(value, str) or not value.strip() or len(value.encode("utf-16-le")) > 240:
+        raise ValueError("invalid visual name")
+    return value
 
 
 def graph_identity(token):
@@ -261,6 +270,40 @@ class Gateway:
                              "status": status["status"], "lastOnlineAt": status["lastOnlineAt"]})
         self._add_camera_group_metadata(channels)
         return channels
+
+    def camera_visuals(self, viewer, action, data):
+        if action == "list-visuals":
+            return {"visuals": self.status_store.list_visuals(viewer)}
+
+        name = visual_name(data.get("name"))
+        visual_id = data.get("id")
+        if action == "rename-visual":
+            if not isinstance(visual_id, str) or not VISUAL_ID.fullmatch(visual_id):
+                raise ValueError("invalid visual id")
+            previous_name = visual_name(data.get("previousName"))
+            visual = self.status_store.rename_visual(viewer, visual_id, name, previous_name)
+            if visual is None:
+                raise PlaybackError(404)
+            if visual["name"] != name:
+                raise PlaybackError(409)
+            return {"visual": visual}
+
+        camera_ids = data.get("cameraIds")
+        if (not isinstance(camera_ids, list) or not 1 <= len(camera_ids) <= MAX_STREAMS
+                or any(not isinstance(item, str) or not CHANNEL_ID.fullmatch(item) for item in camera_ids)
+                or len(camera_ids) != len(set(camera_ids))):
+            raise ValueError("invalid visual camera ids")
+
+        if action == "import-visual":
+            occurrence = data.get("occurrence")
+            if type(occurrence) is not int or not 0 <= occurrence <= 9_007_199_254_740_991:
+                raise ValueError("invalid visual occurrence")
+            legacy = json.dumps([name, camera_ids, occurrence]).encode("ascii")
+            visual_id = hashlib.sha256(legacy).hexdigest()
+        elif (not isinstance(visual_id, str) or len(visual_id) != 32 or not VISUAL_ID.fullmatch(visual_id)
+              or any(item not in self.entries for item in camera_ids)):
+            raise ValueError("invalid new visual")
+        return {"visual": self.status_store.create_visual(viewer, visual_id, name, camera_ids)}
 
     def camera_status_events(self, after=None):
         if after is None:
@@ -699,17 +742,22 @@ def handler_for(gateway):
                 return
             try:
                 size = int(self.headers.get("Content-Length", "0"))
-                if not 0 < size <= 1024:
+                if not 0 < size <= 2048:
                     raise ValueError("request size")
                 data = json.loads(self.rfile.read(size))
                 if not isinstance(data, dict):
                     raise ValueError("request type")
+                action = data.get("action")
+                if not isinstance(action, str) or (size > 1024 and action not in VISUAL_ACTIONS):
+                    raise ValueError("invalid action or request size")
                 viewer = gateway.authorize(self.headers.get("Authorization", ""))
                 offered = data.get("codecs")
                 codecs = tuple(codec for codec in ("h264", "hevc")
                                if isinstance(offered, list) and codec in offered)
                 if data.get("action") == "list":
                     result = {"channels": gateway.catalog()}
+                elif action in VISUAL_ACTIONS:
+                    result = gateway.camera_visuals(viewer, action, data)
                 elif data.get("action") == "status-events":
                     after = data.get("after")
                     if after is not None and (type(after) is not int or after < 0 or after > 9_007_199_254_740_991):
@@ -734,6 +782,8 @@ def handler_for(gateway):
                 self.send(200, json.dumps(result).encode())
             except PlaybackError as error:
                 self.send(error.status)
+            except sqlite3.Error:
+                self.send(503)
             except (ValueError, UnicodeError):
                 self.send(400)
 

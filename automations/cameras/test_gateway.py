@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 from http.server import ThreadingHTTPServer
 
+from camera_status import CameraStatusStore
 from gateway import CATALOG, MEDIA, Gateway, Stream, handler_for
 
 
@@ -63,6 +64,60 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(channel["lastOnlineAt"], "2026-11-24T12:00:00Z")
         self.assertNotIn("input", channel)
         self.assertNotIn("command", channel)
+
+    def test_saved_visuals_sync_only_with_the_same_viewer_and_preserve_camera_order(self):
+        self.gateway.users.add("other-owner")
+        self.gateway.entries["ch-2"] = self.gateway.entries["ch-1"]
+        visual = {"id": "a" * 32, "name": "Portão", "cameraIds": ["ch-2", "ch-1"]}
+        create = {"action": "create-visual", **visual}
+        rename = {"action": "rename-visual", "id": visual["id"], "name": "Obra", "previousName": "Portão"}
+        listing = {"action": "list-visuals"}
+        self.assertEqual(self.request("POST", CATALOG, body=create)[0], 401)
+        self.assertEqual(self.request("POST", CATALOG, "owner", create)[0], 200)
+        self.assertEqual(self.request("POST", CATALOG, "owner", create)[0], 200)
+        self.assertEqual(self.request("POST", CATALOG, "other-owner", rename)[0], 404)
+        self.assertEqual(json.loads(self.request("POST", CATALOG, "other-owner", listing)[2]), {"visuals": []})
+        self.assertEqual(json.loads(self.request("POST", CATALOG, "OWNER", listing)[2]), {"visuals": [visual]})
+        self.assertEqual(self.request("POST", CATALOG, "owner", rename)[0], 200)
+        self.assertEqual(self.request("POST", CATALOG, "owner", rename)[0], 200)
+        self.assertEqual(self.request("POST", CATALOG, "owner", {**rename, "name": "Antigo"})[0], 409)
+        self.assertEqual(json.loads(self.request("POST", CATALOG, "owner", listing)[2]),
+                         {"visuals": [{**visual, "name": "Obra"}]})
+
+    def test_legacy_visual_import_is_repeatable_and_does_not_revert_a_rename(self):
+        legacy = {"action": "import-visual", "name": "Meu visual", "cameraIds": ["old-channel", "ch-1"],
+                  "occurrence": 0}
+        status, _, payload = self.request("POST", CATALOG, "owner", legacy)
+        self.assertEqual(status, 200)
+        visual = json.loads(payload)["visual"]
+        rename = {"action": "rename-visual", "id": visual["id"], "name": "Novo nome", "previousName": legacy["name"]}
+        self.assertEqual(self.request("POST", CATALOG, "owner", rename)[0], 200)
+        self.assertEqual(json.loads(self.request("POST", CATALOG, "owner", legacy)[2]),
+                         {"visual": {**visual, "name": "Novo nome"}})
+        duplicate = json.loads(self.request("POST", CATALOG, "owner", {**legacy, "occurrence": 1})[2])["visual"]
+        self.assertNotEqual(duplicate["id"], visual["id"])
+        self.assertEqual(duplicate["cameraIds"], legacy["cameraIds"])
+        for invalid in [{"cameraIds": ["ch-1", "ch-1"]}, {"cameraIds": ["INVALID"]}, {"name": " "},
+                        {"occurrence": True}, {"name": "\ud800"}]:
+            with self.subTest(invalid=invalid):
+                self.assertEqual(self.request("POST", CATALOG, "owner", {**legacy, **invalid})[0], 400)
+
+    def test_visuals_survive_reopening_the_existing_status_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "camera-status.sqlite3"
+            store = CameraStatusStore(path)
+            visual = {"id": "a" * 32, "name": "Visão geral", "cameraIds": ["ch-2", "ch-1"]}
+            try:
+                store.update("ch-1", "online")
+                self.assertEqual(store.create_visual("owner", visual["id"], visual["name"], visual["cameraIds"]), visual)
+            finally:
+                store.close()
+            store = CameraStatusStore(path)
+            try:
+                self.assertEqual(store.list_visuals("owner"), [visual])
+                self.assertEqual(store.get("ch-1")["status"], "online")
+            finally:
+                store.close()
 
     def test_catalog_identifies_channels_from_the_same_physical_camera(self):
         sources = [
