@@ -166,7 +166,7 @@ def discover_device_status(cloud_id, status_client):
 
 
 def read_motion_command(stream, ptz):
-    """Read and dispatch one PTZ command from the buffered settings stream."""
+    """Read and dispatch one PTZ command from the settings pipe."""
     raw = stream.readline(16385)
     if not raw or len(raw) > 16384:
         return False
@@ -185,7 +185,10 @@ def main():
     media = os.fdopen(os.dup(sys.stdout.fileno()), "wb", buffering=0)
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     from xmplayer.core import legacy_api
-    settings = json.loads(sys.stdin.buffer.readline(16384))
+    # The live reader can still be waiting for PTZ input when the source ends.
+    # An unbuffered pipe avoids holding the stdin buffer lock during shutdown.
+    control_input = open(sys.stdin.fileno(), "rb", buffering=0, closefd=False)
+    settings = json.loads(control_input.readline(16384))
     install_transport(legacy_api, settings["tlsPins"])
     operation = settings.get("operation", "live")
     if operation == "status":
@@ -251,16 +254,11 @@ def main():
     ptz = PtzCommandQueue()
 
     def commands():
-        # Keep using the buffered reader used for the initial settings line.
-        # readline() may prefetch a PTZ command that arrived during startup;
-        # reading the same descriptor with os.read() would skip that buffer.
-        while not stop.is_set() and read_motion_command(sys.stdin.buffer, ptz):
+        while not stop.is_set() and read_motion_command(control_input, ptz):
             pass
 
-    command_thread = None
     if operation == "live":
-        command_thread = threading.Thread(target=commands, daemon=True)
-        command_thread.start()
+        threading.Thread(target=commands, daemon=True).start()
 
     def forward_video(assembler, data, key):
         nonlocal sent_video
@@ -308,8 +306,6 @@ def main():
                   file=sys.stderr, flush=True)
     finally:
         stop.set()
-        if command_thread:
-            command_thread.join(timeout=1)
         media.close()
 
 
