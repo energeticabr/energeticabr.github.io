@@ -542,6 +542,11 @@ test('os gráficos de uma etapa cruzam produto, fornecedor e mês sem mudar o es
   assert.equal(point(8).getAttribute('aria-pressed'), 'true');
   point(8).dispatchEvent(new root.ownerDocument.defaultView.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   assert.equal(total(), 'R$105,00');
+  point(9).focus();
+  point(9).dispatchEvent(new root.ownerDocument.defaultView.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+  const focusedPoint = root.ownerDocument.activeElement;
+  focusedPoint.dispatchEvent(new root.ownerDocument.defaultView.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  assert.equal(total(), 'R$10,00');
 });
 
 test('gráficos de compra de um produto cruzam fornecedor, quantidade e valor mensal', async t => {

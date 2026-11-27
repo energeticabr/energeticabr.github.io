@@ -212,9 +212,13 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
     });
     if(selectedMonth>=0)showMonth(selectedMonth);
     svg.addEventListener('keydown',event=>{
-      if(!['ArrowLeft','ArrowRight'].includes(event.key))return;event.preventDefault();
-      const current=Number(monthDetail.dataset.monthIndex||0),next=Math.max(0,Math.min(data.months.length-1,current+(event.key==='ArrowRight'?1:-1)));
-      showMonth(next);
+      if(!['ArrowLeft','ArrowRight'].includes(event.key))return;
+      const point=event.target.closest('circle[data-month-index]');
+      if(!point)return;
+      event.preventDefault();
+      const current=Number(point.dataset.monthIndex);
+      const next=Math.max(0,Math.min(data.months.length-1,current+(event.key==='ArrowRight'?1:-1)));
+      point.parentElement.querySelector(`circle[data-month-index="${next}"]`)?.focus({preventScroll:true});
     });
     const legend=make('div','gm-expense-dashboard-legend');
     for(const [field,label] of series){
