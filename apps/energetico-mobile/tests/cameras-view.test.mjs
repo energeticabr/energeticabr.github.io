@@ -5,11 +5,12 @@ import { createChatClient } from '../src/chat/chat-client.js';
 import { createCamerasView } from '../src/ui/cameras-view.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false,
+function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, android = false,
   cameraList, timerControl, catalog, startError, visualService } = {}) {
   const dom = new JSDOM('<button>Menu</button>', { url: 'https://example.com' });
   t.after(() => dom.window.close());
   const { document, HTMLMediaElement, HTMLDialogElement } = dom.window;
+  if (android) Object.defineProperty(dom.window.navigator, 'userAgent', { value: 'Mozilla/5.0 (Linux; Android 14) Chrome/130.0' });
   if (storage) Object.defineProperty(dom.window, 'localStorage', { value: storage });
   if (timerControl) {
     dom.window.setInterval = (callback, delay) => { timerControl.callback = callback; timerControl.delay = delay; return 41; };
@@ -529,6 +530,43 @@ test('a troca de codec envia a playlist antiga somente para a câmera afetada', 
     [[['site-1', 'site-2'], undefined], [['site-1'], oldUrl]]);
   assert.match(video.src, /index\.m3u8$/);
 });
+
+for (const buffered of [false, true]) {
+  test(`recupera no Android um canal sem primeiro quadro ${buffered ? 'com vídeo no buffer' : 'com o buffer vazio'}`, async t => {
+    const { document, grids, starts } = setup(t, { android: true, useGrid: true, supportsHevc: true });
+    await flush();
+    const window = document.defaultView;
+    const timers = new Map();
+    let timerId = 0;
+    window.setTimeout = (callback, delay) => { timers.set(++timerId, { callback, delay }); return timerId; };
+    window.clearTimeout = id => timers.delete(id);
+    document.querySelector('[data-camera-grid]').click();
+    for (let index = 0; index < 4; index++) document.querySelectorAll('[data-camera-select]')[index].click();
+    document.querySelector('[data-camera-open-grid]').click();
+    await flush();
+    const [stalled, ...healthy] = document.querySelectorAll('video');
+    const previousUrl = stalled.src;
+    for (const video of healthy) video.dispatchEvent(new window.Event('playing'));
+    if (buffered) {
+      Object.defineProperty(stalled, 'buffered', { value: { length: 1, start: () => 0, end: () => 5 } });
+      stalled.dispatchEvent(new window.Event('waiting'));
+    }
+    const deadlines = [...timers];
+    assert.equal(deadlines.length, 1);
+    const [[id, deadline]] = deadlines;
+    assert.ok(deadline.delay <= 20_000);
+    timers.delete(id);
+    deadline.callback();
+    await flush();
+    assert.deepEqual(grids.map(grid => grid.ids), [['site-1', 'site-2', 'site-3', 'site-4'], ['site-1']]);
+    assert.deepEqual(starts.at(-1).codecs, buffered ? [] : ['h264', 'hevc']);
+    assert.equal(grids.at(-1).previousUrl, buffered ? previousUrl : undefined);
+    assert.ok(starts.filter(start => start.id !== 'site-1').every(start => !start.signal.aborted));
+    stalled.dispatchEvent(new window.Event('playing'));
+    assert.equal(document.querySelectorAll('.cameras-player__tile-live:not([hidden])').length, 4);
+    assert.equal(timers.size, 0);
+  });
+}
 
 test('ao retomar a grade restringe a conversão à câmera que precisou de compatibilidade', async t => {
   const { document, grids, view } = setup(t, { useGrid: true, supportsHevc: true });
