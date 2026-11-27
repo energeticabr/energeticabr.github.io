@@ -1,13 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {existsSync} from 'node:fs';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {resolve,join,dirname,basename} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'vite';
 import {JSDOM} from 'jsdom';
 import {runBrowserLayout} from './helpers/browser-layout-runner.mjs';
+
+test('provision PDFs with long mirrored names give most of the screen to the document',{timeout:120000},async t=>{
+  const browser=[process.env.CHROME_BIN,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/google-chrome'].find(path=>path&&existsSync(path));
+  if(!browser)return t.skip('Chrome unavailable');
+  const cacheRoot=await mkdtemp(join(tmpdir(),'provision-attachment-vite-'));
+  const server=await createServer({root:resolve(fileURLToPath(new URL('..',import.meta.url))),cacheDir:join(cacheRoot,'cache'),optimizeDeps:{noDiscovery:true,include:['decimal.js','pdf-lib','pdfjs-dist/legacy/build/pdf.mjs']},server:{host:'127.0.0.1',port:0,hmr:false,watch:null},logLevel:'silent'});
+  const capture=process.env.PROVISION_PDF_CAPTURE_DIR;
+  try{
+    await server.listen();
+    for(const [width,height,safeAreaInsets] of [[1280,589],[568,320],[844,390,{left:47,right:47,bottom:21}],[390,844]]){
+      const {stdout,screenshot}=await runBrowserLayout(browser,{
+        width,height,safeAreaInsets,captureScreenshot:Boolean(capture),
+        url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/provision-report-browser.html?grouped&attachment${capture?'&capture':''}`,
+      });
+      const {window}=new JSDOM(stdout);
+      let result;
+      try{result=JSON.parse(window.document.documentElement.dataset.layout);}finally{window.close();}
+      if(capture)await writeFile(join(capture,`provision-pdf-${width}x${height}.png`),screenshot);
+      const detail=`${width}×${height}: ${JSON.stringify(result)}`;
+      assert.equal(result.error,undefined,detail);
+      assert.ok(result.pdfRatio>=.60,detail);
+      assert.deepEqual(result.layout,{horizontal:true,compactFooter:true,compactStatus:true,actions:true},detail);
+      assert.equal(result.titleInfo.text,result.boletoName,detail);
+      assert.equal(result.titleInfo.fullName,result.mirroredName,detail);
+      assert.ok(result.titleInfo.height<=22,detail);
+      assert.ok(result.secondPageVisible&&result.nextWorks&&result.startsAtTop&&result.returns,detail);
+      assert.deepEqual(result.exported,[result.mirroredName],detail);
+      t.diagnostic(`${width}×${height}: document uses ${Math.round(result.pdfRatio*100)}% of the viewer height`);
+    }
+  }finally{await server.close();await rm(cacheRoot,{recursive:true,force:true,maxRetries:5,retryDelay:250});}
+});
 
 test('provision report fills the space beneath navigation on a tablet in both orientations',{timeout:90000},async t=>{
   const browser=[process.env.CHROME_BIN,'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','/usr/bin/google-chrome'].find(path=>path&&existsSync(path));

@@ -170,12 +170,12 @@
   color: #b00000;
 }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-title { font-size: 14px; }
-.attachment-preview-dialog:is([data-layout="nfe-report-pdf"], [data-layout="compact-report-pdf"]) .attachment-preview-title {
+.attachment-preview-dialog:is([data-layout="nfe-report-pdf"], [data-compact-report-pdf="scroll"]) .attachment-preview-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.attachment-preview-dialog[data-layout="nfe-report-pdf"] .attachment-preview-status:has(> [data-preview-complete]) {
+.attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-status:has(> [data-preview-complete]) {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -200,15 +200,21 @@
 
 @media (max-width: 680px) and (orientation: landscape), (max-height: 680px) and (orientation: portrait) {
   .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-status > .app-loading__percentage { min-width: 48px; padding: 2px 8px; font-size: .85rem; }
-  .attachment-preview-dialog[data-layout="compact-report-pdf"] :is(.attachment-preview-footer, .attachment-preview-collection-nav) { gap: 4px; }
-  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-footer { padding-inline: 4px; }
-  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-footer button { min-width: 44px; padding-inline: 4px; font-size: 12px; }
-  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-collection-status { min-width: 32px; white-space: nowrap; }
-  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-collection-nav button { font-size: 0; }
-  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-collection-nav button::before { font-size: 22px; }
-  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-collection-previous::before { content: "‹"; content: "‹" / ""; }
-  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-collection-next::before { content: "›"; content: "›" / ""; }
-  .attachment-preview-dialog[data-layout="compact-report-pdf"] .attachment-preview-export svg { width: 18px; height: 18px; }
+  .attachment-preview-dialog[data-compact-report-pdf="scroll"] :is(.attachment-preview-footer, .attachment-preview-collection-nav) { gap: 4px; }
+  .attachment-preview-dialog[data-compact-report-pdf="scroll"] .attachment-preview-footer { padding-inline: 4px; }
+  .attachment-preview-dialog[data-compact-report-pdf="scroll"] .attachment-preview-footer button { min-width: 44px; padding-inline: 4px; font-size: 12px; }
+  .attachment-preview-dialog[data-compact-report-pdf="scroll"] .attachment-preview-collection-status { min-width: 32px; white-space: nowrap; }
+  .attachment-preview-dialog[data-compact-report-pdf="scroll"] .attachment-preview-collection-nav button { font-size: 0; }
+  .attachment-preview-dialog[data-compact-report-pdf="scroll"] .attachment-preview-collection-nav button::before { font-size: 22px; }
+  .attachment-preview-dialog[data-compact-report-pdf="scroll"] .attachment-preview-collection-previous::before { content: "‹"; content: "‹" / ""; }
+  .attachment-preview-dialog[data-compact-report-pdf="scroll"] .attachment-preview-collection-next::before { content: "›"; content: "›" / ""; }
+  .attachment-preview-dialog[data-compact-report-pdf="scroll"] .attachment-preview-export svg { width: 18px; height: 18px; }
+}
+
+@media (orientation: landscape) {
+  .attachment-preview-dialog[data-layout="provision-report-pdf"] .attachment-preview-footer {
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+  }
 }
 
 @media (max-width: 600px) {

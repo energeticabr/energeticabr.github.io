@@ -7,6 +7,7 @@ const compactReportPdfLocations = new Map([
   ['dda-report-pdf', 'no relatório DDA'],
   ['nfe-report-pdf', 'no relatório de notas fiscais'],
   ['compact-report-pdf', 'no relatório'],
+  ['provision-report-pdf', 'no relatório de provisões'],
 ]);
 
 function previewKind(blob, fileName) {
@@ -455,7 +456,7 @@ export function createAttachmentPreview({
     session.progressTask.complete();
     session.previewReady = true;
     const badge = session.loader.querySelector('[role="progressbar"]');
-    if (session.layout === 'nfe-report-pdf') badge?.setAttribute('data-preview-complete', '');
+    if (['nfe-report-pdf', 'provision-report-pdf'].includes(session.layout)) badge?.setAttribute('data-preview-complete', '');
     if (session.layout === 'payslip-report-pdf') {
       reportMeta.replaceChildren(badge, documentRef.createTextNode(` ${message}`));
       reportMeta.hidden = false;
@@ -487,8 +488,10 @@ export function createAttachmentPreview({
     if (!dialog.open) returnFocus = typeof resolveReturnFocus === "function" ? resolveReturnFocus : documentRef.activeElement;
     release();
     const compactReport = compactReportPdfLocations.has(layout);
+    const pagedReport = layout === 'dda-report-pdf' || layout === 'nfe-report-pdf';
     dialog.dataset.layout = compactReport || ['flow-summary', 'report-pdf', 'payslip-report-pdf'].includes(layout) ? layout : "media";
-    dialog.toggleAttribute('data-compact-report-pdf', compactReport);
+    if (compactReport) dialog.dataset.compactReportPdf = pagedReport ? 'paged' : 'scroll';
+    else delete dialog.dataset.compactReportPdf;
     const reportLayout = dialog.dataset.layout !== "media";
     reportMeta.replaceChildren();
     reportMeta.hidden = true;
@@ -505,7 +508,10 @@ export function createAttachmentPreview({
       updateLoadingIndicator(session.loader, { progress: session.progress, progressLabel: value.progressLabel });
     }, { signal: session.abort.signal, isCurrent: () => active === session && !session.failed });
     const correction = layout === 'nfe-report-pdf' && /^CCe-.+-110110-(\d{2})\.pdf$/i.exec(session.fileName);
-    title.textContent = label || (correction ? `Carta de correção (CC-e) · ${correction[1]}` : session.fileName);
+    const displayName = layout === 'provision-report-pdf'
+      ? session.fileName.replace(/^PROV-[1-9]\d*-[a-f0-9]{64}-(?=.)/, '')
+      : session.fileName;
+    title.textContent = label || (correction ? `Carta de correção (CC-e) · ${correction[1]}` : displayName);
     title.title = (label || compactReport) ? session.fileName : '';
     updateCollectionNavigation();
     showPreviewStatus(session, session.loader);
@@ -688,7 +694,7 @@ export function createAttachmentPreview({
           onProgress: value => presentationProgress(session, value),
           onDdaCopyReady: available => { if (active === session) { ddaCopyButton.hidden = !available; if (available) dialog.dataset.ddaCopy = 'true'; else delete dialog.dataset.ddaCopy; } },
           fit: ['report-pdf', 'payslip-report-pdf'].includes(layout) ? 'page' : 'width',
-          navigation: compactReport && layout !== 'compact-report-pdf' ? 'paged' : 'scroll',
+          navigation: pagedReport ? 'paged' : 'scroll',
           rotatesWithViewport: compactReport,
           initialPage,
           onPageChange: page => {

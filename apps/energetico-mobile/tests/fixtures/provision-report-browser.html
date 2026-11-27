@@ -27,18 +27,77 @@ try {
   ];
   const recurrences=[{...base,id:'7',status:'ATIVO',startDate:'2026-10-03',modified:'2026-10-01T12:00:00Z'},{...base,id:'8',status:'ATIVO',startDate:'2026-01-01',modified:'2026-10-01T12:00:00Z'},
     {...base,id:'9',status:'INATIVO',supplier:'FORNECEDOR INATIVO COM NOME EXTENSO LTDA.',product:'EQUIPAMENTO COM UMA DESCRIÇÃO LONGA PARA QUEBRAR SEM PERDER INFORMAÇÕES',modified:'2026-10-10T12:30:00Z'}];let loads=0;
-  const grouped=new URLSearchParams(location.search).has('grouped');
+  const params=new URLSearchParams(location.search),grouped=params.has('grouped');
+  const verifyAttachment=params.has('attachment');
+  const boletoName='Boleto_Bancario_Sicoob.pdf';
+  const mirroredName=`PROV-302-${'a'.repeat(64)}-${boletoName}`;
+  const exported=[];
   const descriptions=grouped?[{id:'42',branch:'FILIAL DO PAI',supplier:'FORNECEDOR DE REFERÊNCIA',dueDate:'2026-10-09',hasAttachments:true},
     {id:'43',branch:'FILIAL DO PAI',supplier:'FORNECEDOR DE REFERÊNCIA',dueDate:'2026-10-25',hasAttachments:false}]:[];
   if(grouped){provisions[0].descriptionId='42';provisions[0].branch='FILIAL DO PAI';provisions[0].supplier='FORNECEDOR DE REFERÊNCIA';provisions[1].descriptionId='42';provisions[2].descriptionId='43';provisions[0].hasAttachments=provisions[1].hasAttachments=true;}
-  const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async()=>{}});
+  const preview=createAttachmentPreview({canEmbedPdf:()=>false,exportMedia:async(_blob,name)=>{exported.push(name);}});
   const data={async loadProvisionReportSnapshot(){loads++;return {provisions,recurrences,descriptions};},
-    async listProvisionReportAttachments(_kind,id){return [{fileName:`Recibo-${id}.pdf`},...(id==='302'?[{fileName:`Extra-${id}.pdf`}]:[])];},
-    async downloadProvisionReportAttachment(_kind,_id,fileName){const {PDFDocument}=await import('pdf-lib');const pdf=await PDFDocument.create();pdf.addPage([300,400]).drawText(fileName,{x:30,y:350,size:18});return new Blob([await pdf.save()],{type:'application/pdf'});}};
-  const action='open-provision-report',view=decorateReportPrint(decorateReportNavigation(createProvisionReportView({data,openMediaCollection:preview.openCollection,now:()=>new Date('2026-10-11T12:00:00Z')}),{action}),{action,previewMedia:preview.open,closePreview:preview.close});
+    async listProvisionReportAttachments(_kind,id){return [{fileName:verifyAttachment&&id==='302'?mirroredName:`Recibo-${id}.pdf`},...(id==='302'?[{fileName:`Extra-${id}.pdf`}]:[])];},
+    async downloadProvisionReportAttachment(_kind,_id,fileName){
+      const {PDFDocument}=await import('pdf-lib');
+      const pdf=await PDFDocument.create();
+      pdf.addPage([595,842]).drawText(fileName===mirroredName?'Boleto de exemplo':fileName,{x:35,y:780,size:20});
+      if(fileName===mirroredName)pdf.addPage([595,842]).drawText('Segunda página do boleto',{x:35,y:780,size:20});
+      return new Blob([await pdf.save()],{type:'application/pdf'});
+    }};
+  const openMediaCollection=(items,options)=>preview.openCollection(items,{...options,onAddToTray:()=>{}});
+  const action='open-provision-report',view=decorateReportPrint(decorateReportNavigation(createProvisionReportView({data,openMediaCollection,now:()=>new Date('2026-10-11T12:00:00Z')}),{action}),{action,previewMedia:preview.open,closePreview:preview.close});
   await view.open();const root=view.element;
   const portrait=root.dataset.reportPortrait==='true';
   const reportPanel=root.querySelector('[role="dialog"]'),panelBounds=reportPanel.getBoundingClientRect();
+  if(verifyAttachment){
+    const get=selector=>document.querySelector(selector);
+    const dialog=get('.attachment-preview-dialog'),title=get('.attachment-preview-title'),footer=get('.attachment-preview-footer');
+    const getAction=action=>get(`[data-preview-action="${action}"]`);
+    const waitForPdf=async name=>{
+      for(let frame=0;frame<480;frame++){
+        if(dialog.open&&title.textContent.endsWith(name)&&get('.attachment-preview-pdf-page canvas')
+          && get('.attachment-preview-status').textContent.includes('100%'))return;
+        await new Promise(requestAnimationFrame);
+      }
+      throw new Error(`PDF sem prévia: ${name}`);
+    };
+    root.querySelector('[data-description-id="42"] .pr-group-toggle').click();
+    const row=root.querySelector('[data-id="302"]');
+    row.scrollIntoView({block:'nearest'});
+    for(let frame=0;frame<120&&!row.querySelector('.pr-attachment-icon');frame++)await new Promise(requestAnimationFrame);
+    const trigger=row.querySelector('.pr-attachment-icon');
+    trigger.focus({preventScroll:true});
+    const reportScroll=root.querySelector('.pr-content'),before=reportScroll.scrollTop;
+    trigger.click();
+    await waitForPdf(boletoName);
+    const viewport=get('.attachment-preview-pdf-viewport'),status=get('.attachment-preview-status');
+    const pdfRatio=viewport.clientHeight/dialog.clientHeight;
+    const titleInfo={text:title.textContent,fullName:title.title,height:title.offsetHeight};
+    const layout={
+      horizontal:dialog.offsetWidth>dialog.offsetHeight,
+      compactFooter:footer.offsetHeight<=72,
+      compactStatus:status.offsetHeight<=1,
+      actions:['add-to-tray','export'].every(action=>getAction(action).offsetWidth>0&&!getAction(action).disabled),
+    };
+    const secondPage=get('[data-page-number="2"]');
+    viewport.scrollTop=secondPage.offsetTop;
+    const secondPageVisible=viewport.scrollTop>0&&secondPage.offsetTop-viewport.scrollTop<viewport.clientHeight;
+    getAction('export').click();
+    getAction('next').click();
+    await waitForPdf('Extra-302.pdf');
+    const nextWorks=getAction('collection-status').textContent==='2 de 2'&&getAction('next').disabled
+      && getAction('previous').textContent==='‹ PDF anterior';
+    getAction('previous').click();
+    await waitForPdf(boletoName);
+    const startsAtTop=get('.attachment-preview-pdf-viewport').scrollTop===0;
+    get('.attachment-preview-close').click();
+    const returns=!dialog.open&&!root.hidden&&document.activeElement===trigger&&reportScroll.scrollTop===before;
+    if(params.has('capture')){trigger.click();await waitForPdf(boletoName);}
+    document.documentElement.dataset.layout=JSON.stringify({
+      pdfRatio,titleInfo,layout,secondPageVisible,nextWorks,startsAtTop,returns,exported,mirroredName,boletoName,
+    });
+  }else{
   const rect=node=>{
     const {left,right,top,bottom,width,height}=node.getBoundingClientRect();
     // Compare the actual columns in the shared landscape coordinate system.
@@ -124,5 +183,6 @@ try {
       branchCell.click();groupProbe.collapsed=toggle.getAttribute('aria-expanded');groupProbe.hiddenAgain=controlled.every(node=>node.hidden&&getComputedStyle(node).display==='none');
     }
     document.documentElement.dataset.layout=JSON.stringify({...initial,zoomProbe,groupProbe});
+  }
 }catch(error){document.documentElement.dataset.layout=JSON.stringify({error:String(error.stack||error)});}
 </script></body></html>
