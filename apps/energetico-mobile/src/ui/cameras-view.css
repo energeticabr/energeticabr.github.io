@@ -219,6 +219,7 @@
   letter-spacing: .04em;
   text-align: left;
 }
+.camera-card__status-ribbon--no-signal { background: #111d; }
 .camera-card__last-online {
   position: absolute;
   inset: 34px 0 auto;
