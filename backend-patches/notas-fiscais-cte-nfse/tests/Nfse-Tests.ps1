@@ -97,6 +97,16 @@ Equal $batch.lastNsu '000000000000007' 'cursor only from returned NSU'
 Equal $batch.documents.Count 1 'gzip base64 doc decoded'
 Equal $batch.hasMore $true 'nonempty batch permits next probe; no server max invented'
 Equal $batch.retryAfterSeconds 0 'next batch can be requested'
+$replacementKey=$key.Substring(0,49)+'2'
+$replacement=@{}+$item
+$replacement.NSU=8
+$replacement.ArquivoXml=Zip ($none.Replace('<cStat>100</cStat>','<cStat>101</cStat>').Replace('<nNFSe>123</nNFSe>','<nNFSe>124</nNFSe>').Replace($key,$replacementKey))
+$replacement.ChaveAcesso=$replacementKey
+$replacementBatch=ConvertFrom-NfseDistributionResponse (Response @($item,$replacement)) $company
+Equal $replacementBatch.lastNsu '000000000000008' 'replacement invoice does not block the distribution cursor'
+Equal $replacementBatch.documents.Count 2 'normal and replacement invoices both stay in the batch'
+Equal $replacementBatch.documents[1].fields.SITUACAO 'AUTORIZADA' 'the new replacement invoice is authorized'
+Equal $replacementBatch.documents[1].fields.STATUS_IMPORTACAO 'XML_COMPLETO' 'replacement imports its complete XML'
 $empty=ConvertFrom-NfseDistributionResponse (Response @() 'NENHUM_DOCUMENTO_LOCALIZADO') $company
 Equal $empty.lastNsu $null 'empty response cannot manufacture cursor zero'
 Equal $empty.hasMore $false 'empty terminates current sweep'
