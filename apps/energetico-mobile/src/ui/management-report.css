@@ -139,6 +139,7 @@
 .gm-expense-dashboard-series.is-total .gm-dashboard-value-label { fill:#305496; }
 .gm-expense-dashboard-series.is-paid .gm-dashboard-value-label { fill:#146c43; }
 .gm-expense-dashboard-series.is-forecast .gm-dashboard-value-label { fill:#94600d; }
+.gm-expense-dashboard-series .gm-dashboard-value-label.is-shared { fill:#000; }
 .gm-dashboard-month-label,.gm-dashboard-scale-label { fill:#52677d; font:13px Arial,sans-serif; }
 .gm-expense-dashboard-legend { display:flex; flex-wrap:wrap; justify-content:center; gap:6px 15px; margin-top:2px; }
 .gm-dashboard-legend-item { position:relative; padding:3px 5px 3px 18px; border:0; background:transparent; color:#42566b; font:bold 13px Arial,sans-serif; cursor:pointer; }
