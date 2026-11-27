@@ -74,6 +74,9 @@
   svg.dispatchEvent(new PointerEvent('pointerleave'));
   await waitForLayout();
 
+  const pointLabel = (chart, series, index) =>
+    chart.querySelectorAll(`.is-${series} .gm-dashboard-value-label`)[index];
+  const differentMonthColors = ['total', 'paid'].map(series => getComputedStyle(pointLabel(svg, series, 11)).fill);
   const crowdedMonths = [
     [335441, 7441], [265673, 0], [319062, 160], [721837, 0], [571681, 19672], [531881, 0],
     [194166, 7128], [267269, 0], [475641, 0], [214545, 0], [412853, 10081], [125867, 0],
@@ -89,11 +92,19 @@
   Object.assign(crowdedChart.style, { width: '508px', height: '190px' });
   await waitForLayout();
   const equalMonthLabels = ['total', 'paid'].filter(series =>
-    getComputedStyle(crowdedChart.querySelectorAll(`.is-${series} .gm-dashboard-value-label`)[3]).display !== 'none');
+    getComputedStyle(pointLabel(crowdedChart, series, 3)).display !== 'none');
+  const sharedColor = getComputedStyle(pointLabel(crowdedChart, 'paid', 3)).fill;
+  const totalLegend = root.querySelector('.gm-dashboard-legend-item.is-total');
+  const paidLegend = root.querySelector('.gm-dashboard-legend-item.is-paid');
+  totalLegend.click();
+  const paidOnlyColor = getComputedStyle(pointLabel(crowdedChart, 'paid', 3)).fill;
+  totalLegend.click();
+  paidLegend.click();
+  const totalOnlyColor = getComputedStyle(pointLabel(crowdedChart, 'total', 3)).fill;
 
   document.documentElement.dataset.layout = JSON.stringify({
     coverage: drawnWidth / cardWidth, valueHeight, monthHeight, noOverlap, rankSize,
     lastLabel, detail: detail.textContent, detailVisible, resized: drawnWidth - resized, months: monthsLabels.length,
-    equalMonthLabels,
+    equalMonthLabels, sharedColor, differentMonthColors, paidOnlyColor, totalOnlyColor,
   });
 </script>
