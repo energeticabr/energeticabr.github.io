@@ -6,6 +6,7 @@ from contextlib import ExitStack
 from datetime import date
 from http.cookiejar import Cookie, LWPCookieJar
 from pathlib import Path
+from secrets import token_urlsafe
 from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
@@ -36,7 +37,7 @@ class PortalSessionTests(unittest.TestCase):
         resources.enter_context(patch.dict(sys.modules, {'collector': collector, 'fcntl': locking}))
         resources.enter_context(patch('trancid_portal_adapter.config_values', return_value={
             'TRANCID_DB_PATH': str(self.root / 'monitor.sqlite'),
-            'TRANCID_USERNAME': 'test-user', 'TRANCID_PASSWORD': 'test-password',
+            'TRANCID_USERNAME': 'test-user', 'TRANCID_PASSWORD': token_urlsafe(16),
         }))
 
     def collector(self):
