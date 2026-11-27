@@ -16,7 +16,7 @@ createCamerasView(document).open({
     id: 'camera-' + (index + 1),
     label: index === 0 ? 'Entrada' : listMode && index === 8
       ? 'Pátio ' + 'NomeLongoSemEspaços'.repeat(5) : 'Obra Xavante • canal ' + (index + 1),
-    status: index === 0 ? 'offline' : 'online',
+    status: index === 0 || (location.search === '?player' && index === 1) ? 'offline' : 'online',
     lastOnlineAt: index === 0 ? '2026-11-24T12:00:00Z' : null,
     ...([0, 2, 6].includes(index) ? { cameraGroup: 'camera-1', cameraLabel: 'Obra Xavante' } : {}),
   })),
@@ -179,7 +179,24 @@ if (wallMode) {
     layout.focused = measurePlayer();
     doubleTap(video);
     layout.restored = measurePlayer();
-    video.closest('.cameras-player__tile').querySelector('.cameras-player__focus').click();
+    const tile = video.closest('.cameras-player__tile');
+    const dismiss = tile.querySelector('[data-camera-dismiss]:not([hidden])');
+    const ribbon = tile.querySelector('.cameras-player__status[data-offline]');
+    if (dismiss && ribbon) {
+      const button = rect(dismiss);
+      layout.playerOffline = {
+        tile: rect(tile), button, label: rect(tile.querySelector('.cameras-player__label')), ribbon: rect(ribbon),
+        clickable: dismiss.contains(document.elementFromPoint(button.left + button.width / 2, button.top + button.height / 2)),
+        noSpinner: getComputedStyle(ribbon, '::before').content === 'none',
+      };
+      dismiss.click();
+      layout.seven = measurePlayer();
+      player.querySelector('[data-camera-dismiss]:not([hidden])').click();
+      layout.six = measurePlayer();
+      player.querySelector('[data-camera-player-back]').click();
+      dialog.querySelector('[data-camera-visual-open]').click();
+    }
+    dialog.querySelector('[data-camera-video="camera-1"]').closest('.cameras-player__tile').querySelector('.cameras-player__focus').click();
     layout.individual = measurePlayer();
   }
 }

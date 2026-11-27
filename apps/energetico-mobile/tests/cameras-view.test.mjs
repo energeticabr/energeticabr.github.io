@@ -116,6 +116,85 @@ test('câmera off-line sem horário conhecido informa que ainda não há histór
   assert.match(document.querySelector('[data-camera-open="cam-1"]').getAttribute('aria-label'), /Sem registro de conexão/i);
 });
 
+test('oculta uma câmera off-line do visual aberto sem reabrir os vídeos restantes', async t => {
+  const ids = ['site-1', 'site-2', 'site-3'];
+  const { document, starts, grids, view } = setup(t, { useGrid: true, accountKey: 'conta',
+    catalog: ids.map((id, index) => ({ id, label: `Obra ${index + 1}`, status: index === 0 ? 'offline' : 'online' })),
+  });
+  const { defaultView: window } = document;
+  window.localStorage.setItem('energetico:camera-visual:v1:conta', JSON.stringify([{ name: 'Visual 1', cameraIds: ids }]));
+  await flush();
+  document.querySelector('[data-camera-tab="visuals"]').click();
+  document.querySelector('[data-camera-visual-open]').click();
+  await flush();
+  const [offline, ...remaining] = document.querySelectorAll('[data-camera-video]');
+  for (const video of remaining) video.dispatchEvent(new window.Event('playing'));
+  const tile = offline.closest('.cameras-player__tile');
+  const status = tile.querySelector('.cameras-player__status');
+  assert.equal(status.textContent, 'OFF-LINE');
+  assert.equal(status.dataset.loading, 'false');
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, '2/3 ao vivo');
+
+  offline.click(); offline.click();
+  const dismiss = tile.querySelector('[data-camera-dismiss]');
+  assert.equal(dismiss.hidden, false);
+  assert.equal(dismiss.getAttribute('aria-label'), 'Ocultar Obra 1 desta visualização');
+  dismiss.click();
+  assert.equal(starts[0].signal.aborted, true);
+  assert.ok(starts.slice(1).every(({ signal }) => !signal.aborted));
+  assert.equal(grids.length, 1);
+  assert.deepEqual([...document.querySelectorAll('[data-camera-video]')], remaining);
+  assert.equal(document.querySelector('.cameras-player__grid').dataset.count, '2');
+  assert.equal(document.querySelector('.cameras-player__stage').dataset.focused, 'false');
+  assert.equal(document.querySelector('.cameras-player__title').textContent, 'Visual 1');
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
+
+  Object.defineProperty(document, 'hidden', { value: false });
+  window.dispatchEvent(new window.Event('pagehide'));
+  view.resume();
+  assert.deepEqual(starts.slice(3).map(({ id }) => id), ids.slice(1));
+  document.querySelector('[data-camera-player-back]').click();
+  document.querySelector('[data-camera-visual-open]').click();
+  assert.deepEqual([...document.querySelectorAll('[data-camera-video]')].map(video => video.dataset.cameraVideo), ids);
+});
+
+test('exibe off-line quando a abertura não entrega vídeo e retira a tarja se recuperar', async t => {
+  const { document } = setup(t);
+  await flush();
+  const { defaultView: window } = document;
+  const timers = new Map();
+  let nextTimer = 0;
+  window.setTimeout = (callback, delay) => { timers.set(++nextTimer, { callback, delay }); return nextTimer; };
+  window.clearTimeout = id => timers.delete(id);
+  const open = document.querySelector('[data-camera-open]');
+  open.click();
+  await flush();
+  const video = document.querySelector('[data-camera-video]');
+  const status = document.querySelector('.cameras-player__status');
+  const dismiss = document.querySelector('[data-camera-dismiss]');
+  const elapseDeadline = () => {
+    const [id, timer] = [...timers].find(([, { delay }]) => delay === 45_000);
+    timers.delete(id);
+    timer.callback();
+  };
+  assert.equal(status.dataset.loading, 'true');
+  elapseDeadline();
+  assert.equal(status.textContent, 'OFF-LINE');
+  assert.equal(status.dataset.loading, 'false');
+  assert.equal(dismiss.hidden, false);
+  video.dispatchEvent(new window.Event('playing'));
+  assert.equal(status.textContent, '');
+  assert.equal(dismiss.hidden, true);
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
+
+  document.querySelector('[data-camera-player-back]').click();
+  open.click();
+  elapseDeadline();
+  document.querySelector('[data-camera-dismiss]').click();
+  assert.equal(document.querySelector('.cameras-player'), null);
+  assert.equal(document.activeElement, open);
+});
+
 test('atualiza status a cada minuto enquanto a lista está aberta e cancela ao fechar', async t => {
   const timerControl = { cleared: [] };
   let reads = 0;
@@ -349,8 +428,11 @@ test('aguarda a rede se a chamada de recuperação falhar enquanto o aparelho fi
   const window = document.defaultView;
   const video = document.querySelector('video');
   let retry;
-  window.setTimeout = callback => { retry = callback; return 1; };
-  window.clearTimeout = () => { retry = null; };
+  window.setTimeout = (callback, delay) => {
+    if (delay === 4_000) { retry = callback; return 1; }
+    return 2;
+  };
+  window.clearTimeout = id => { if (id === 1) retry = null; };
   video.dispatchEvent(new window.Event('playing'));
   Object.defineProperty(video, 'error', { configurable: true, value: { code: 2 } });
   video.dispatchEvent(new window.Event('error'));
@@ -378,16 +460,47 @@ test('preserva o codec direto quando o serviço fica indisponível durante a rec
   const window = document.defaultView;
   const video = document.querySelector('video');
   let retry;
-  window.setTimeout = callback => { retry = callback; return 1; };
-  window.clearTimeout = () => { retry = null; };
-  video.dispatchEvent(new window.Event('playing'));
+  window.setTimeout = (callback, delay) => {
+    if (delay === 4_000) { retry = callback; return 1; }
+    return 2;
+  };
+  window.clearTimeout = id => { if (id === 1) retry = null; };
   Object.defineProperty(video, 'error', { configurable: true, value: { code: 2 } });
   video.dispatchEvent(new window.Event('error'));
   await flush();
   retry();
   await flush();
   assert.deepEqual(starts.map(item => item.codecs), [['h264', 'hevc'], ['h264', 'hevc'], ['h264', 'hevc']]);
-  assert.match(document.querySelector('.cameras-player__status').textContent, /Fonte indisponível/);
+  assert.equal(document.querySelector('.cameras-player__status').textContent, 'OFF-LINE');
+  assert.equal(document.querySelector('[data-camera-play-retry]').hidden, false);
+});
+
+test('distingue falta de capacidade e falta de acesso de câmera off-line', async t => {
+  const { document } = setup(t, {
+    catalog: [{ id: 'site-1', label: 'Obra 1', status: 'online' }, { id: 'site-2', label: 'Obra 2', status: 'offline' }],
+    startError: ({ id }) => id === 'site-1'
+      ? Object.assign(new Error('Serviço ocupado'), { status: 429 })
+      : Object.assign(new Error('Acesso negado'), { status: 403 }),
+  });
+  await flush();
+  const window = document.defaultView;
+  let retry;
+  window.setTimeout = (callback, delay) => {
+    if (delay === 4_000) { retry = callback; return 1; }
+    return 2;
+  };
+  window.clearTimeout = () => {};
+  document.querySelector('[data-camera-open="site-1"]').click();
+  await flush();
+  retry();
+  await flush();
+  assert.equal(document.querySelector('.cameras-player__status').textContent, 'Serviço ocupado');
+  assert.equal(document.querySelector('[data-camera-dismiss]').hidden, true);
+  document.querySelector('[data-camera-player-back]').click();
+  document.querySelector('[data-camera-open="site-2"]').click();
+  await flush();
+  assert.equal(document.querySelector('.cameras-player__status').textContent, 'Acesso negado');
+  assert.equal(document.querySelector('[data-camera-dismiss]').hidden, true);
 });
 
 test('pede HEVC apenas quando o aparelho suporta e retorna a H.264 se a mídia falhar', async t => {
@@ -471,8 +584,9 @@ test('a grade reconecta uma transmissão interrompida sem reabrir os demais cana
     return timerId;
   };
   document.defaultView.clearTimeout = id => timers.delete(id);
-  const elapse = () => {
-    const [id, timer] = [...timers.entries()][0];
+  const elapse = (select = () => true) => {
+    const [id, timer] = [...timers].sort((left, right) => left[1].delay - right[1].delay)
+      .find(([, { delay }]) => select(delay));
     timers.delete(id);
     timer.callback();
     return timer.delay;
@@ -511,7 +625,16 @@ test('a grade reconecta uma transmissão interrompida sem reabrir os demais cana
   assert.equal(starts.filter(item => item.id === 'site-2').length, 1);
   Object.defineProperty(video, 'error', { value: { code: 2 } });
   video.dispatchEvent(new Event('error'));
-  assert.equal(timers.size, 1);
+  assert.equal(elapse(delay => delay === 45_000), 45_000);
+  assert.equal(notice.textContent, 'OFF-LINE');
+  assert.equal(notice.dataset.loading, 'false');
+  elapse();
+  await flush();
+  assert.equal(notice.textContent, 'OFF-LINE');
+  video.dispatchEvent(new Event('playing'));
+  assert.equal(notice.textContent, '');
+  video.dispatchEvent(new Event('error'));
+  assert.equal(timers.size, 2);
   document.querySelector('[data-camera-player-back]').click();
   assert.equal(timers.size, 0);
 });
@@ -597,9 +720,8 @@ for (const buffered of [false, true]) {
       stalled.dispatchEvent(new window.Event('waiting'));
     }
     const deadlines = [...timers];
-    assert.equal(deadlines.length, 1);
-    const [[id, deadline]] = deadlines;
-    assert.ok(deadline.delay <= 20_000);
+    assert.deepEqual(deadlines.map(([, { delay }]) => delay).sort((a, b) => a - b), [20_000, 45_000]);
+    const [id, deadline] = deadlines.find(([, { delay }]) => delay === 20_000);
     timers.delete(id);
     deadline.callback();
     await flush();

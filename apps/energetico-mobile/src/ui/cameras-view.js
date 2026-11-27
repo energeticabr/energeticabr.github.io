@@ -13,6 +13,7 @@ const CAMERA_STATUS_REFRESH_MS = 60_000;
 const LIVE_RENEWAL_INTERVAL_MS = 5 * 60_000;
 const LIVE_WAIT_NOTICE_MS = 2_000;
 const LIVE_STALL_MS = 20_000;
+const LIVE_OFFLINE_MS = 45_000;
 const LIVE_STABLE_MS = 30_000;
 const LIVE_RETRY_DELAY_MS = 4_000;
 const LIVE_NETWORK_RETRIES = 2;
@@ -726,6 +727,7 @@ export function createCamerasView(documentRef) {
       saveCurrentThumbnails();
       gridRequest?.abort(); gridRequest = null;
       for (const item of playback) {
+        clearOfflineDeadline(item);
         item.controller.abort();
         item.searchController?.abort();
         detachVideo(item);
@@ -756,6 +758,7 @@ export function createCamerasView(documentRef) {
       stopLeaseRenewal();
       gridRequest?.abort(); gridRequest = null;
       for (const item of playback) {
+        clearOfflineDeadline(item);
         item.controller.abort();
         if (item.searchController) {
           item.searchController.abort(); item.searchController = null;
@@ -768,8 +771,10 @@ export function createCamerasView(documentRef) {
         item.networkRetries = 0;
         item.connectionState = 'connecting'; item.failureLabel = '';
         item.liveBadge.hidden = true;
-        item.status.dataset.loading = 'true';
-        item.status.textContent = 'Retomando transmissão…';
+        if (!item.offline) {
+          item.status.dataset.loading = 'true';
+          item.status.textContent = 'Retomando transmissão…';
+        }
         item.updateControls?.(); item.updateHeader?.();
         detachVideo(item);
         updateSavedFrame(item);
@@ -866,14 +871,40 @@ export function createCamerasView(documentRef) {
         item.onPlaybackError?.(true, { stalled: true });
       }, delay);
     }
+    function clearOfflineDeadline(item) {
+      if (item.offlineTimer === null) return;
+      windowRef.clearTimeout(item.offlineTimer);
+      item.offlineTimer = null;
+    }
+    function setOffline(item, offline) {
+      clearOfflineDeadline(item);
+      item.offline = offline;
+      item.status.toggleAttribute('data-offline', offline);
+      item.dismiss.hidden = !offline;
+      if (offline) {
+        item.status.textContent = 'OFF-LINE';
+        item.status.dataset.loading = 'false';
+      } else if (documentRef.activeElement === item.dismiss) {
+        player?.querySelector('[data-camera-player-back]')?.focus({ preventScroll: true });
+      }
+    }
     function showWaiting(item, reconnecting) {
       item.connected = false;
       item.connectionState = reconnecting ? 'waiting' : 'connecting';
       item.failureLabel = '';
       item.liveBadge.hidden = true;
-      item.status.textContent = reconnecting ? 'Reconectando…'
-        : item.mode === 'playback' ? 'Abrindo gravação…' : 'Conectando…';
-      item.status.dataset.loading = 'true';
+      if (!item.offline) {
+        item.status.textContent = reconnecting ? 'Reconectando…'
+          : item.mode === 'playback' ? 'Abrindo gravação…' : 'Conectando…';
+        item.status.dataset.loading = 'true';
+        if (item.mode === 'live' && item.offlineTimer === null) {
+          // Keep one deadline across attempts until there is live video again.
+          item.offlineTimer = windowRef.setTimeout(() => {
+            setOffline(item, true);
+            item.updateHeader?.();
+          }, LIVE_OFFLINE_MS);
+        }
+      }
       item.updateControls?.(); item.updateHeader?.();
     }
     async function connect(item, channel, recordingId = null, startPlayback = start, { preserveViewState = false } = {}) {
@@ -885,6 +916,7 @@ export function createCamerasView(documentRef) {
       if (Boolean(item.recordingId) !== Boolean(recordingId)) item.networkRetries = 0;
       item.recordingId = recordingId;
       item.mode = recordingId ? 'playback' : 'live';
+      if (recordingId) setOffline(item, false);
       item.liveUrl = null;
       updateSavedFrame(item);
       item.thumbnailTime = null;
@@ -892,38 +924,31 @@ export function createCamerasView(documentRef) {
       item.playingSince = null;
       item.waitStartedAt = null;
       const reconnecting = !recordingId && item.networkRetries > 0;
-      item.connected = false; item.connectionState = reconnecting ? 'waiting' : 'connecting'; item.failureLabel = '';
-      item.playAttempted = false; item.retry.hidden = true; item.updateControls?.();
+      item.playAttempted = false; item.retry.hidden = true;
       item.retry.textContent = 'Tentar reproduzir';
       item.reconnect = null;
       if (!preserveViewState) {
         item.video.muted = true; item.video.defaultMuted = true;
         item.collapseDrawer?.();
       }
-      item.liveBadge.hidden = true;
       if (item.audioButton && !preserveViewState) {
         item.audioButton.setAttribute('aria-pressed', 'false');
         item.audioButton.querySelector('.cameras-player__action-label').textContent = 'Áudio';
       }
-      item.status.dataset.loading = 'true';
-      item.updateHeader?.();
       const { signal } = item.controller;
       signal.addEventListener('abort', () => {
         clearWaiting(item);
         item.cancelRecovery?.();
       }, { once: true });
-      item.status.textContent = recordingId ? 'Abrindo gravação…'
-        : reconnecting ? 'Reconectando…' : 'Conectando…';
+      showWaiting(item, reconnecting);
       function tryAutoplay() {
         if (signal.aborted || item.cancelRecovery || item.playAttempted || item.connectionState === 'error') return;
         if (android && !recordingId && item.onPlaybackError && item.waitingTimer === null) {
           scheduleStallRecovery(item, LIVE_STALL_MS);
         }
         item.playAttempted = true;
-        item.connectionState = reconnecting ? 'waiting' : 'connecting'; item.failureLabel = '';
         item.retry.hidden = true;
-        item.status.textContent = recordingId ? 'Abrindo gravação…' : reconnecting ? 'Reconectando…' : 'Conectando…';
-        item.status.dataset.loading = 'true';
+        showWaiting(item, reconnecting);
         let attempt;
         try { attempt = item.video.play(); }
         catch (error) { playbackRejected(error); return; }
@@ -932,6 +957,7 @@ export function createCamerasView(documentRef) {
       function playbackRejected(error) {
         if (signal.aborted || item.cancelRecovery) return;
         clearWaiting(item);
+        setOffline(item, false);
         item.connected = false; item.connectionState = 'error';
         item.failureLabel = error?.name === 'NotAllowedError' ? 'Autoplay bloqueado' : 'Falha na reprodução';
         item.liveBadge.hidden = true;
@@ -943,9 +969,9 @@ export function createCamerasView(documentRef) {
       }
       item.retry.onclick = () => {
         if (signal.aborted) return;
-        item.playAttempted = false; item.connectionState = 'connecting'; item.failureLabel = '';
-        item.status.dataset.loading = 'true'; item.status.textContent = 'Conectando…';
-        item.retry.hidden = true; item.updateHeader?.();
+        item.playAttempted = false;
+        item.retry.hidden = true;
+        showWaiting(item, false);
         tryAutoplay();
       };
       item.video.addEventListener('canplay', tryAutoplay, { once: true });
@@ -1005,22 +1031,23 @@ export function createCamerasView(documentRef) {
         };
         item.retry.textContent = 'Tentar novamente';
         item.retry.onclick = item.reconnect;
-        if (item.preview) item.status.textContent += ' Toque no vídeo para tentar novamente.';
-        else item.retry.hidden = false;
+        if (!item.preview) item.retry.hidden = false;
+        else if (!item.offline) item.status.textContent += ' Toque no vídeo para tentar novamente.';
       }
-      const showDisconnected = message => {
+      const showDisconnected = (message, network) => {
         item.cancelRecovery?.();
         saveThumbnail(item);
         item.connected = false;
         item.connectionState = 'error'; item.failureLabel = 'Transmissão interrompida';
         item.onPlaybackError = null;
+        setOffline(item, !recordingId && (item.offline || (network && item.networkRetries >= LIVE_NETWORK_RETRIES)));
         detachVideo(item);
         updateSavedFrame(item);
         item.liveBadge.hidden = true;
         item.status.dataset.loading = 'false'; item.retry.hidden = true;
         item.updateControls?.();
         item.updateHeader?.();
-        item.status.textContent = message;
+        if (!item.offline) item.status.textContent = message;
         if (!recordingId) offerLiveRetry();
       };
       try {
@@ -1041,9 +1068,8 @@ export function createCamerasView(documentRef) {
             retryCompatible(url);
             return;
           }
-          if (!recordingId && network && (stalled || item.preview || item.played || item.networkRetries)
-            && retryNetwork({ previousUrl: url })) return;
-          showDisconnected('Transmissão interrompida.');
+          if (!recordingId && network && retryNetwork({ previousUrl: url })) return;
+          showDisconnected('Transmissão interrompida.', network);
         };
         item.onPlaybackError = failed;
         // Android can wait indefinitely for its first frame without an error event.
@@ -1066,14 +1092,17 @@ export function createCamerasView(documentRef) {
         }
       } catch (error) {
         if (signal.aborted) return;
+        const status = error?.status;
         const networkUnavailable = error?.code === 'NETWORK_UNAVAILABLE' || error instanceof TypeError;
-        const recoverable = networkUnavailable || [404, 408, 429, 500, 502, 503, 504].includes(error?.status);
-        const offline = networkUnavailable && windowRef.navigator.onLine === false;
-        if (!recordingId && recoverable && retryNetwork({ resumeOfflineAttempt: offline && item.networkRetries > 0 })) return;
+        const recoverable = networkUnavailable || [404, 408, 429, 500, 502, 503, 504].includes(status);
+        const deviceOffline = networkUnavailable && windowRef.navigator.onLine === false;
+        if (!recordingId && recoverable && retryNetwork({ resumeOfflineAttempt: deviceOffline && item.networkRetries > 0 })) return;
         item.connected = false; item.connectionState = 'error'; item.failureLabel = 'Falha ao conectar';
+        const retriesExhausted = recoverable && status !== 429 && item.networkRetries >= LIVE_NETWORK_RETRIES;
+        setOffline(item, !recordingId && status !== 401 && status !== 403 && (item.offline || retriesExhausted));
         item.liveBadge.hidden = true; item.status.dataset.loading = 'false';
         item.retry.hidden = true; item.updateControls?.(); item.updateHeader?.();
-        item.status.textContent = error?.message || 'Não foi possível abrir esta câmera.';
+        if (!item.offline) item.status.textContent = error?.message || 'Não foi possível abrir esta câmera.';
         if (!recordingId) offerLiveRetry();
       }
     }
@@ -1085,7 +1114,7 @@ export function createCamerasView(documentRef) {
         playerReturnChannelId = playerReturnFocus?.dataset?.cameraOpen || null;
       }
       stopPlayer({ restoreFocus: false, preserveReturnFocus: replacingPlayer });
-      playerChannels = chosen;
+      playerChannels = [...chosen];
       for (const node of background) node.inert = true;
       player = make('div', 'cameras-player');
       player.dataset.count = String(chosen.length);
@@ -1117,8 +1146,8 @@ export function createCamerasView(documentRef) {
       const tileItems = [];
       let focusedCameraId = null;
       let pendingCameraTap = null;
-      function toggleCameraFocus(channel) {
-        focusedCameraId = focusedCameraId === String(channel.id) ? null : String(channel.id);
+      function setCameraFocus(channelId) {
+        focusedCameraId = channelId;
         stage.dataset.focused = String(Boolean(focusedCameraId));
         // Keep all media elements rendered when another camera covers the grid.
         for (const { tile, item } of tileItems) {
@@ -1130,6 +1159,31 @@ export function createCamerasView(documentRef) {
           }
         }
       }
+      function dismissCamera(item, slot) {
+        if (!item.offline) return;
+        const index = playback.indexOf(item);
+        if (index < 0) return;
+        if (playback.length === 1) { stopPlayer(); return; }
+        clearOfflineDeadline(item);
+        item.controller.abort();
+        detachVideo(item);
+        playback.splice(index, 1);
+        playerChannels.splice(index, 1);
+        tileItems.splice(index, 1);
+        slot.remove();
+        const count = playerChannels.length;
+        player.dataset.count = grid.dataset.count = String(count);
+        if (!visualName) title.textContent = count === 1 ? playerChannels[0].label : `${count} câmeras`;
+        if (count === 1) {
+          const { video } = tileItems[0];
+          video.classList.remove('cameras-player__video--focusable');
+          video.removeAttribute('title');
+        }
+        pendingCameraTap = null;
+        if (focusedCameraId === String(item.channelId)) setCameraFocus(null);
+        updateHeader();
+        back.focus({ preventScroll: true });
+      }
       for (const channel of chosen) {
         const tile = make('div', 'cameras-player__tile');
         const video = documentRef.createElement('video');
@@ -1138,7 +1192,7 @@ export function createCamerasView(documentRef) {
         video.setAttribute('autoplay', ''); video.setAttribute('muted', ''); video.setAttribute('playsinline', '');
         video.crossOrigin = 'anonymous'; video.setAttribute('aria-label', channel.label);
         video.dataset.cameraVideo = channel.id;
-        if (preview && chosen.length > 1) {
+        if (preview) {
           video.classList.add('cameras-player__video--focusable');
           video.title = 'Toque duas vezes para ampliar; toque duas vezes novamente para ver todas as câmeras.';
           video.tabIndex = 0;
@@ -1156,13 +1210,19 @@ export function createCamerasView(documentRef) {
         const notice = make('span', 'cameras-player__status', 'Conectando…'); notice.setAttribute('role', 'status'); notice.dataset.loading = 'true';
         const retry = make('button', 'cameras-player__retry', 'Tentar reproduzir'); retry.type = 'button';
         retry.dataset.cameraPlayRetry = ''; retry.hidden = true;
-        const item = { controller: new AbortController(), video, status: notice, retry, liveBadge,
+        const dismiss = make('button', 'cameras-player__dismiss', '×'); dismiss.type = 'button';
+        dismiss.dataset.cameraDismiss = ''; dismiss.hidden = true;
+        dismiss.setAttribute('aria-label', `Ocultar ${channel.label} desta visualização`);
+        const slot = make('div', 'cameras-player__slot');
+        const item = { controller: new AbortController(), video, status: notice, retry, dismiss, liveBadge,
           savedFrame, savedFrameImage, hls: null,
           mode: 'live', connected: false, connectionState: 'connecting', failureLabel: '', playAttempted: false,
           preview, channelId: channel.id, recordingId: null, searchButton: null, searchResults: null,
           thumbnailTime: null, played: false, networkRetries: 0, playingSince: null, waitStartedAt: null,
-          waitingTimer: null, cancelRecovery: null, reconnect: null,
+          waitingTimer: null, offlineTimer: null, offline: false, cancelRecovery: null, reconnect: null,
           codecs: canPlayHevc(video) ? ['h264', 'hevc'] : ['h264'] };
+        if (channel.status === 'offline') setOffline(item, true);
+        dismiss.addEventListener('click', () => dismissCamera(item, slot));
         video.addEventListener('playing', () => {
           if (item.controller.signal.aborted || item.connectionState === 'error') return;
           clearWaiting(item);
@@ -1170,6 +1230,7 @@ export function createCamerasView(documentRef) {
           if (item.playingSince === null || item.connectionState === 'waiting') item.playingSince = windowRef.Date.now();
           item.waitStartedAt = null;
           item.played = true; item.connected = true; item.connectionState = 'playing'; item.failureLabel = '';
+          setOffline(item, false);
           item.status.textContent = ''; item.status.dataset.loading = 'false'; item.retry.hidden = true;
           item.savedFrame.hidden = true;
           item.liveBadge.hidden = item.mode !== 'live';
@@ -1207,14 +1268,15 @@ export function createCamerasView(documentRef) {
           };
           video.addEventListener('click', event => {
             resume();
-            if (chosen.length < 2) return;
+            if (playerChannels.length < 2) return;
             const now = Date.now();
             const isDoubleTap = pendingCameraTap?.channelId === channel.id
               && now - pendingCameraTap.time <= 400
               && Math.hypot(event.clientX - pendingCameraTap.x, event.clientY - pendingCameraTap.y) <= 32;
             if (isDoubleTap) {
               pendingCameraTap = null;
-              toggleCameraFocus(channel);
+              const id = String(channel.id);
+              setCameraFocus(focusedCameraId === id ? null : id);
             } else pendingCameraTap = { channelId: channel.id, time: now, x: event.clientX, y: event.clientY };
           });
           video.addEventListener('keydown', event => {
@@ -1224,7 +1286,7 @@ export function createCamerasView(documentRef) {
           });
         }
         playback.push(item); tileItems.push({ tile, video, item, channel });
-        tile.append(video, savedFrame, label, liveBadge, notice, retry, footer);
+        tile.append(video, savedFrame, dismiss, label, liveBadge, notice, retry, footer);
         if (chosen.length > 1 && (move || listRecordings)) {
           tile.classList.add('cameras-player__tile--focusable');
           const focus = make('button', 'cameras-player__focus', '1 tela');
@@ -1232,24 +1294,27 @@ export function createCamerasView(documentRef) {
           focus.addEventListener('click', () => openPlayer([channel], focus));
           footer.append(focus);
         }
-        const slot = make('div', 'cameras-player__slot');
         slot.append(tile);
         grid.append(slot);
       }
       function updateHeader() {
+        const count = playback.length;
+        const first = playback[0];
         const connected = playback.filter(item => item.connectionState === 'playing' && item.mode === 'live').length;
-        liveState.textContent = chosen.length === 1
-          ? (playback[0].connectionState === 'playing'
-            ? (playback[0].mode === 'live' ? 'AO VIVO' : 'GRAVAÇÃO')
-            : playback[0].connectionState === 'error' ? (playback[0].failureLabel || 'Falha ao reproduzir')
-              : playback[0].connectionState === 'waiting' ? 'Reconectando…'
-                : playback[0].mode === 'playback' ? 'Abrindo gravação…' : 'Conectando…')
-          : (connected === chosen.length ? 'AO VIVO' : connected ? `${connected}/${chosen.length} ao vivo`
-            : playback.every(item => item.connectionState === 'error') ? 'Falha ao conectar'
-              : playback.some(item => item.connectionState === 'waiting') ? 'Reconectando…' : 'Conectando…');
-        liveState.dataset.mode = chosen.length === 1 && playback[0]?.mode === 'playback' ? 'playback' : 'live';
-        liveState.dataset.connected = String(chosen.length > 0 && playback.every(item => item.connectionState === 'playing'));
-        liveState.dataset.state = chosen.length === 1 ? playback[0]?.connectionState || 'connecting' : 'group';
+        const allOffline = playback.every(item => item.offline);
+        liveState.textContent = count === 1
+          ? (first.offline ? 'OFF-LINE' : first.connectionState === 'playing'
+            ? (first.mode === 'live' ? 'AO VIVO' : 'GRAVAÇÃO')
+            : first.connectionState === 'error' ? (first.failureLabel || 'Falha ao reproduzir')
+              : first.connectionState === 'waiting' ? 'Reconectando…'
+                : first.mode === 'playback' ? 'Abrindo gravação…' : 'Conectando…')
+          : (connected === count ? 'AO VIVO' : connected ? `${connected}/${count} ao vivo`
+            : allOffline ? 'OFF-LINE'
+              : playback.every(item => item.offline || item.connectionState === 'error') ? 'Falha ao conectar'
+                : playback.some(item => !item.offline && item.connectionState === 'waiting') ? 'Reconectando…' : 'Conectando…');
+        liveState.dataset.mode = count === 1 && first.mode === 'playback' ? 'playback' : 'live';
+        liveState.dataset.connected = String(playback.every(item => item.connectionState === 'playing'));
+        liveState.dataset.state = allOffline ? 'error' : count === 1 ? first.connectionState : 'group';
       }
       playback.forEach(item => { item.updateHeader = updateHeader; });
 
