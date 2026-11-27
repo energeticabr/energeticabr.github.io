@@ -116,7 +116,7 @@ test('câmera off-line sem horário conhecido informa que ainda não há histór
   assert.match(document.querySelector('[data-camera-open="cam-1"]').getAttribute('aria-label'), /Sem registro de conexão/i);
 });
 
-test('oculta uma câmera off-line do visual aberto sem reabrir os vídeos restantes', async t => {
+test('oculta câmeras off-line e ao vivo sem reabrir os outros vídeos ou editar o visual salvo', async t => {
   const ids = ['site-1', 'site-2', 'site-3'];
   const { document, starts, grids, view } = setup(t, { useGrid: true, accountKey: 'conta',
     catalog: ids.map((id, index) => ({ id, label: `Obra ${index + 1}`, status: index === 0 ? 'offline' : 'online' })),
@@ -128,6 +128,7 @@ test('oculta uma câmera off-line do visual aberto sem reabrir os vídeos restan
   document.querySelector('[data-camera-visual-open]').click();
   await flush();
   const [offline, ...remaining] = document.querySelectorAll('[data-camera-video]');
+  assert.equal(document.querySelectorAll('[data-camera-dismiss]:not([hidden])').length, 3);
   for (const video of remaining) video.dispatchEvent(new window.Event('playing'));
   const tile = offline.closest('.cameras-player__tile');
   const status = tile.querySelector('.cameras-player__status');
@@ -149,10 +150,23 @@ test('oculta uma câmera off-line do visual aberto sem reabrir os vídeos restan
   assert.equal(document.querySelector('.cameras-player__title').textContent, 'Visual 1');
   assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
 
+  const [live, stillPlaying] = remaining;
+  live.click(); live.click();
+  const dismissLive = live.closest('.cameras-player__tile').querySelector('[data-camera-dismiss]');
+  assert.equal(dismissLive.hidden, false);
+  dismissLive.click();
+  assert.equal(starts[1].signal.aborted, true);
+  assert.equal(starts[2].signal.aborted, false);
+  assert.equal(starts.length, 3);
+  assert.deepEqual([...document.querySelectorAll('[data-camera-video]')], [stillPlaying]);
+  assert.equal(document.querySelector('.cameras-player__grid').dataset.count, '1');
+  assert.equal(document.querySelector('.cameras-player__stage').dataset.focused, 'false');
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
+
   Object.defineProperty(document, 'hidden', { value: false });
   window.dispatchEvent(new window.Event('pagehide'));
   view.resume();
-  assert.deepEqual(starts.slice(3).map(({ id }) => id), ids.slice(1));
+  assert.deepEqual(starts.slice(3).map(({ id }) => id), ['site-3']);
   document.querySelector('[data-camera-player-back]').click();
   document.querySelector('[data-camera-visual-open]').click();
   assert.deepEqual([...document.querySelectorAll('[data-camera-video]')].map(video => video.dataset.cameraVideo), ids);
@@ -182,15 +196,14 @@ test('exibe off-line quando a abertura não entrega vídeo e retira a tarja se r
   assert.equal(status.textContent, 'OFF-LINE');
   assert.equal(status.dataset.loading, 'false');
   assert.equal(dismiss.hidden, false);
+  dismiss.focus();
   video.dispatchEvent(new window.Event('playing'));
   assert.equal(status.textContent, '');
-  assert.equal(dismiss.hidden, true);
+  assert.equal(dismiss.hidden, false);
+  assert.equal(document.activeElement, dismiss);
   assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
 
-  document.querySelector('[data-camera-player-back]').click();
-  open.click();
-  elapseDeadline();
-  document.querySelector('[data-camera-dismiss]').click();
+  dismiss.click();
   assert.equal(document.querySelector('.cameras-player'), null);
   assert.equal(document.activeElement, open);
 });
@@ -495,12 +508,12 @@ test('distingue falta de capacidade e falta de acesso de câmera off-line', asyn
   retry();
   await flush();
   assert.equal(document.querySelector('.cameras-player__status').textContent, 'Serviço ocupado');
-  assert.equal(document.querySelector('[data-camera-dismiss]').hidden, true);
+  assert.equal(document.querySelector('.cameras-player__status').hasAttribute('data-offline'), false);
   document.querySelector('[data-camera-player-back]').click();
   document.querySelector('[data-camera-open="site-2"]').click();
   await flush();
   assert.equal(document.querySelector('.cameras-player__status').textContent, 'Acesso negado');
-  assert.equal(document.querySelector('[data-camera-dismiss]').hidden, true);
+  assert.equal(document.querySelector('.cameras-player__status').hasAttribute('data-offline'), false);
 });
 
 test('pede HEVC apenas quando o aparelho suporta e retorna a H.264 se a mídia falhar', async t => {

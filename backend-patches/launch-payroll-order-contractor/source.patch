@@ -1,0 +1,245 @@
+--- a/worker/workflow.py
++++ b/worker/workflow.py
+@@ -32649,6 +32649,37 @@
+             state["pending_launch_payroll"] = {"settlement_loading": True}
+             return self._settlement_payroll_lookup_failed(state, etag)
+ 
++    @staticmethod
++    def _launch_payroll_sheet_supplier(entry: dict) -> str:
++        return str(entry.get("payroll_supplier") or entry.get("supplier") or "").strip()
++
++    def _enable_launch_payroll_order_supplier(self, state: dict, pending: dict) -> None:
++        if state.get("flow") != "launch" or pending.get("order_supplier_checked"):
++            return
++        entries = pending.get("entries") or []
++        orders = {
++            str((entry.get("fields") or {}).get("AGRUPAR") or "").strip()
++            for entry in entries
++        }
++        if len(orders) != 1 or not (order := next(iter(orders))).isdigit() or int(order) <= 0:
++            return
++        try:
++            fields = self.sharepoint.get_item_fields(int(order), ["FORNECEDOR"], "NOTASPENDENTES")
++            supplier = str(fields.get("FORNECEDOR") or "").strip()
++            is_contractor = self._launch_payroll_supplier_contractor(supplier, strict=True)
++        except Exception:
++            # Preserve established eligibility if the order or catalog cannot be read.
++            return
++        pending["order_supplier_checked"] = True
++        if not is_contractor:
++            return
++        for entry in entries:
++            original = str(entry.get("supplier") or "").strip()
++            if original and normalize_text(original) != normalize_text(supplier):
++                entry["payroll_supplier"] = supplier
++                entry["eligible"] = True
++        pending["eligible_ids"] = [str(entry["item_id"]) for entry in entries if entry.get("eligible")]
++
+     def _maybe_prompt_launch_payroll(
+         self,
+         state: dict,
+@@ -32697,18 +32728,16 @@
+                        if item.get("provision_id") else {}),
+                 }
+             )
+-        eligible_ids = [
+-            str(item["item_id"]) for item in entries if item["eligible"]
+-        ]
+-        if not eligible_ids:
+-            return None
+-
+-        state["pending_launch_payroll"] = {
++        pending = {
+             "entries": entries,
+-            "eligible_ids": eligible_ids,
++            "eligible_ids": [str(item["item_id"]) for item in entries if item["eligible"]],
+             "launch_item_ids": [item["item_id"] for item in entries],
+             "decision": None,
+         }
++        self._enable_launch_payroll_order_supplier(state, pending)
++        if not pending["eligible_ids"]:
++            return None
++        state["pending_launch_payroll"] = pending
+         if state.get("flow") == "payment_settlement":
+             state["pending_launch_payroll"]["settlement_links_checked"] = True
+             state["pending_launch_payroll"]["settlement_tax_checked"] = True
+@@ -32778,7 +32807,9 @@
+     def _begin_launch_payroll_linking(self, state, etag):
+         pending = state.get("pending_launch_payroll") or {}
+         pending["decision"] = "sim"
+-        if len(pending.get("entries") or []) > 1:
++        self._enable_launch_payroll_order_supplier(state, pending)
++        entries = pending.get("entries") or []
++        if len(entries) > 1 or any(entry.get("payroll_supplier") for entry in entries):
+             return self._send_launch_payroll_entry_selection(state, etag)
+ 
+         pending["selected_entries"] = [
+@@ -32808,7 +32839,9 @@
+         self, state: dict, etag: str | None
+     ) -> dict:
+         pending = state.get("pending_launch_payroll") or {}
++        self._enable_launch_payroll_order_supplier(state, pending)
+         options = []
++        has_allowances = False
+         for entry in pending.get("entries", []):
+             fields = entry.get("fields") or {}
+             try:
+@@ -32820,7 +32853,10 @@
+                 f"ID {entry['item_id']} — {entry.get('supplier') or 'FORNECEDOR NÃO INFORMADO'}"
+                 f" — {product} — {total}"
+             )
+-            if not entry.get("eligible"):
++            if entry.get("payroll_supplier"):
++                title += f" — AJUDA DE CUSTO NA FOLHA DE {entry['payroll_supplier']}"
++                has_allowances = True
++            elif not entry.get("eligible"):
+                 title += " — FORNECEDOR NÃO É EMPREITEIRO"
+             options.append(
+                 {
+@@ -32838,6 +32874,9 @@
+             "prompt": (
+                 ("MARQUE OS PAGAMENTOS DAS PROVISÕES DE EMPREITEIRO QUE DESEJA VINCULAR À FOLHA. "
+                  "OS DEMAIS NÃO SERÃO INCLUÍDOS." if state.get("flow") == "payment_settlement" else
++                 "MARQUE OS LANÇAMENTOS QUE DESEJA VINCULAR À FOLHA. "
++                 "AS LINHAS DE OUTROS FORNECEDORES MARCADAS COM AJUDA DE CUSTO "
++                 "SERÃO VINCULADAS À FOLHA DO EMPREITEIRO DO PEDIDO." if has_allowances else
+                  "MARQUE OS LANÇAMENTOS DE EMPREITEIRO QUE DESEJA INCLUIR "
+                  "NA FOLHA. OS DEMAIS NÃO SERÃO INCLUÍDOS.")
+             ),
+@@ -32886,8 +32925,8 @@
+         ):
+             self._send_text(
+                 state,
+-                "❌ A SELEÇÃO CONTÉM UM ID INVÁLIDO OU DE FORNECEDOR QUE NÃO É "
+-                "EMPREITEIRO. MARQUE NOVAMENTE SOMENTE OS IDS HABILITADOS.",
++                "❌ A SELEÇÃO CONTÉM UM ID INDISPONÍVEL. "
++                "MARQUE NOVAMENTE SOMENTE OS IDS HABILITADOS.",
+             )
+             result = self._send_launch_payroll_entry_selection(state, etag)
+             return {**result, "status": "invalid_launch_payroll_selection"}
+@@ -33114,7 +33153,7 @@
+             for entry in pending.get('selected_entries') or []:
+                 if entry.get('FOLHAPGTO_ID') or entry.get('IDFOLHA'):
+                     continue
+-                supplier = str(entry.get('supplier') or '').strip()
++                supplier = self._launch_payroll_sheet_supplier(entry)
+                 if supplier not in cache:
+                     options = self._launch_payroll_sheets_for_supplier(supplier, month_key=target)
+                     cache[supplier] = {int(option['id']) for option in options
+@@ -33169,7 +33208,7 @@
+                 index += 1
+                 pending["sheet_entry_index"] = index
+                 continue
+-            supplier = str(entry.get("supplier") or "").strip()
++            supplier = self._launch_payroll_sheet_supplier(entry)
+             launch_id = entry["item_id"]
+             option_key = f"launch_payroll_sheet_{launch_id}"
+             pending["sheet_entry_index"] = index
+@@ -33218,7 +33257,7 @@
+                     "key": option_key,
+                     "prompt": (
+                         f"PAGAMENTO {index + 1} DE {len(selected_entries)} — "
+-                        "A QUAL FOLHA DESEJA VINCULAR ESTE PAGAMENTO?"
++                        f"A QUAL FOLHA DE {supplier} DESEJA VINCULAR ESTE PAGAMENTO?"
+                     ),
+                     "button_label": "ESCOLHER FOLHA",
+                     "terminal_options": [{"id": LAUNCH_PAYROLL_NO_ID,
+@@ -33289,7 +33328,7 @@
+         entries = pending.get("selected_entries") or []
+         index = int(pending.get("sheet_entry_index", 0))
+         entry = entries[index] if 0 <= index < len(entries) else None
+-        supplier = str((entry or {}).get("supplier") or "").strip()
++        supplier = self._launch_payroll_sheet_supplier(entry or {})
+         source = (selected or {}).get("source_values") or {}
+         if (
+             not selected
+@@ -33299,7 +33338,7 @@
+             or not supplier
+             or normalize_text(str(source.get("FORNECEDOR") or "")) != normalize_text(supplier)
+         ):
+-            self._send_text(state, "❌ ESCOLHA UMA FOLHA VÁLIDA VINCULADA AO FORNECEDOR DA LINHA.")
++            self._send_text(state, "❌ ESCOLHA UMA FOLHA VÁLIDA DO FORNECEDOR INDICADO.")
+             result = self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
+             return {**result, "status": "invalid_launch_payroll_sheet"}
+         try:
+@@ -33315,6 +33354,33 @@
+         pending["sheet_entry_index"] = index + 1
+         return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
+ 
++    def _finish_launch_payroll_allowances(self, state: dict, etag: str | None) -> tuple:
++        pending = state["pending_launch_payroll"]
++        for entry in pending.get("selected_entries") or []:
++            if not entry.get("payroll_supplier") or entry.get("FOLHAPGTO_ID"):
++                continue
++            if not pending.get("allowance_retry"):
++                # Persist the sheet and the selection before attempting the write.
++                state["stage"] = LAUNCH_PAYROLL_TYPE_STAGE
++                pending["allowance_retry"] = True
++                etag = self._save(state, etag)
++                try:
++                    self._record_launch_payroll_type(state, entry, "AJUDA DE CUSTO")
++                except Exception:
++                    self._send_text(state, f"❌ NÃO FOI POSSÍVEL CONFIRMAR A AJUDA DE CUSTO DO LANÇAMENTO {entry['item_id']}.")
++                else:
++                    pending.pop("allowance_retry", None)
++                    etag = self._save(state, etag)
++                    self._send_text(state, f"✅ LANÇAMENTO {entry['item_id']} VINCULADO COMO AJUDA DE CUSTO.")
++                    continue
++            self._send_actions(state, "DESEJA TENTAR NOVAMENTE O VÍNCULO DE AJUDA DE CUSTO?", [
++                {"id": "launch_payroll_allowance_retry", "title": "TENTAR NOVAMENTE",
++                 "reply": "launch_payroll_allowance_retry"},
++            ], allow_back=False)
++            return etag, {"status": "awaiting_launch_payroll_allowance_retry",
++                          "batch_id": state["batch_id"], "etag": etag}
++        return etag, None
++
+     def _prompt_launch_payroll_type(
+         self, state: dict, etag: str | None
+     ) -> dict:
+@@ -33324,6 +33390,10 @@
+         entries = pending.get("selected_entries") or []
+         if len(entries) > 1 and "sheet_entry_index" not in pending:
+             return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
++        if any(entry.get("payroll_supplier") and not entry.get("FOLHAPGTO_ID") for entry in entries):
++            etag, retry = self._finish_launch_payroll_allowances(state, etag)
++            if retry is not None:
++                return retry
+         index = int(pending.get("type_index", 0))
+         while index < len(entries) and entries[index].get("FOLHAPGTO_ID"):
+             index += 1
+@@ -33371,6 +33441,14 @@
+         if len(pending.get("selected_entries") or []) > 1 and "sheet_entry_index" not in pending:
+             self._mark_processed(state, message_id)
+             return self._prompt_launch_payroll_sheet_for_current_supplier(state, etag)
++        if pending.get("allowance_retry"):
++            raw = _control_command(event.get("reply_id") or event.get("text") or "")
++            self._mark_processed(state, message_id)
++            if raw == normalize_text("launch_payroll_allowance_retry"):
++                pending.pop("allowance_retry")
++            else:
++                etag = self._save(state, etag)
++            return self._prompt_launch_payroll_type(state, etag)
+         if pending.get('awaiting_type_mode'):
+             return self._handle_launch_payroll_assignment_mode(event, state, etag, 'type')
+         if (len([entry for entry in pending.get('selected_entries') or [] if not entry.get('FOLHAPGTO_ID')]) > 1
+@@ -33466,7 +33544,8 @@
+         if launch_id <= 0 or sheet_id <= 0 or unit_value is None or quantity is None:
+             raise ValueError("Dados obrigatórios do lançamento estão ausentes")
+         payroll_fields = {
+-            "FORNECEDOR": str(fields.get("FORNECEDOR") or entry.get("supplier") or "").strip(),
++            "FORNECEDOR": str(entry.get("payroll_supplier") or fields.get("FORNECEDOR")
++                              or entry.get("supplier") or "").strip(),
+             "TIPOPGTO": selected_type,
+             "VALORUNITARIO": _decimal_storage(unit_value),
+             "QTD": _decimal_storage(quantity),
+--- a/worker/payroll_row_attachments.py
++++ b/worker/payroll_row_attachments.py
+@@ -63,7 +63,7 @@
+     launch, payroll = item_id(launch), item_id(payroll)
+     if item_id(expected.get('IDLANCAMENTO')) != launch:
+         raise RuntimeError('O lançamento não corresponde ao item da folha.')
+-    ownership = {'FORNECEDOR': expected.get('FORNECEDOR')}
++    ownership = {'FORNECEDOR': source_expected.get('FORNECEDOR') or expected.get('FORNECEDOR')}
+     if _text(source_expected.get('FILIAL')):
+         ownership['FILIAL'] = source_expected['FILIAL']
+     if not _text(ownership['FORNECEDOR']):

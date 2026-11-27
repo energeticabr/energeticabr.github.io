@@ -1,0 +1,26 @@
+{
+  "files": {
+    "/opt/energetica-whatsapp/worker/workflow.py": {
+      "before": "a02925f12853636c4b0f37dc49bb3c693e469532702bf19f16302f0429755c90",
+      "after": "4a64c183143ccab3390ec3fb74ba51c4f318742d54c4a32e8baf360da5352232"
+    },
+    "/home/opc/energetica-build/worker/workflow.py": {
+      "before": "b9fffbdfb0408117e3e2333836876704f1d1b996e626f14540b3005f5af0858b",
+      "after": "c07d8e4171a75a51d1a8958de5c75f56d3a42ce51c58b71f4fdcd5080a9a6745"
+    },
+    "/opt/energetica-whatsapp/worker/payroll_row_attachments.py": {
+      "before": "8df81f46b23c9ac3b1c120d1c93932dfb75951650aa6f9e50e0664991cc2ee12",
+      "after": "f2aa4f5f3872f2c8d397e32de9c732ef3aae64f0c1197253596488387828d7fb"
+    },
+    "/home/opc/energetica-build/worker/payroll_row_attachments.py": {
+      "before": "2b4d045294ab657f80720e8560c6368473889f3c0499c317c1889baadfc10620",
+      "after": "cf121be511e788b1632873e237d68983d23b87361d8fa30da9b78836bddc1fc2"
+    }
+  },
+  "inputs": {
+    "deploy.py": "3e10c7688c35627cdcb9f3d4177ea72207710690d928f0ef3c66e1b2b8d09c65",
+    "deploy.sh": "da49bac204d4cc125f8b60a4d8c59706e0afd09968b4201818a826426a7c298c",
+    "deployment_gate.sh": "ae5ed44ab6d6ab1edfecbc14dd3bbd59505e9f991962d1410f488e4a029eefb6",
+    "source.patch": "fa1ebc41a271e1a57e81c3c6930c835846b9fd133a2b804ed224587bb621bb7b"
+  }
+}

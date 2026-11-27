@@ -179,23 +179,28 @@ if (wallMode) {
     layout.focused = measurePlayer();
     doubleTap(video);
     layout.restored = measurePlayer();
-    const tile = video.closest('.cameras-player__tile');
-    const dismiss = tile.querySelector('[data-camera-dismiss]:not([hidden])');
-    const ribbon = tile.querySelector('.cameras-player__status[data-offline]');
-    if (dismiss && ribbon) {
+    const liveVideo = player.querySelector('[data-camera-video="camera-3"]');
+    liveVideo.dispatchEvent(new Event('playing'));
+    layout.closeButtons = [...player.querySelectorAll('.cameras-player__tile')].map(tile => {
+      const dismiss = tile.querySelector('[data-camera-dismiss]');
+      const badge = tile.querySelector('.cameras-player__tile-live:not([hidden])');
       const button = rect(dismiss);
-      layout.playerOffline = {
-        tile: rect(tile), button, label: rect(tile.querySelector('.cameras-player__label')), ribbon: rect(ribbon),
+      return {
+        tile: rect(tile), button, label: rect(tile.querySelector('.cameras-player__label')),
+        badge: badge && rect(badge),
         clickable: dismiss.contains(document.elementFromPoint(button.left + button.width / 2, button.top + button.height / 2)),
-        noSpinner: getComputedStyle(ribbon, '::before').content === 'none',
       };
-      dismiss.click();
-      layout.seven = measurePlayer();
-      player.querySelector('[data-camera-dismiss]:not([hidden])').click();
-      layout.six = measurePlayer();
-      player.querySelector('[data-camera-player-back]').click();
-      dialog.querySelector('[data-camera-visual-open]').click();
-    }
+    });
+    const tile = video.closest('.cameras-player__tile');
+    const ribbon = tile.querySelector('.cameras-player__status[data-offline]');
+    layout.playerOffline = { tile: rect(tile), ribbon: rect(ribbon),
+      noSpinner: getComputedStyle(ribbon, '::before').content === 'none' };
+    tile.querySelector('[data-camera-dismiss]').click();
+    layout.seven = measurePlayer();
+    liveVideo.closest('.cameras-player__tile').querySelector('[data-camera-dismiss]').click();
+    layout.six = measurePlayer();
+    player.querySelector('[data-camera-player-back]').click();
+    dialog.querySelector('[data-camera-visual-open]').click();
     dialog.querySelector('[data-camera-video="camera-1"]').closest('.cameras-player__tile').querySelector('.cameras-player__focus').click();
     layout.individual = measurePlayer();
   }
