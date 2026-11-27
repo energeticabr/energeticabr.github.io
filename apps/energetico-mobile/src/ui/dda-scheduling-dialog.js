@@ -6,6 +6,7 @@ const messages = {
   approval: 'O Sicoob recebeu a ordem e aguarda assinatura. Consulte novamente após a assinatura.',
   pending: 'O Sicoob ainda não confirmou o resultado. Consulte a situação desta ordem para acompanhar.',
   rejected: 'O Sicoob recusou a ordem. Consulte o boleto novamente antes de fazer outro agendamento.',
+  cancelled: 'O Sicoob confirmou o cancelamento deste agendamento.',
   scheduled: 'Agendamento confirmado pelo Sicoob.',
   effective: 'Pagamento confirmado pelo Sicoob.',
 };
@@ -94,11 +95,18 @@ export function createDdaSchedulingDialog({ document: doc, host, request, onResu
       if (result.itemId !== itemId || result.key !== key || !messages[result.status]) {
         throw new Error('O Sicoob não confirmou a situação deste boleto.');
       }
+      const bankDate = /^\d{4}-\d{2}-\d{2}$/.test(result.date || '') ? result.date : '';
+      const differentOrder = bankDate && input.value && bankDate !== input.value;
+      if (bankDate && (differentOrder || !input.value)) {
+        summary.textContent = 'Data da ordem ' + formatDay(bankDate);
+        summary.hidden = false;
+      }
       label.hidden = true;
       feedback.setAttribute('role', 'status');
-      feedback.textContent = messages[result.status];
+      feedback.textContent = differentOrder && result.status === 'scheduled'
+        ? 'Este boleto já estava agendado para a data exibida.' : messages[result.status];
       title.textContent = result.status === 'scheduled' ? 'Pagamento agendado' : 'Situação do agendamento';
-      const canCheck = ['pending', 'approval'].includes(result.status);
+      const canCheck = ['pending', 'approval', 'scheduled'].includes(result.status);
       actions.replaceChildren(cancel, ...(canCheck ? [check] : []));
       onResult(result);
     }

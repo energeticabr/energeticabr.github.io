@@ -17,7 +17,7 @@ QUOTE = re.compile('[a-f0-9]{32}')
 BARCODE = re.compile('[0-9]{44}')
 FIELDS = ('Id', 'CHAVE_DDA', 'CNPJ_PAGADOR', 'CODIGO_BARRAS', 'VENCIMENTO', 'STATUS_DDA',
           'SITUACAO', 'PGTO_CONFIRMADO', 'DDA_RECUSADO', 'BLOQUEADO', 'DDA_CICLO_AGENDAMENTO')
-RETRYABLE = ('rejected', 'not_sent')
+RETRYABLE = ('rejected', 'cancelled', 'not_sent')
 
 
 def today_in_brasilia():
@@ -52,8 +52,11 @@ def read_row(repository, item_id, key):
 def open_barcode(row):
     barcode = str(row.get('CODIGO_BARRAS') or '').strip()
     truthy = ('sim', 's', '1', 'true')
+    situation = str(row.get('SITUACAO') or '').strip().casefold()
+    bank_situation = str(row.get('STATUS_DDA') or '').strip().casefold()
     if (not BARCODE.fullmatch(barcode) or row.get('DDA_CICLO_AGENDAMENTO') in ('AGENDADO', 'PAGO_AGENDADO')
-            or str(row.get('STATUS_DDA') or row.get('SITUACAO') or '').strip().casefold() != 'em aberto'
+            or situation in ('agendado', 'pago', 'pago (liquidado)', 'liquidado', 'baixado', 'recusado')
+            or (bank_situation or situation) != 'em aberto'
             or any(str(row.get(field) or '').strip().casefold() in truthy
                    for field in ('PGTO_CONFIRMADO', 'DDA_RECUSADO', 'BLOQUEADO'))):
         raise ValueError('O boleto precisa estar em aberto e disponível para pagamento.')
@@ -92,6 +95,7 @@ class Scheduling:
         database = sqlite3.connect(self.path, timeout=8)
         database.row_factory = sqlite3.Row
         try:
+            database.execute('PRAGMA foreign_keys=ON')
             database.execute("""
                 CREATE TABLE IF NOT EXISTS quotes (
                     id TEXT PRIMARY KEY, owner TEXT NOT NULL, item INTEGER NOT NULL,
@@ -134,7 +138,8 @@ class Scheduling:
         barcode = open_barcode(row)
         with self.database() as database:
             order = self.order(database, barcode)
-            if order and order['status'] not in RETRYABLE:
+        if order and order['status'] not in RETRYABLE:
+            if order['status'] != 'scheduled' or self.resume(owner, key, order, refresh_scheduled=True)['status'] not in RETRYABLE:
                 raise ValueError('Já existe uma ordem para este boleto. Atualize a galeria para consultar.')
         due = str(row.get('VENCIMENTO') or '')[:10]
         valid_day(due)
@@ -171,7 +176,7 @@ class Scheduling:
                 raise PermissionError('Conferência DDA indisponível para esta sessão.')
             order = self.order(database, quote['barcode'])
         if order and (order['status'] not in RETRYABLE or order['quote'] == quote_id):
-            return self.resume(owner, quote, order)
+            return self.resume(owner, quote['item_key'], order)
         if quote['expires'] <= self.clock() or valid_day(quote['day']) <= self.today():
             raise ValueError('A conferência expirou. Consulte o boleto novamente.')
         row = read_row(repository, quote['item'], quote['item_key'])
@@ -182,10 +187,13 @@ class Scheduling:
             order = self.order(database, quote['barcode'])
             claimed = not order or (order['status'] in RETRYABLE and order['quote'] != quote_id)
             if claimed:
+                current = database.execute('SELECT expires FROM quotes WHERE id=? AND owner=?', (quote_id, owner)).fetchone()
+                if current is None or current['expires'] <= self.clock() or valid_day(quote['day']) <= self.today():
+                    raise ValueError('A conferência expirou. Consulte o boleto novamente.')
                 database.execute('INSERT OR REPLACE INTO orders VALUES (?,?,?,?,NULL)',
                                  (quote['barcode'], quote_id, 'submitting', self.clock()))
         if not claimed:
-            return self.resume(owner, quote, order)
+            return self.resume(owner, quote['item_key'], order)
         result = self.bank('dispatch', payload)
         return self.finish(quote, result, previous='submitting')
 
@@ -198,29 +206,32 @@ class Scheduling:
             if quote is None:
                 return {'status': 'none', 'itemId': item, 'key': key}
             order = self.order(database, quote['barcode'])
-        return self.resume(owner, quote, order)
+        return self.resume(owner, quote['item_key'], order, refresh_scheduled=True)
 
-    def resume(self, owner, quote, order):
+    def resume(self, owner, key, order, *, refresh_scheduled=False):
         with self.database() as database:
             prior = database.execute('SELECT * FROM quotes WHERE id=?', (order['quote'],)).fetchone()
-        if prior is None or prior['owner'] != owner or prior['item_key'] != quote['item_key']:
+        if prior is None or prior['owner'] != owner or prior['item_key'] != key:
             raise ValueError('Já existe uma ordem para este boleto.')
         state = order['status']
         if state == 'submitting' and self.clock() - order['changed'] < 45:
             return self.public(prior, 'pending')
-        if state in ('pending', 'approval', 'submitting'):
+        if state in ('pending', 'approval', 'submitting') or (refresh_scheduled and state == 'scheduled'):
             payload = json.loads(prior['payload'])
             result = self.bank('lookup', payload)
             if result.get('status') == 'pending':
-                return self.public(prior, 'approval' if state == 'approval' else 'pending')
+                with self.database() as database:
+                    latest = self.order(database, prior['barcode'])
+                known = latest['status'] if latest['quote'] == prior['id'] else 'pending'
+                return self.public(prior, 'pending' if known == 'submitting' else known)
             return self.finish(prior, result, previous=state)
         return self.public(prior, state)
 
     def finish(self, quote, result, *, previous):
         status, bank_id = result.get('status'), result.get('paymentId')
-        if status not in ('scheduled', 'approval', 'rejected', 'not_sent', 'pending', 'effective'):
+        if status not in ('scheduled', 'approval', *RETRYABLE, 'pending', 'effective'):
             status = 'pending'
-        if status in ('scheduled', 'effective') and (type(bank_id) is not int or bank_id <= 0):
+        if status in ('scheduled', 'effective', 'rejected', 'cancelled') and (type(bank_id) is not int or bank_id <= 0):
             status = 'pending'
         with self.database(write=True) as database:
             database.execute("""

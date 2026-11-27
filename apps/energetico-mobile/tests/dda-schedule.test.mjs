@@ -73,3 +73,23 @@ test('a read-only bank quote leaves the calendar usable and never offers dispatc
   assert.equal(dialog.querySelector('[data-dda-schedule-confirm]'), null);
   assert.deepEqual(calls.map(([action]) => action), ['list', 'quote']);
 });
+
+test('a concurrent confirmed order displays its own date instead of the date that was reviewed', async t => {
+  const confirmedDate = '2090-08-17';
+  const doc = await gallery(t, async action => {
+    if (action === 'list') return { status: 'available', entries: [] };
+    if (action === 'quote') return { status: 'quoted', date, amountCents: 1542,
+      beneficiary: 'Beneficiário do banco', quoteId: 'c'.repeat(32), canConfirm: true };
+    return { status: 'scheduled', itemId, key, date: confirmedDate };
+  });
+  await flush();
+  doc.querySelector('[data-dda-schedule]').click();
+  const dialog = doc.querySelector('[data-dda-schedule-dialog]');
+  dialog.querySelector('input[type=date]').value = date;
+  dialog.querySelector('[data-dda-schedule-next]').click();
+  await flush();
+  dialog.querySelector('[data-dda-schedule-confirm]').click();
+  await flush();
+  assert.match(dialog.querySelector('.dda-payment-summary').textContent, /17\/08\/2090/);
+  assert.match(dialog.querySelector('[role=status]').textContent, /já estava agendado/i);
+});

@@ -58,24 +58,43 @@ function Get-AmountCents($Value) {
     return [long]($amount * 100)
 }
 
+function Get-BankBoletoQuote {
+    $response = Invoke-Bank GET "/boletos/${barcode}?numeroConta=$account&dataPagamento=$($inputData.date)" $headers
+    if ($response.StatusCode -in 400,404,406) { return }
+    if ($response.StatusCode -ne 200) { throw 'DDA_QUOTE_FAILED' }
+    $bank = ($response.Content | ConvertFrom-Json -AsHashtable).resultado
+    $name = $bank.nomeRazaoSocialBeneficiarioFinal
+    $document = $bank.numeroCpfCnpjBeneficiarioFinal
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        $name = $bank.nomeRazaoSocialBeneficiario
+        $document = $bank.numeroCpfCnpjBeneficiario
+    }
+    if ($bank.bloquearPagamento -ne $false -or $bank.consultaEmContingencia -ne $false -or
+        [string]$bank.codigoSituacaoBoletoPagamento -ne '12' -or $bank.codigoBarras -cne $barcode -or
+        $bank.dataVencimentoBoleto -cne $inputData.due -or $bank.dataPagamento -cne $inputData.date -or
+        $bank.numeroCpfCnpjPagador -cne $company.cnpj -or [string]::IsNullOrWhiteSpace($name) -or
+        [string]::IsNullOrWhiteSpace($bank.nomeRazaoSocialPagador) -or [string]::IsNullOrWhiteSpace($bank.identificadorConsulta)) { return }
+    return @{amountCents=(Get-AmountCents $bank.valorPagamento); beneficiary=$name; bankQuote=@{
+        identificadorConsulta=$bank.identificadorConsulta; valorBoleto=[decimal]$bank.valorBoleto;
+        valorDescontoAbatimento=[decimal]$bank.valorAbatimentoDesconto; valorMultaMora=[decimal]$bank.valorMultaMora;
+        nomePortador=$bank.nomeRazaoSocialPagador; beneficiary=$name; beneficiaryDocument=[string]$document}}
+}
+
 function Get-ReceiptState($Response) {
     if ($Response.StatusCode -eq 202 -and $Operation -eq 'dispatch') { return @{status='approval'} }
-    if ($Response.StatusCode -in 400,406 -and $Operation -eq 'dispatch') {
-        $deny = $Response.Content | ConvertFrom-Json -AsHashtable -ErrorAction SilentlyContinue
-        if ($deny.mensagens) { return @{status='rejected'} }
-    }
     if ($Response.StatusCode -ne 200) { return @{status='pending'} }
     $result = ($Response.Content | ConvertFrom-Json -AsHashtable).resultado
     $line = ([string]$result.numeroLinhaDigitavel) -replace '[ .-]', ''
     if ($line -notmatch '^[0-9]{47}$') { return @{status='pending'} }
     $receiptCode = $line.Substring(0,4) + $line.Substring(32,15) + $line.Substring(4,5) + $line.Substring(10,10) + $line.Substring(21,10)
     if ($receiptCode -cne $barcode) { return @{status='pending'} }
-    if ($result.situacaoPagamento -in 'Rejeitado','Cancelado') { return @{status='rejected'} }
     if ($result.dataPagamento -cne $inputData.date -or (Get-AmountCents $result.valorPagamento) -ne $inputData.amountCents -or
         [string]$result.idPagamento -notmatch '^[1-9][0-9]{0,17}$') { return @{status='pending'} }
     switch ($result.situacaoPagamento) {
         'Agendado' { return @{status='scheduled'; paymentId=[long]$result.idPagamento} }
         'Efetivado' { return @{status='effective'; paymentId=[long]$result.idPagamento} }
+        'Rejeitado' { return @{status='rejected'; paymentId=[long]$result.idPagamento} }
+        'Cancelado' { return @{status='cancelled'; paymentId=[long]$result.idPagamento} }
         default { return @{status='pending'} }
     }
 }
@@ -85,7 +104,6 @@ try {
     . (Join-Path $collector 'DdaBankHttp.ps1')
     $inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json -AsHashtable
     $company = Read-PrivateJson (Join-Path $env:DDA_PRIVATE_ROOT 'sharepoint-bank-credentials.dpapi')
-    $payments = Read-PrivateJson (Join-Path $env:DDA_PRIVATE_ROOT 'sicoob-payments-credentials.dpapi')
     $barcode = [string]$inputData.barcode
     $account = [string]$company.accountNumber
     if ($barcode -notmatch '^[0-9]{44}$' -or $account -notmatch '^[0-9]{1,14}$' -or
@@ -93,19 +111,28 @@ try {
         $inputData.company -cne $company.cnpj) { throw 'INVALID_DDA_SCOPE' }
     $certificate = Get-CompanyClientCertificate -Cnpj $company.cnpj
     $headers = $null
-    $canConfirm = $false
+    $usingPaymentClient = $false
     $version = 'v3'
-    if ($payments.Count) {
-        if ($payments.cnpj -cne $company.cnpj -or [string]$payments.accountNumber -cne $account -or
-            [string]$payments.cooperative -notmatch '^[0-9]{1,4}$' -or -not $payments.clientId -or
-            ($payments.apiVersion -and $payments.apiVersion -cnotin 'v3','v4')) { throw 'DDA_PAYMENT_CONFIGURATION_MISMATCH' }
-        $headers = Get-ScopeHeaders $payments.clientId 'pagamentos_consulta pagamentos_inclusao'
-        if ($headers) {
-            $canConfirm = $true
-            if ($payments.apiVersion) { $version = $payments.apiVersion }
-            $identity = "$($payments.clientId)|$account|$($payments.cooperative)|$version"
-            $configuration = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($identity)))
+    try {
+        $payments = Read-PrivateJson (Join-Path $env:DDA_PRIVATE_ROOT 'sicoob-payments-credentials.dpapi')
+        if ($payments.Count) {
+            if ($payments.cnpj -cne $company.cnpj -or [string]$payments.accountNumber -cne $account -or
+                [string]$payments.cooperative -notmatch '^[0-9]{1,4}$' -or -not $payments.clientId -or
+                ($payments.apiVersion -and $payments.apiVersion -cnotin 'v3','v4')) { throw 'DDA_PAYMENT_CONFIGURATION_MISMATCH' }
+            $scopes = if ($Operation -eq 'lookup') { 'pagamentos_consulta' } else { 'pagamentos_consulta pagamentos_inclusao' }
+            $headers = Get-ScopeHeaders $payments.clientId $scopes
+            if ($headers) {
+                $usingPaymentClient = $true
+                if ($payments.apiVersion) { $version = $payments.apiVersion }
+                $identity = "$($payments.clientId)|$account|$($payments.cooperative)|$version"
+                $configuration = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($identity)))
+            }
         }
+    } catch {
+        if ($Operation -ne 'quote') { throw }
+        $headers = $null
+        $usingPaymentClient = $false
+        $version = 'v3'
     }
     if ($Operation -eq 'quote' -and -not $headers) { $headers = Get-ScopeHeaders $company.clientId 'pagamentos_consulta' }
     if (-not $headers) { throw 'DDA_PAYMENT_AUTH_UNAVAILABLE' }
@@ -114,29 +141,18 @@ try {
     $result = switch ($Operation) {
         'quote' {
             if (Get-PendingBankOrder) { @{status='already_scheduled'}; break }
-            $response = Invoke-Bank GET "/boletos/${barcode}?numeroConta=$account&dataPagamento=$($inputData.date)" $headers
-            if ($response.StatusCode -in 400,404,406) { @{status='unavailable'}; break }
-            if ($response.StatusCode -ne 200) { throw 'DDA_QUOTE_FAILED' }
-            $bank = ($response.Content | ConvertFrom-Json -AsHashtable).resultado
-            if ($bank.bloquearPagamento -ne $false -or $bank.consultaEmContingencia -ne $false -or
-                [string]$bank.codigoSituacaoBoletoPagamento -ne '12' -or $bank.codigoBarras -cne $barcode -or
-                $bank.dataVencimentoBoleto -cne $inputData.due -or $bank.dataPagamento -cne $inputData.date -or
-                $bank.numeroCpfCnpjPagador -cne $company.cnpj -or [string]::IsNullOrWhiteSpace($bank.nomeRazaoSocialBeneficiario) -or
-                [string]::IsNullOrWhiteSpace($bank.nomeRazaoSocialPagador) -or [string]::IsNullOrWhiteSpace($bank.identificadorConsulta)) {
-                @{status='unavailable'}; break
-            }
-            $quoted = @{status='quoted'; date=$inputData.date; amountCents=(Get-AmountCents $bank.valorPagamento);
-                beneficiary=$bank.nomeRazaoSocialBeneficiario; canConfirm=$canConfirm}
-            if ($canConfirm) {
+            $bank = Get-BankBoletoQuote
+            if (-not $bank) { @{status='unavailable'}; break }
+            $quoted = @{status='quoted'; date=$inputData.date; amountCents=$bank.amountCents;
+                beneficiary=$bank.beneficiary; canConfirm=$usingPaymentClient}
+            if ($usingPaymentClient) {
                 $quoted.configuration = $configuration
-                $quoted.bankQuote = @{identificadorConsulta=$bank.identificadorConsulta;
-                    valorBoleto=[decimal]$bank.valorBoleto; valorDescontoAbatimento=[decimal]$bank.valorAbatimentoDesconto;
-                    valorMultaMora=[decimal]$bank.valorMultaMora; nomePortador=$bank.nomeRazaoSocialPagador}
+                $quoted.bankQuote = $bank.bankQuote
             }
             $quoted
         }
         default {
-            if (-not $canConfirm -or $inputData.configuration -cne $configuration -or
+            if (-not $usingPaymentClient -or $inputData.configuration -cne $configuration -or
                 $inputData.orderKey -notmatch '^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$') { throw 'DDA_PAYMENT_AUTH_UNAVAILABLE' }
             $orderKey = "$($payments.cooperative)-$account-$($inputData.orderKey)"
             if ($Operation -eq 'lookup') {
@@ -146,7 +162,15 @@ try {
             if (Get-PendingBankOrder) { @{status='not_sent'}; break }
             $today = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, 'America/Sao_Paulo').ToString('yyyy-MM-dd')
             if ([string]::CompareOrdinal($inputData.date,$today) -le 0) { @{status='not_sent'}; break }
-            $data = $inputData.bankQuote
+            $bank = Get-BankBoletoQuote
+            $data = $bank.bankQuote
+            $validationFields = 'beneficiary','beneficiaryDocument','valorBoleto','valorDescontoAbatimento','valorMultaMora','nomePortador'
+            if (-not $data -or $bank.amountCents -ne $inputData.amountCents -or
+                @($validationFields | Where-Object { $data[$_] -cne $inputData.bankQuote[$_] }).Count) {
+                @{status='not_sent'}; break
+            }
+            $data.Remove('beneficiary')
+            $data.Remove('beneficiaryDocument')
             $data.aceitaValorDivergente = $false
             $data.numeroCpfCnpjPortador = $company.cnpj
             $data.amount = [decimal]$inputData.amountCents / 100

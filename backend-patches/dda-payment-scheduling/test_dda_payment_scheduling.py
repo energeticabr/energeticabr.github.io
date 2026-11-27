@@ -16,10 +16,12 @@ DATE = '2026-12-04'
 
 class Repository:
     company = COMPANY
+    situation = 'Em aberto'
 
     def read(self, item_id):
         return {'Id': item_id, 'CHAVE_DDA': KEY, 'CNPJ_PAGADOR': COMPANY,
-                'CODIGO_BARRAS': BARCODE, 'VENCIMENTO': '2026-12-05', 'STATUS_DDA': 'Em aberto'}
+                'CODIGO_BARRAS': BARCODE, 'VENCIMENTO': '2026-12-05', 'STATUS_DDA': 'Em aberto',
+                'SITUACAO': self.situation}
 
 
 class Bank:
@@ -115,6 +117,39 @@ class SchedulingTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.call('confirm', identity={'oid': 'other-operator'}, quoteId=quote_id)
         self.assertEqual([op for op, _ in self.bank.calls], ['quote'])
+
+    def test_a_confirmed_cancellation_allows_a_new_quote_without_an_automatic_dispatch(self):
+        quote_id = self.quote()['quoteId']
+        self.assertEqual(self.call('confirm', quoteId=quote_id)['status'], 'scheduled')
+        self.bank.lookup_result = {'status': 'cancelled', 'paymentId': 27}
+        self.assertEqual(self.call('status', itemId=12, key=KEY)['status'], 'cancelled')
+        new_quote = self.quote()['quoteId']
+        self.assertNotEqual(new_quote, quote_id)
+        self.assertEqual([op for op, _ in self.bank.calls], ['quote', 'dispatch', 'lookup', 'quote'])
+
+    def test_an_already_paid_row_blocks_confirmation_even_with_an_old_open_bank_status(self):
+        quote_id = self.quote()['quoteId']
+        self.repository.situation = 'Pago (liquidado)'
+        with self.assertRaises(ValueError):
+            self.call('confirm', quoteId=quote_id)
+        self.assertEqual([op for op, _ in self.bank.calls], ['quote'])
+
+    def test_expiry_and_cleanup_during_sharepoint_read_cannot_leave_an_orphan_order(self):
+        self.service.clock = lambda: self.clock
+        self.clock = 1000
+        quote_id = self.quote()['quoteId']
+        original_read = self.repository.read
+
+        def read_after_expiry(item_id):
+            self.repository.read = original_read
+            self.clock += 301
+            self.quote()
+            return original_read(item_id)
+
+        self.repository.read = read_after_expiry
+        with self.assertRaises(ValueError):
+            self.call('confirm', quoteId=quote_id)
+        self.assertEqual([op for op, _ in self.bank.calls], ['quote', 'quote'])
 
 
 if __name__ == '__main__':

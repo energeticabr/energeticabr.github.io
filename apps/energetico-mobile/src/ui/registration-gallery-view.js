@@ -403,7 +403,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     ? createDdaSchedulingDialog({ document: doc, host: root, request: schedulePayment, onResult: receipt => {
       scheduleRevision++;
       const id = String(receipt.itemId);
-      if (['none', 'rejected', 'not_sent'].includes(receipt.status)) scheduleEntries.delete(id);
+      if (['none', 'rejected', 'cancelled', 'not_sent'].includes(receipt.status)) scheduleEntries.delete(id);
       else scheduleEntries.set(id, receipt);
       populateFilters();
       render();
@@ -421,15 +421,15 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     const key = registrationRawField(row.fields, 'CHAVE_DDA', model);
     const itemId = Number(row.id);
     const entry = scheduleForRow(row);
-    const pending = ['pending', 'approval'].includes(entry?.status);
+    const canFollow = ['pending', 'approval', 'scheduled'].includes(entry?.status);
     if (!schedulingAllowed || !Number.isSafeInteger(itemId) || itemId < 1 || !/^[a-f0-9]{64}$/.test(key || '')) return {};
     const canSchedule = !entry && rowFieldValue(row, 'SITUACAO') === 'Em aberto'
       && /^[0-9]{44}$/.test(registrationRawField(row.fields, 'CODIGO_BARRAS', model) || '')
       && !/^(sim|s|1|true)$/i.test(String(registrationRawField(row.fields, 'BLOQUEADO', model) || '').trim());
-    return { scheduleEntry: entry, onSchedule: pending || canSchedule ? trigger => {
+    return { scheduleEntry: entry, onSchedule: canFollow || canSchedule ? trigger => {
       if (destroyed || root.hidden || bankController || provisionController || paymentConfirmation?.isOpen
         || root.getAttribute('aria-busy') === 'true') return;
-      scheduleDialog.show({ itemId, key, existing: pending ? entry : null }, trigger);
+      scheduleDialog.show({ itemId, key, existing: canFollow ? entry : null }, trigger);
     } : undefined };
   }
   const bankReceipt = kind === 'dda' ? createDdaSyncReceipt({ document: doc, host: root,
