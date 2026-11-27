@@ -11,7 +11,8 @@ test("calendar counts unresolved existing out-of-range people separately from mi
     row(5, "07:00;12:00;13:00;17:00"), row(6, "08:35;12:00;13:00;17:00"),
     row(7, "06:40;11:45;12:45;13:34;13:43"),
     row(8, "07:00;12:00;13:00;14:00;17:00"),
-    row(9, "07:00;12:30;13:30;17:00")];
+    row(9, "07:00;12:30;13:30;17:00"),
+    row(15, "06:40;11:45;12:45;13:43")];
   assert.deepEqual(rhid.rhidOutOfRangeCountsByDate(rows, "2026-09"), { "2026-09-28": 4 });
   assert.deepEqual(rhid.rhidOutOfRangeCountsByDate(rows, "2026-10"), {});
 });
@@ -46,6 +47,7 @@ test("monthly irregularities count effective incomplete people once, not absence
     row(8, "2026-10-01", "07:00"), row(9, "2026-09-31", "07:00"),
     row(10, "2026-09-30", "07:00", { NOME_COLABORADOR: "PIS NÃO LOCALIZADO" }),
     row(11, "2026-09-30", "07:00; 07:10; 12:00; 13:00; 17:00"),
+    row(12, "2026-09-30", "07:00", { NOME_COLABORADOR: "Máuro  Antonio Pereira" }),
   ];
   assert.deepEqual(rhid.rhidIrregularCountsByDate(rows, "2026-09"), { "2026-09-28": 1, "2026-09-29": 2 });
 });

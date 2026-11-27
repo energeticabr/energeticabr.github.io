@@ -1,4 +1,4 @@
-import { isExcludedFromRegularRhidReports } from "./rhid-report-participants.js";
+import { isExcludedFromDailyRhidReport, isExcludedFromRegularRhidReports } from "./rhid-report-participants.js";
 
 function punchText(value) {
   if (Array.isArray(value)) return value.flatMap(punchText);
@@ -265,10 +265,14 @@ function rhidCountsByDate(rows, month, predicate) {
   }
   const counts = {};
   for (const [day, dailyRows] of days) {
-    const count = buildRhidAttendanceTable(dailyRows).people.filter(predicate).length;
+    const count = buildDailyRhidAttendanceTable(dailyRows).people.filter(predicate).length;
     if (count) counts[day] = count;
   }
   return counts;
+}
+
+export function buildDailyRhidAttendanceTable(rows) {
+  return buildRhidAttendanceTable(rows.filter(row => !isExcludedFromDailyRhidReport(row)));
 }
 
 export function buildRhidAttendanceTable(rows = [], { includeNonRegular = false } = {}) {

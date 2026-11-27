@@ -1389,7 +1389,10 @@ test("botão geral do relatório abre a lista completa de validação da data se
 
 test("ajuste RHID salva justificativa e atualiza somente o relatório selecionado", async t => {
   const h = makeHarness();
-  const rows = [{ ID_PESSOA_RHID: "23", NOME_COLABORADOR: "EDGAR", BATIDAS_RHID: "07:01; 11:59; 13:00; 17:03" }];
+  const rows = [
+    { ID_PESSOA_RHID: "23", NOME_COLABORADOR: "EDGAR", BATIDAS_RHID: "07:01; 11:59; 13:00; 17:03" },
+    { ID_PESSOA_RHID: "15", NOME_COLABORADOR: "MAURO ANTONIO PEREIRA", BATIDAS_RHID: "" },
+  ];
   let reportCalls = 0;
   h.client.getRhidAttendanceReport = async date => {
     reportCalls += 1;
@@ -1414,6 +1417,7 @@ test("ajuste RHID salva justificativa e atualiza somente o relatório selecionad
   assert.equal(closed, 1);
   const current = h.store.getState().messages.at(-1);
   assert.equal(current.id, message.id);
+  assert.deepEqual(current.detail_table.people.map(person => person.name), ["EDGAR"]);
   assert.equal(current.detail_table.people[0].slots.exit2.rhid, "17:03");
   assert.equal(current.detail_table.people[0].slots.exit2.effective, "17:00");
 });
@@ -1924,7 +1928,7 @@ test("atalho RHID abre a tela mesmo sem presenças no dia, sem PDF automático",
   assert.equal(previews.length, 0);
 });
 
-test("compartilha PDF RHID sem o colaborador que não bate ponto regularmente, sem refazer a consulta", async t => {
+test("omite Mauro e Bernardo da tela diária RHID e compartilha o mesmo relatório em PDF", async t => {
   const h = makeHarness();
   const requested = [];
   const exported = [];
@@ -1953,7 +1957,7 @@ test("compartilha PDF RHID sem o colaborador que não bate ponto regularmente, s
   assert.equal(previews.length, 0, "abrir a tela diária não gera nem abre o PDF");
   assert.equal(exported.length, 0);
   const report = h.store.getState().messages.at(-1);
-  assert.equal(report.detail_table.rows.length, 8, "a tela e o PDF devem partir das mesmas oito pessoas regulares");
+  assert.equal(report.detail_table.rows.length, 7, "a tela e o PDF devem partir das mesmas sete pessoas");
   const expectedRows = [
     ["CLEITON CESAR NONATO", "06:58", "12:01", "12:59", "15:50", "07:54"],
     ["EDGAR NELSON DA SILVA", "06:55", "12:00", "—", "—", "05:05 (parcial)"],
@@ -1962,7 +1966,6 @@ test("compartilha PDF RHID sem o colaborador que não bate ponto regularmente, s
     ["JOSE GERALDO DOS SANTOS", "07:00", "12:04", "12:56", "16:04", "08:12"],
     ["LUIZ BERNARDO DOS SANTOS", "06:54", "12:10", "—", "16:00", "05:16 (parcial)"],
     ["MAURICIO HONORATO DE SOUZA", "06:53", "12:01", "12:59", "15:52", "08:01"],
-    ["MAURO ANTONIO PEREIRA", "06:57", "12:00", "13:03", "16:01", "08:01"],
   ];
   assert.deepEqual(report.detail_table.rows, expectedRows, "a tabela deve manter cada horário na linha do colaborador da tela");
   await h.view.emit("share-rhid-attendance-report", { messageId: report.id });
@@ -1982,6 +1985,7 @@ test("compartilha PDF RHID sem o colaborador que não bate ponto regularmente, s
     }
     const text = pages.flatMap(page => page.items).map(item => item.str).join(" ");
     assert.equal(text.includes("BERNARDO NOTINI MOREIRA BAHIA"), false);
+    assert.equal(text.includes("MAURO ANTONIO PEREIRA"), false);
     for (let index = 0; index < expectedRows.length; index += 1) {
       const row = expectedRows[index];
       const name = row[0];
