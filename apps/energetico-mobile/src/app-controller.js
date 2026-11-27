@@ -10464,6 +10464,14 @@ export function createAppController({
             ...(sourceKind === 'dda' ? { syncMonitor: ensureFinancialSync('dda') } : {}),
             ...(!isDdaReport && sourceKind === 'dda' ? {
               confirmPayment: async options => { assertSession(); const receipt = await client.confirmDdaPayment(options); assertSession(); return receipt; },
+              ...(typeof client.scheduleDdaPayment === 'function' ? {
+                schedulePayment: async (operation, payload, options) => {
+                  assertSession();
+                  const result = await client.scheduleDdaPayment(operation, payload, options);
+                  assertSession();
+                  return result;
+                },
+              } : {}),
               onStartLaunch: ddaPaymentLaunchHandler(data, assertSession),
               onStartProvision: ddaPaymentLaunchHandler(data, assertSession, {
                 flowId: 'payment', replyId: 'action_payment', text: 'CRIAR UMA PROVISÃO DE PAGAMENTO',

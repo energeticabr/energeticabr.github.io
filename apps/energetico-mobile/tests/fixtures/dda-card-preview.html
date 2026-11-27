@@ -18,9 +18,34 @@ const rows=[2,0,1].map((offset,index)=>({id:String(index+1),fields:{
 }}));
 let synced=false;
 const outcome=new URLSearchParams(location.search).get('outcome');
+const schedule=new URLSearchParams(location.search).has('schedule');
 const gallery=createRegistrationGallery({document,kind:'dda',onHome:()=>{},
+schedulePayment:schedule?async(action,payload)=>action==='list'?{status:'available',entries:[]}
+ :{status:'quoted',amountCents:12345,beneficiary:'Fornecedor fictício',date:payload.date,canConfirm:true,quoteId:'c'.repeat(32)}:undefined,
 confirmPayment:async({itemId,key})=>{await new Promise(r=>setTimeout(r,200));const confirmedAt=new Date().toISOString(),confirmedBy='demonstracao@example.test';Object.assign(rows.find(row=>Number(row.id)===itemId).fields,{PGTO_CONFIRMADO:true,PGTO_CONFIRMADO_EM:confirmedAt,PGTO_CONFIRMADO_POR:confirmedBy});return {status:'confirmed',itemId,key,confirmedAt,confirmedBy};},
 refreshBank:async({onStatus})=>{onStatus('Consultando o Sicoob. Tempo decorrido: 00:03. A consulta completa costuma levar de 10 a 15 minutos. Dados fictícios de demonstração.');await new Promise(resolve=>setTimeout(resolve,300));if(outcome==='failed')throw Error('Não foi possível confirmar o resultado da consulta. Tente novamente.');const noNew=synced||outcome==='empty';const result={status:'succeeded',created:noNew?0:2,createdItemIds:noNew?[]:[2,3],elapsedMs:670000};synced=true;return result;},
 data:{loadSnapshot:async()=>({rows:synced?rows:rows.slice(0,1)}),listAttachments:async()=>[{fileName:'espelho-ficticio.pdf'}]},openMediaCollection:()=>{}});
 await gallery.open();
+if(schedule){
+ const afterRender=()=>new Promise(resolve=>requestAnimationFrame(resolve));
+ const fits=(element,container)=>{
+  const inner=element.getBoundingClientRect(),outer=container.getBoundingClientRect();
+  return inner.width>0&&inner.height>0&&inner.left>=outer.left&&inner.right<=outer.right;
+ };
+ await afterRender();
+ const button=document.querySelector('[data-dda-schedule]');
+ const buttonFits=fits(button,button.closest('[data-registration-row]'));
+ button.click();
+ const dialog=document.querySelector('[data-dda-schedule-dialog]');
+ const input=dialog.querySelector('input[type=date]');
+ const dateFocused=document.activeElement===input;
+ const dateFits=fits(input,dialog)&&fits(dialog,document.documentElement);
+ input.value=due(2).slice(0,10);
+ dialog.querySelector('[data-dda-schedule-next]').click();
+ await afterRender();
+ const confirmation=dialog.querySelector('[data-dda-schedule-confirm]');
+ document.documentElement.dataset.layout=JSON.stringify({buttonFits,dateFits,dateFocused,
+  reviewFits:fits(dialog,document.documentElement),reviewText:dialog.textContent.includes('Fornecedor fictício'),
+  confirmationVisible:fits(confirmation,dialog)});
+}
 </script></body></html>
