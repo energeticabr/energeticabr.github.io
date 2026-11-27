@@ -937,12 +937,19 @@ export function createChatClient({
       const lastOnlineAt = typeof channel.lastOnlineAt === "string"
         && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(channel.lastOnlineAt)
         && Number.isFinite(Date.parse(channel.lastOnlineAt)) ? channel.lastOnlineAt : null;
-      return {
+      const camera = {
         id: channel.id,
         label: channel.label,
         status: channel.status === "online" || channel.status === "offline" ? channel.status : "unknown",
         lastOnlineAt,
       };
+      if (typeof channel.cameraGroup === "string" && /^[a-z0-9-]{1,48}$/.test(channel.cameraGroup)) {
+        camera.cameraGroup = channel.cameraGroup;
+        if (typeof channel.cameraLabel === "string" && channel.cameraLabel.length <= 120 && channel.cameraLabel.trim()) {
+          camera.cameraLabel = channel.cameraLabel;
+        }
+      }
+      return camera;
     });
   }
 
