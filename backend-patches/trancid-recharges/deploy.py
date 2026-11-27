@@ -44,7 +44,7 @@ MODULES = ('trancid_recharges.py', 'trancid_portal_adapter.py')
 
 def patch_bridge(data):
     source = data.decode('utf-8')
-    if ROUTE + ANCHOR in source:
+    if source.count(ROUTE) == 1:
         return data
     if source.count(ANCHOR) != 1:
         raise ValueError('Unexpected portal routing. Review the active bridge.')

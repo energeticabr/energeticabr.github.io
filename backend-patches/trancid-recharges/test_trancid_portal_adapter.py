@@ -1,12 +1,123 @@
+import os
+import sys
+import tempfile
 import unittest
+from contextlib import ExitStack
 from datetime import date
+from http.cookiejar import Cookie, LWPCookieJar
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, call, patch
 
-from trancid_portal_adapter import Form, Portal, PortalError, PortalUncertain, parse_cards
+from trancid_portal_adapter import LOGOUT_PATH, Form, Portal, PortalError, PortalUncertain, parse_cards
 
 
 ORIGIN = "http://provider.example:8082"
 CARDS = ["06850000084216", "06850000084217"]
+
+
+class PortalSessionTests(unittest.TestCase):
+    def setUp(self):
+        resources = ExitStack()
+        self.addCleanup(resources.close)
+        directory = resources.enter_context(tempfile.TemporaryDirectory())
+        self.root = Path(directory)
+        self.active_session = None
+        self.session_count = 0
+        self.logouts = []
+        self.fail_logout = False
+        self.lose_login_response = False
+        locking = SimpleNamespace(flock=Mock(), LOCK_EX=1, LOCK_NB=2)
+        collector = SimpleNamespace(
+            ORIGIN=ORIGIN, BALANCE_URL=ORIGIN + '/balance', Collector=self.collector,
+            parse_login=lambda *_: {'btnLogin': 'OK'},
+            document=lambda page: SimpleNamespace(values=Form(page).fields, frames=[]),
+        )
+        resources.enter_context(patch.dict(sys.modules, {'collector': collector, 'fcntl': locking}))
+        resources.enter_context(patch('trancid_portal_adapter.config_values', return_value={
+            'TRANCID_DB_PATH': str(self.root / 'monitor.sqlite'),
+            'TRANCID_USERNAME': 'test-user', 'TRANCID_PASSWORD': 'test-password',
+        }))
+
+    def collector(self):
+        jar = LWPCookieJar()
+        login = '<input name="txtEmailTitular">'
+
+        def read(url, fields=None):
+            if url == ORIGIN + '/':
+                self.session_count += 1
+                jar.set_cookie(Cookie(
+                    0, 'ASP.NET_SessionId', str(self.session_count), None, False,
+                    'provider.example', False, False, '/', True, False, None, True, None, None, {},
+                ))
+                return ORIGIN + '/frmLogin.aspx', login
+            session = next(iter(jar)).value
+            if url == ORIGIN + LOGOUT_PATH:
+                self.logouts.append(session)
+                if self.fail_logout:
+                    raise TimeoutError()
+                if self.active_session == session:
+                    self.active_session = None
+                return url, ''
+            if fields is not None:
+                if self.active_session:
+                    return url, login + 'Já existe uma conexão em aberto para esse login no site.'
+                self.active_session = session
+                if self.lose_login_response:
+                    raise TimeoutError()
+                return ORIGIN + '/authenticated.aspx', ''
+            raise AssertionError(f'Unexpected request: {url}')
+
+        return SimpleNamespace(jar=jar, read=read)
+
+    def test_next_operation_recovers_a_session_left_by_a_stopped_worker(self):
+        interrupted = Portal()
+        interrupted.__enter__()
+        # Model process termination: the OS releases the file lock, but __exit__ never runs.
+        interrupted.lock.close()
+        self.assertEqual(self.active_session, '1')
+
+        with Portal():
+            self.assertEqual(self.logouts, ['1'])
+            self.assertEqual(self.active_session, '2')
+
+        with Portal():
+            self.assertEqual(self.active_session, '3')
+        self.assertEqual(self.logouts, ['1', '2', '3'])
+        self.assertIsNone(self.active_session)
+        self.assertEqual(list(self.root.iterdir()), [self.root / 'collector.lock'])
+
+    def test_failed_logout_preserves_only_the_own_session_for_recovery(self):
+        self.fail_logout = True
+        with self.assertLogs('trancid_portal_adapter', 'WARNING'), Portal():
+            self.assertEqual(self.active_session, '1')
+        files = list(self.root.glob('*.cookies'))
+        self.assertEqual(len(files), 1)
+        if os.name != 'nt':
+            self.assertEqual(files[0].stat().st_mode & 0o777, 0o600)
+
+        self.fail_logout = False
+        with Portal():
+            self.assertEqual(self.active_session, '2')
+        self.assertEqual(self.logouts, ['1', '1', '2'])
+
+    def test_lost_login_response_still_closes_our_session(self):
+        self.lose_login_response = True
+        with self.assertRaisesRegex(PortalError, 'não respondeu'):
+            with Portal():
+                self.fail('The login response was lost.')
+        self.assertEqual(self.logouts, ['1'])
+        self.assertIsNone(self.active_session)
+
+    def test_portal_busy_with_an_external_session_never_requests_logout(self):
+        self.active_session = 'external'
+        for _ in range(2):
+            with self.assertRaisesRegex(PortalError, 'Já existe uma sessão'):
+                with Portal():
+                    self.fail('The portal already has an external session.')
+        self.assertEqual(self.logouts, [])
+        self.assertEqual(self.active_session, 'external')
+        self.assertEqual(list(self.root.iterdir()), [self.root / 'collector.lock'])
 
 
 class BoletoTests(unittest.TestCase):

@@ -7,6 +7,7 @@ import os
 import re
 import shlex
 import sys
+import tempfile
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from html import escape, unescape
@@ -28,6 +29,7 @@ DETAIL_REPORT = "/frmRelPedidoCargaBordoCI.aspx"
 CREATE_PAGE = "/frmSelGrupoNovoPedido.aspx"
 DRAFT_PAGE = "/frmPedidoCargaIndividual.aspx"
 LOGOUT_PATH = "/frmLogout.aspx?encerra=true&popup=true"
+PENDING_LOGOUT_FILE = "recharge-pending-logout.cookies"
 BRT = timezone(timedelta(hours=-3))
 MONEY = r"(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}"
 CARD = r"\d{14}"
@@ -367,7 +369,8 @@ class Portal:
         self.origin = None
         self.balance_url = None
         self.lock = None
-        self.authenticated = False
+        self.pending_logout = None
+        self.login_started = False
         self.today = lambda: datetime.now(BRT).date()
 
     def __enter__(self):
@@ -375,7 +378,8 @@ class Portal:
             import fcntl
 
             config = config_values()
-            self.lock = (Path(config["TRANCID_DB_PATH"]).parent / "collector.lock").open("a")
+            state_dir = Path(config["TRANCID_DB_PATH"]).parent
+            self.lock = (state_dir / "collector.lock").open("a")
             try:
                 fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as error:
@@ -386,18 +390,29 @@ class Portal:
 
             self.origin, self.balance_url = ORIGIN, BALANCE_URL
             self.collector = Collector()
-            # Keep the scheduled collector's persisted session untouched.
+            # Use a separate record for recharge sessions, under the shared portal lock.
             self.collector.jar.clear()
+            self.pending_logout = state_dir / PENDING_LOGOUT_FILE
+            if self.pending_logout.exists():
+                self.collector.jar.load(str(self.pending_logout), ignore_discard=True)
+                self._finish_session()
+
             _, page = self._read(self.origin + "/")
-            url, page = self._read(
-                self.origin + "/frmLogin.aspx",
-                parse_login(page, config["TRANCID_USERNAME"], config["TRANCID_PASSWORD"]),
-            )
+            fields = parse_login(page, config["TRANCID_USERNAME"], config["TRANCID_PASSWORD"])
+            # The portal associates login with the ASP.NET session issued on the login page.
+            # Record it before the POST so even a lost response or process restart is recoverable.
+            self._remember_session()
+            self.login_started = True
+            try:
+                url, page = self._read(self.origin + "/frmLogin.aspx", fields)
+            finally:
+                self._remember_session()
             if urlsplit(url).path.lower().endswith("/frmlogin.aspx") or "txtEmailTitular" in document(page).values:
+                self.pending_logout.unlink()
+                self.login_started = False
                 if "JA EXISTE UMA CONEXAO" in normalize(Form(page).text):
                     raise PortalError("Já existe uma sessão aberta na Trancid. Aguarde o encerramento.")
                 raise PortalError("A Trancid recusou a sessão corporativa.")
-            self.authenticated = True
             for frame in document(page).frames:
                 if "logout" not in frame.lower():
                     self._read(urljoin(url, frame))
@@ -411,15 +426,31 @@ class Portal:
 
     def __exit__(self, *_):
         try:
-            if self.authenticated:
-                self._read(self.origin + LOGOUT_PATH)
+            if self.login_started:
+                self._finish_session()
         except Exception:
             LOGGER.warning("O portal Trancid não confirmou o encerramento da sessão.")
         finally:
-            self.authenticated = False
+            self.login_started = False
             if self.lock is not None:
                 self.lock.close()
                 self.lock = None
+
+    def _remember_session(self):
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=self.pending_logout.parent, delete=False) as stream:
+                temporary = Path(stream.name)
+            self.collector.jar.save(str(temporary), ignore_discard=True)
+            temporary.replace(self.pending_logout)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+
+    def _finish_session(self):
+        self._read(self.origin + LOGOUT_PATH)
+        self.pending_logout.unlink()
+        self.collector.jar.clear()
 
     def _same_origin(self, url):
         parsed, origin = urlsplit(url), urlsplit(self.origin)
