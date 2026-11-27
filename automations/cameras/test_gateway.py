@@ -1,9 +1,11 @@
 import http.client
 import json
 import secrets
+import sqlite3
 import threading
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 from http.server import ThreadingHTTPServer
@@ -12,14 +14,150 @@ from camera_status import CameraStatusStore
 from gateway import CATALOG, MEDIA, Gateway, Stream, handler_for
 
 
+class PhysicalCameraStatusTest(unittest.TestCase):
+    channels = ("patio-1", "patio-2", "patio-3")
+
+    def gateway(self, store, *, first_channel="patio-1"):
+        channels = [
+            {"id": channel, "label": f"Pátio · canal {index}", "format": "hevc",
+             "command": ["/unused"], "input": {"cloudId": "patio-device"}}
+            for index, channel in enumerate(self.channels, 1)
+        ]
+        channels.append({"id": "entrada", "label": "Entrada · canal 1", "format": "hevc",
+                         "command": ["/unused"], "input": {"deviceId": "entrada-device"}})
+        channels.sort(key=lambda entry: entry["id"] != first_channel)
+        return Gateway({"origins": [], "viewers": [], "ffmpeg": "unused", "channels": channels},
+                       status_store=store)
+
+    def test_reports_one_camera_transition_when_three_channels_fall_and_recover_at_different_times(self):
+        with CameraStatusStore(":memory:") as store:
+            gateway = self.gateway(store)
+            baseline = gateway.camera_status_events()
+            for channel in self.channels:
+                store.update(channel, "online", checked_at="2026-11-24T12:00:00Z")
+            store.update("patio-2", "offline", checked_at="2026-11-24T13:00:00Z")
+            store.update("patio-1", "offline", checked_at="2026-11-24T13:01:00Z")
+            store.update("patio-3", "unknown", checked_at="2026-11-24T13:02:00Z")
+            self.assertEqual(gateway.camera_status_events(baseline["cursor"])["events"], [])
+            self.assertEqual([channel["status"] for channel in gateway.catalog()[:3]],
+                             ["offline", "offline", "unknown"])
+
+            store.update("patio-3", "offline", checked_at="2026-11-24T14:00:00Z")
+            offline = gateway.camera_status_events(baseline["cursor"])
+            self.assertEqual(offline["events"], [
+                {"id": 1, "channelId": "patio-1", "label": "Pátio", "status": "offline",
+                 "changedAt": "2026-11-24T14:00:00Z"},
+            ])
+            store.update("patio-2", "online", checked_at="2026-11-24T15:00:00Z")
+            store.update("patio-1", "online", checked_at="2026-11-24T15:01:00Z")
+            store.update("patio-3", "online", checked_at="2026-11-24T15:02:00Z")
+            self.assertEqual(gateway.camera_status_events(offline["cursor"])["events"], [
+                {"id": 2, "channelId": "patio-1", "label": "Pátio", "status": "online",
+                 "changedAt": "2026-11-24T15:00:00Z"},
+            ])
+
+    def test_restart_preserves_the_previous_camera_state_during_an_inconclusive_period(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "camera-status.sqlite3"
+            with CameraStatusStore(path) as store:
+                gateway = self.gateway(store)
+                baseline = gateway.camera_status_events()
+                store.update("patio-1", "online")
+                store.update("patio-1", "offline")
+                store.update("patio-2", "offline")
+                self.assertEqual(gateway.camera_status_events(0)["events"], [])
+            with CameraStatusStore(path) as store:
+                gateway = self.gateway(store)
+                store.update("patio-3", "offline")
+                result = gateway.camera_status_events(0)
+                self.assertEqual(result["generation"], baseline["generation"])
+                self.assertEqual([(event["channelId"], event["status"]) for event in result["events"]],
+                                 [("patio-1", "offline")])
+
+    def test_legacy_channel_notices_do_not_replay_for_a_group_and_other_notices_keep_their_cursor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "camera-status.sqlite3"
+            with closing(sqlite3.connect(path)) as old_database, old_database:
+                old_database.execute("""
+                    CREATE TABLE camera_status_events (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        channel_id TEXT NOT NULL,
+                        state TEXT NOT NULL CHECK (state IN ('online', 'offline')),
+                        changed_at TEXT NOT NULL
+                    )
+                """)
+                old_database.executemany("""
+                    INSERT INTO camera_status_events(channel_id, state, changed_at) VALUES (?, 'offline', ?)
+                """, [(channel, "2026-11-24T12:00:00Z")
+                      for channel in ("patio-1", "entrada", "patio-2", "patio-3")])
+            with CameraStatusStore(path) as store:
+                for channel in self.channels:
+                    store.update(channel, "offline")
+                gateway = self.gateway(store)
+                pending = gateway.camera_status_events(0)
+                self.assertEqual([(event["id"], event["channelId"], event["label"]) for event in pending["events"]],
+                                 [(2, "entrada", "Entrada")])
+                baseline = gateway.camera_status_events(pending["cursor"])
+                self.assertEqual(baseline["events"], [])
+                self.assertEqual(baseline["cursor"], 4)
+                store.update("patio-3", "online")
+                result = gateway.camera_status_events(baseline["cursor"])
+                self.assertEqual([(event["id"], event["channelId"], event["status"]) for event in result["events"]],
+                                 [(5, "patio-1", "online")])
+
+    def test_redeployment_seeds_the_current_camera_state_after_a_legacy_writer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "camera-status.sqlite3"
+            with CameraStatusStore(path) as store:
+                self.gateway(store)
+                for channel in self.channels:
+                    store.update(channel, "online")
+            # A temporarily restored gateway only records statuses and events by channel.
+            with closing(sqlite3.connect(path)) as old_database, old_database:
+                old_database.execute("UPDATE camera_status SET state = 'offline', last_confirmed_state = 'offline'")
+                old_database.executemany("""
+                    INSERT INTO camera_status_events(channel_id, state, changed_at) VALUES (?, 'offline', ?)
+                """, [(channel, "2026-11-24T12:00:00Z") for channel in self.channels])
+            with CameraStatusStore(path) as store:
+                gateway = self.gateway(store)
+                self.assertEqual(gateway.camera_status_events(0)["events"], [])
+                store.update("patio-3", "online")
+                result = gateway.camera_status_events(0)
+                self.assertEqual([(event["id"], event["channelId"], event["status"]) for event in result["events"]],
+                                 [(4, "patio-1", "online")])
+
+    def test_reordering_channels_preserves_pending_notices_and_the_camera_baseline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "camera-status.sqlite3"
+            with CameraStatusStore(path) as store:
+                self.gateway(store)
+                for channel in self.channels:
+                    store.update(channel, "offline")
+                store.update("patio-1", "online")
+                store.update("patio-2", "unknown")
+                store.update("patio-1", "offline")
+            with CameraStatusStore(path) as store:
+                gateway = self.gateway(store, first_channel="patio-3")
+                store.update("patio-2", "offline")
+                self.assertEqual(
+                    [(event["channelId"], event["status"]) for event in gateway.camera_status_events(0)["events"]],
+                    [("patio-3", "online"), ("patio-3", "offline")],
+                )
+
+
 class CameraGatewayTest(unittest.TestCase):
     def setUp(self):
+        self.start_gateway([{
+            "id": "ch-1", "label": "Câmera de teste", "format": "hevc",
+            "command": ["/unused"], "input": {"password": secrets.token_urlsafe(16)},
+        }])
+
+    def start_gateway(self, channels):
         config = {
             "origins": ["https://www.energeticabr.com"],
             "viewers": ["owner"],
             "ffmpeg": "unused",
-            "channels": [{"id": "ch-1", "label": "Câmera de teste", "format": "hevc",
-                          "command": ["/unused"], "input": {"password": secrets.token_urlsafe(16)}}],
+            "channels": channels,
         }
         gateway = Gateway(config, identity=lambda token: {"id": token, "userType": "Member"})
         self.gateway = gateway
@@ -132,10 +270,11 @@ class CameraGatewayTest(unittest.TestCase):
             ("garden", "Jardim · canal 2", {"cloudId": "private-icsee-19", "channel": 1}),
         ]
         sample_password = secrets.token_urlsafe(16)
-        self.gateway.entries = {
-            channel: {"id": channel, "label": label, "input": {"password": sample_password, **settings}}
+        self.start_gateway([
+            {"id": channel, "label": label, "format": "hevc", "command": ["/unused"],
+             "input": {"password": sample_password, **settings}}
             for channel, label, settings in sources
-        }
+        ])
         status, _, response = self.request("POST", CATALOG, "owner", {"action": "list"})
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(response), {"channels": [

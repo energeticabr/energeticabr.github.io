@@ -240,6 +240,14 @@ class Gateway:
         self.query_active = False
         self.recording_tokens = {}
         self.status_store = status_store or CameraStatusStore(":memory:")
+        self.camera_groups = self._camera_channel_groups()
+        self.camera_id_by_channel = {channel_id: camera_id for camera_id, channels in self.camera_groups.items()
+                                     for channel_id in channels}
+        self.camera_labels = {camera_id: self._camera_label(channels)
+                              for camera_id, channels in self.camera_groups.items()}
+        self.status_store.configure_camera_groups({
+            camera_id: channels for camera_id, channels in self.camera_groups.items() if len(channels) > 1
+        })
         self.status_monitor = None
 
     def authorize(self, authorization):
@@ -270,7 +278,11 @@ class Gateway:
             status = self.status_store.get(entry["id"])
             channels.append({"id": entry["id"], "label": entry["label"],
                              "status": status["status"], "lastOnlineAt": status["lastOnlineAt"]})
-        self._add_camera_group_metadata(channels)
+        by_id = {channel["id"]: channel for channel in channels}
+        for camera_id, members in self.camera_groups.items():
+            if len(members) > 1:
+                for channel_id in members:
+                    by_id[channel_id].update(cameraGroup=camera_id, cameraLabel=self.camera_labels[camera_id])
         return channels
 
     def camera_visuals(self, viewer, action, data):
@@ -311,38 +323,32 @@ class Gateway:
         if after is None:
             return self.status_store.event_baseline()
         result = self.status_store.events_after(after, limit=100)
-        labels = {channel_id: entry.get("label") or "Câmera"
-                  for channel_id, entry in self.entries.items()}
         events = []
         for event in result["events"]:
-            label = labels.get(event["channelId"])
-            if not label:
-                continue
-            events.append({**event, "label": label})
+            camera_id = self.camera_id_by_channel.get(event["channelId"])
+            if camera_id is not None:
+                events.append({**event, "channelId": camera_id, "label": self.camera_labels[camera_id]})
         return {"events": events, "cursor": result["cursor"], "generation": result["generation"]}
 
-    def _add_camera_group_metadata(self, channels):
+    def _camera_channel_groups(self):
         by_device = {}
-        for channel in channels:
-            settings = self.entries[channel["id"]].get("input")
-            if not isinstance(settings, dict):
-                continue
-            for field in ("cloudId", "deviceId"):
-                value = settings.get(field)
-                if type(value) in (str, int) and (device := str(value).strip()):
-                    by_device.setdefault((field, device), []).append(channel)
-                    break
+        for channel_id, entry in self.entries.items():
+            settings = entry.get("input")
+            device_key = ("channel", channel_id)
+            if isinstance(settings, dict):
+                for field in ("cloudId", "deviceId"):
+                    value = settings.get(field)
+                    if type(value) in (str, int) and (device := str(value).strip()):
+                        device_key = (field, device)
+                        break
+            by_device.setdefault(device_key, []).append(channel_id)
+        # Only the first public channel ID leaves the gateway.
+        return {channels[0]: tuple(channels) for channels in by_device.values()}
 
-        for group in by_device.values():
-            if len(group) < 2:
-                continue
-            # Publish an existing channel ID instead of returning a private device ID.
-            group_id = group[0]["id"]
-            label = next((channel["label"].strip() for channel in group
-                          if isinstance(channel["label"], str) and channel["label"].strip()), "Câmera")
-            label = CHANNEL_LABEL_SUFFIX.sub("", label).strip() or label
-            for channel in group:
-                channel.update(cameraGroup=group_id, cameraLabel=label)
+    def _camera_label(self, channels):
+        labels = (self.entries[channel_id].get("label") for channel_id in channels)
+        label = next((name.strip() for name in labels if isinstance(name, str) and name.strip()), "Câmera")
+        return CHANNEL_LABEL_SUFFIX.sub("", label).strip() or label
 
     def start_status_monitor(self):
         if self.status_monitor is None:

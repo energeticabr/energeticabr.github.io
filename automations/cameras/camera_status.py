@@ -62,6 +62,7 @@ class CameraStatusStore:
         if path != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._channel_groups = {}
         self._connection = sqlite3.connect(path, check_same_thread=False, timeout=10)
         self._connection.execute("PRAGMA busy_timeout = 10000")
         if path != ":memory:":
@@ -120,6 +121,18 @@ class CameraStatusStore:
             except BaseException:
                 self._connection.rollback()
                 raise
+        event_columns = {row[1] for row in self._connection.execute("PRAGMA table_info(camera_status_events)")}
+        if "camera_level" not in event_columns:
+            self._connection.execute("""
+                ALTER TABLE camera_status_events ADD COLUMN camera_level INTEGER NOT NULL DEFAULT 0
+                CHECK (camera_level IN (0, 1))
+            """)
+        self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS camera_group_status (
+                channels TEXT PRIMARY KEY,
+                last_confirmed_state TEXT CHECK (last_confirmed_state IN ('online', 'offline'))
+            )
+        """)
         self._connection.execute("""
             CREATE TABLE IF NOT EXISTS camera_status_meta (
                 key TEXT PRIMARY KEY,
@@ -205,6 +218,63 @@ class CameraStatusStore:
             return {"status": "unknown", "lastOnlineAt": None, "checkedAt": None}
         return {"status": row[0], "lastOnlineAt": row[1], "checkedAt": row[2]}
 
+    def configure_camera_groups(self, groups):
+        """Register multi-channel cameras using their representative public channel IDs."""
+        configured = [(camera_id, channels, json.dumps(sorted(channels))) for camera_id, channels in groups.items()]
+        with self._lock:
+            with self._connection:
+                self._connection.execute("BEGIN IMMEDIATE")
+                for _, channels, members in configured:
+                    state = self._group_state(channels)
+                    if state is None:
+                        stored = self._connection.execute("""
+                            SELECT 1 FROM camera_group_status WHERE channels = ?
+                        """, (members,)).fetchone()
+                        if stored:
+                            # An inconclusive snapshot must not erase the last confirmed camera state.
+                            continue
+                        state = self._group_state(channels, last_confirmed=True)
+                    self._connection.execute("""
+                        INSERT INTO camera_group_status(channels, last_confirmed_state)
+                        VALUES (?, ?)
+                        ON CONFLICT(channels) DO UPDATE SET last_confirmed_state = excluded.last_confirmed_state
+                        WHERE camera_group_status.last_confirmed_state IS NOT excluded.last_confirmed_state
+                    """, (members, state))
+            self._channel_groups = {
+                channel: (camera_id, channels, members)
+                for camera_id, channels, members in configured for channel in channels
+            }
+
+    def _group_state(self, channels, *, last_confirmed=False):
+        placeholders = ",".join("?" for _ in channels)
+        rows = self._connection.execute(f"""
+            SELECT state, last_confirmed_state FROM camera_status
+            WHERE channel_id IN ({placeholders})
+        """, channels).fetchall()
+        states = [row[1] if last_confirmed else row[0] for row in rows]
+        if "online" in states:
+            return "online"
+        if states.count("offline") == len(channels):
+            return "offline"
+        return None
+
+    def _camera_transition(self, channel_id, previous, status):
+        group = self._channel_groups.get(channel_id)
+        if group is None:
+            return channel_id, previous, status
+        camera_id, channels, members = group
+        state = self._group_state(channels)
+        if state is None:
+            return camera_id, None, None
+        (previous,) = self._connection.execute(
+            "SELECT last_confirmed_state FROM camera_group_status WHERE channels = ?", (members,),
+        ).fetchone()
+        if previous != state:
+            self._connection.execute(
+                "UPDATE camera_group_status SET last_confirmed_state = ? WHERE channels = ?", (state, members),
+            )
+        return camera_id, previous, state
+
     def update(self, channel_id, status, *, checked_at=None, last_online_at=None):
         if status not in VALID_STATES:
             raise ValueError("Invalid camera status")
@@ -239,12 +309,15 @@ class CameraStatusStore:
                         checked_at = excluded.checked_at,
                         last_confirmed_state = excluded.last_confirmed_state
                 """, (channel_id, status, last_online_at, checked, last_confirmed_state))
-                if previous_state in {"online", "offline"} and status in {"online", "offline"} \
-                        and status != previous_state:
-                    self._connection.execute("""
-                        INSERT INTO camera_status_events(channel_id, state, changed_at)
-                        VALUES (?, ?, ?)
-                    """, (channel_id, status, checked))
+                if status != "unknown":
+                    camera_id, previous_camera_state, camera_state = self._camera_transition(
+                        channel_id, previous_state, status,
+                    )
+                    if previous_camera_state and camera_state and camera_state != previous_camera_state:
+                        self._connection.execute("""
+                            INSERT INTO camera_status_events(channel_id, state, changed_at, camera_level)
+                            VALUES (?, ?, ?, 1)
+                        """, (camera_id, camera_state, checked))
                 self._connection.commit()
             except BaseException:
                 self._connection.rollback()
@@ -313,10 +386,15 @@ class CameraStatusStore:
         cursor = max(0, int(cursor))
         limit = max(1, min(100, int(limit)))
         with self._lock:
-            rows = self._connection.execute("""
+            grouped = tuple(self._channel_groups)
+            eligible = ""
+            if grouped:
+                placeholders = ",".join("?" for _ in grouped)
+                eligible = f"AND (camera_level = 1 OR channel_id NOT IN ({placeholders}))"
+            rows = self._connection.execute(f"""
                 SELECT id, channel_id, state, changed_at
-                FROM camera_status_events WHERE id > ? ORDER BY id LIMIT ?
-            """, (cursor, limit)).fetchall()
+                FROM camera_status_events WHERE id > ? {eligible} ORDER BY id LIMIT ?
+            """, (cursor, *grouped, limit)).fetchall()
             latest, generation = self._connection.execute("""
                 SELECT COALESCE((SELECT MAX(id) FROM camera_status_events), 0), value
                 FROM camera_status_meta WHERE key = 'event_generation'
