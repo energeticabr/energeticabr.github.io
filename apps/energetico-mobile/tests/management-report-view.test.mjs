@@ -191,6 +191,7 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   assert.deepEqual([...dashboard.querySelectorAll('.gm-expense-dashboard-ranking h3')].map(node=>node.textContent),
     ['Principais produtos','Principais fornecedores','Principais etapas']);
   assert.equal(dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent.replace(/\u00a0/g,' '),'R$ 120,00');
+  paidLegend.click();
   year.focus();
   year.value='2024';
   year.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
@@ -200,6 +201,13 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   assert.deepEqual([...dashboard.querySelectorAll('.gm-expense-dashboard-metric strong')]
     .map(metric=>metric.textContent.replace(/\s/g,'')),['R$70,00','R$70,00','R$0,00']);
   assert.deepEqual([...dashboard.querySelectorAll('.is-suppliers .gm-dashboard-rank-name')].map(node=>node.textContent),['Histórico']);
+  assert.equal(dashboard.querySelector('.gm-dashboard-legend-item.is-paid').getAttribute('aria-pressed'),'false');
+  assert.deepEqual(visibleValues('total').filter(value=>value!=='0'),['70']);
+  const lastControl=dashboard.querySelector('.gm-dashboard-legend-item.is-forecast');
+  year.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
+  assert.equal(dom.window.document.activeElement,lastControl);
+  lastControl.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));
+  assert.equal(dom.window.document.activeElement,year);
   dashboard.querySelector('.gm-expense-dashboard-close').click();
   assert.equal(root.querySelector('.gm-expense-dashboard-backdrop').hidden,true);
   assert.equal(root.querySelector('.gm-dialog').inert,false);
@@ -208,6 +216,7 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   assert.equal(expandButton.getAttribute('aria-expanded'),'false');
   typeButton.click();
   assert.equal(year.value,'2026');
+  assert.equal(dashboard.querySelector('.gm-dashboard-legend-item.is-paid').getAttribute('aria-pressed'),'true');
   dashboard.querySelector('.gm-expense-dashboard-close').click();
   expandButton.click();
   assert.equal(expandButton.getAttribute('aria-expanded'),'true');

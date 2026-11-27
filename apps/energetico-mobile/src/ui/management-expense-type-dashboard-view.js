@@ -26,10 +26,12 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
   const scroll=make('div','gm-expense-dashboard-scroll');scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label','Gráficos e rankings de gastos');
   dialog.append(header,scroll);backdrop.append(dialog);root.append(backdrop);
   let trigger=null,background=[],destroyed=false,trendObserver,buildYear;
+  const hiddenSeries=new Set();
 
   function close({restoreFocus=true}={}) {
     if(backdrop.hidden)return;
     trendObserver?.disconnect();trendObserver=undefined;
+    hiddenSeries.clear();
     backdrop.hidden=true;scroll.replaceChildren();title.textContent='';subtitle.textContent='';
     for(const [node,inert] of background)node.inert=inert;
     background=[];
@@ -99,7 +101,7 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
       });
       for (const point of points) if (point.label) group.append(point.label);
       svg.append(group);
-      return { group, path, points };
+      return { field, group, path, points };
     });
     const [totalPlot, paidPlot] = plots;
     const monthLabels = data.months.map(month => {
@@ -117,6 +119,7 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
       const scaleRight = Math.max(...grid.map(tick => tick.width)) + 4;
       const valueLabels = plots.flatMap(plot => plot.points.filter(point => point.label));
       for (const point of valueLabels) point.width ??= textWidth(point.label);
+      for (const { field, group } of plots) group.toggleAttribute('hidden', hiddenSeries.has(field));
       const monthLabelWidth = Math.max(0, ...monthLabels.map(textWidth));
       const edge = Math.ceil(Math.max(monthLabelWidth, ...valueLabels.map(point => point.width)) / 2) + 4;
       startX = Math.max(scaleRight + 11, edge);
@@ -187,11 +190,14 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
       showMonth(next);
     });
     const legend=make('div','gm-expense-dashboard-legend');
-    for(const [index, [field,label]] of series.entries()){
-      const button=make('button',`gm-dashboard-legend-item is-${field}`,label);button.type='button';button.dataset.series=field;button.setAttribute('aria-pressed','true');
+    for(const [field,label] of series){
+      const button=make('button',`gm-dashboard-legend-item is-${field}`,label);button.type='button';button.dataset.series=field;
+      button.setAttribute('aria-pressed',String(!hiddenSeries.has(field)));
       button.addEventListener('click',()=>{
-        const visible=button.getAttribute('aria-pressed')==='true';button.setAttribute('aria-pressed',String(!visible));
-        plots[index].group.toggleAttribute('hidden', visible);
+        const hide=!hiddenSeries.has(field);
+        if(hide)hiddenSeries.add(field);
+        else hiddenSeries.delete(field);
+        button.setAttribute('aria-pressed',String(!hide));
         layout();
       });legend.append(button);
     }
@@ -249,8 +255,9 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
     if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close();return;}
     if(event.key!=='Tab')return;event.stopPropagation();
     const firstControl=yearSelect.disabled?closeButton:yearSelect;
-    if(event.shiftKey&&(doc.activeElement===firstControl||doc.activeElement===dialog)){event.preventDefault();scroll.focus();}
-    else if(!event.shiftKey&&(doc.activeElement===scroll||doc.activeElement===dialog)){event.preventDefault();firstControl.focus();}
+    const lastControl=scroll.querySelector('.gm-expense-dashboard-legend button:last-child')||scroll;
+    if(event.shiftKey&&(doc.activeElement===firstControl||doc.activeElement===dialog)){event.preventDefault();lastControl.focus();}
+    else if(!event.shiftKey&&(doc.activeElement===lastControl||doc.activeElement===dialog)){event.preventDefault();firstControl.focus();}
   });
   return Object.freeze({
     get isOpen(){return !backdrop.hidden;},
