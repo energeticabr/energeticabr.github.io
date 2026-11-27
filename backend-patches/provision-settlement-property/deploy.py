@@ -70,15 +70,14 @@ def health():
     for service in SERVICES:
         if subprocess.run(['systemctl', 'is-active', '--quiet', service], timeout=5).returncode:
             return False
-    body = []
-    for port in (8765, 8080):
-        with urlopen(f'http://127.0.0.1:{port}/health', timeout=2) as response:
-            body.append(response.read().strip())
-    return body == [b'ok', b'ok']
+    with urlopen('http://127.0.0.1:8765/health', timeout=2) as response:
+        bridge_healthy = json.load(response).get('status') == 'ok'
+    with urlopen('http://127.0.0.1:8080/health', timeout=2) as response:
+        worker_healthy = response.read().strip() == b'ok'
+    return bridge_healthy and worker_healthy
 
 
-def restart():
-    subprocess.run(['systemctl', 'restart', *SERVICES], check=True, timeout=30)
+def wait_for_health():
     for _ in range(12):
         try:
             if health():
@@ -86,12 +85,16 @@ def restart():
         except OSError:
             pass
         time.sleep(1)
-    raise RuntimeError('Workflow services did not recover')
+    raise RuntimeError('Workflow services did not become healthy')
+
+
+def restart():
+    subprocess.run(['systemctl', 'restart', *SERVICES], check=True, timeout=30)
+    wait_for_health()
 
 
 def deploy(plan, receipt):
-    if not health():
-        raise RuntimeError('Workflow services are not healthy before rollout')
+    wait_for_health()
     timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     backup = Path('/var/backups/energetica-whatsapp') / f'provision-settlement-property-{timestamp}'
     backup.mkdir(mode=0o700)
