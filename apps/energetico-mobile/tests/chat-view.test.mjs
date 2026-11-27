@@ -4918,6 +4918,7 @@ test("menu inicial do Energético retira as áreas do NBPAR e conserva o Power B
     "start_pending_construction_diary",
   ]);
   assert.equal(buttons[1].dataset.label, "📊 POWER BI");
+  assert.equal(buttons[2].textContent, "📷 CÂMERAS");
   dom.window.close();
 });
 

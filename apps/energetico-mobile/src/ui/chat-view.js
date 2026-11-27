@@ -414,7 +414,7 @@ function energeticAreaOptions(options, includeCameras) {
     if (index === powerBiIndex || draftReplyId(option).trim().toLowerCase() === "action_powerbi_dashboard") {
       const powerBi = index === powerBiIndex ? powerBiDashboardOption() : option;
       return includeCameras
-        ? [powerBi, { id: "action_cameras", reply: "action_cameras", label: "CÂMERAS" }]
+        ? [powerBi, { id: "action_cameras", reply: "action_cameras", label: "📷 CÂMERAS" }]
         : [powerBi];
     }
     if (isPersonalExpensesArea(option)
