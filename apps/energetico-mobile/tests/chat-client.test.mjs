@@ -159,6 +159,23 @@ test('a grade repete a abertura uma vez para câmeras que aguardavam vagas', asy
   assert.deepEqual(waits, [25000]);
 });
 
+test('fechar um quadro durante a abertura da grade evita que ele dispare outra tentativa', async () => {
+  const path = `/api/portal-camera-media/${'a'.repeat(43)}/index.m3u8`;
+  let opens = 0;
+  const client = clientWith(async (_url, options) => {
+    if (options.method === 'GET') return new Response(null, { status: 204 });
+    opens++;
+    return jsonResponse({ paths: { a: path }, busy: ['b'] });
+  }, { retryDelay: async () => {} });
+  const start = client.prepareCameraGrid(['a', 'b']);
+  const controller = new AbortController();
+  const closing = start('b', { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(closing, { name: 'AbortError' });
+  assert.equal(await start('a'), API_BASE + path);
+  assert.equal(opens, 1);
+});
+
 test('o fallback de um canal espera apenas a liberação da playlist anterior', async () => {
   const previous = `/api/portal-camera-media/${'a'.repeat(43)}/hevc.m3u8`;
   const replacement = `/api/portal-camera-media/${'b'.repeat(43)}/index.m3u8`;
