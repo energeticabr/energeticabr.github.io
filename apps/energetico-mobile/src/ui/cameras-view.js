@@ -41,6 +41,14 @@ function canPlayHevc(video) {
   return mediaSource?.isTypeSupported(HEVC_MIME) === true;
 }
 
+function hasPlaybackBuffer(video) {
+  const { buffered, currentTime } = video;
+  for (let index = 0; index < buffered.length; index++) {
+    if (buffered.start(index) <= currentTime + 0.1 && buffered.end(index) > currentTime + 0.5) return true;
+  }
+  return false;
+}
+
 function groupCameraChannels(channels) {
   const groups = new Map();
   for (const channel of channels) {
@@ -93,6 +101,7 @@ export function createCamerasView(documentRef) {
     const selected = new Set();
     const thumbnails = new Map();
     const windowRef = documentRef.defaultView;
+    const android = /\bAndroid\b/i.test(windowRef.navigator.userAgent);
     const storagePrefix = thumbnailStoragePrefix(accountKey);
     const nameStoragePrefix = cameraNameStoragePrefix(accountKey);
     const visualStorageKey = cameraVisualStorageKey(accountKey);
@@ -825,6 +834,12 @@ export function createCamerasView(documentRef) {
       windowRef.clearTimeout(item.waitingTimer);
       item.waitingTimer = null;
     }
+    function scheduleStallRecovery(item, delay) {
+      item.waitingTimer = windowRef.setTimeout(() => {
+        item.waitingTimer = null;
+        item.onPlaybackError?.(true, { stalled: true });
+      }, delay);
+    }
     function showWaiting(item, reconnecting) {
       item.connected = false;
       item.connectionState = reconnecting ? 'waiting' : 'connecting';
@@ -874,6 +889,9 @@ export function createCamerasView(documentRef) {
         : reconnecting ? 'Reconectando…' : 'Conectando…';
       function tryAutoplay() {
         if (signal.aborted || item.cancelRecovery || item.playAttempted || item.connectionState === 'error') return;
+        if (android && !recordingId && item.onPlaybackError && item.waitingTimer === null) {
+          scheduleStallRecovery(item, LIVE_STALL_MS);
+        }
         item.playAttempted = true;
         item.connectionState = reconnecting ? 'waiting' : 'connecting'; item.failureLabel = '';
         item.retry.hidden = true;
@@ -886,6 +904,7 @@ export function createCamerasView(documentRef) {
       }
       function playbackRejected(error) {
         if (signal.aborted || item.cancelRecovery) return;
+        clearWaiting(item);
         item.connected = false; item.connectionState = 'error';
         item.failureLabel = error?.name === 'NotAllowedError' ? 'Autoplay bloqueado' : 'Falha na reprodução';
         item.liveBadge.hidden = true;
@@ -903,6 +922,7 @@ export function createCamerasView(documentRef) {
         tryAutoplay();
       };
       item.video.addEventListener('canplay', tryAutoplay, { once: true });
+      signal.addEventListener('abort', () => item.video.removeEventListener('canplay', tryAutoplay), { once: true });
       const reopenLive = previousUrl => {
         const open = item.preview && prepareGrid
           ? (id, options) => prepareGrid([id], { ...options, previousUrl })(id, options)
@@ -984,17 +1004,21 @@ export function createCamerasView(documentRef) {
           nativeHls ? null : import('hls.js'),
         ]);
         if (signal.aborted) return;
-        const failed = (network = false) => {
+        const failed = (network = false, { stalled = false } = {}) => {
           if (signal.aborted || item.cancelRecovery) return;
           clearWaiting(item);
-          if (!recordingId && network && (item.preview || item.played || item.networkRetries) && retryNetwork()) return;
-          if (!recordingId && !network && item.codecs.length && /\/(?:h264|hevc)\.m3u8$/.test(new URL(url).pathname)) {
+          const decoderStalled = android && stalled && hasPlaybackBuffer(item.video);
+          if (!recordingId && (!network || decoderStalled) && item.codecs.length
+            && /\/(?:h264|hevc)\.m3u8$/.test(new URL(url).pathname)) {
             retryCompatible(url);
             return;
           }
+          if (!recordingId && network && (stalled || item.preview || item.played || item.networkRetries) && retryNetwork()) return;
           showDisconnected('Transmissão interrompida.');
         };
         item.onPlaybackError = failed;
+        // Android can wait indefinitely for its first frame without an error event.
+        if (android && !recordingId) scheduleStallRecovery(item, LIVE_STALL_MS);
         if (nativeHls) {
           item.video.src = url;
           item.video.load();
@@ -1133,10 +1157,7 @@ export function createCamerasView(documentRef) {
           item.waitStartedAt = windowRef.Date.now();
           item.waitingTimer = windowRef.setTimeout(() => {
             showWaiting(item, true);
-            item.waitingTimer = windowRef.setTimeout(() => {
-              item.waitingTimer = null;
-              item.onPlaybackError?.(true);
-            }, LIVE_STALL_MS - LIVE_WAIT_NOTICE_MS);
+            scheduleStallRecovery(item, LIVE_STALL_MS - LIVE_WAIT_NOTICE_MS);
           }, LIVE_WAIT_NOTICE_MS);
         });
         video.addEventListener('error', () => {
