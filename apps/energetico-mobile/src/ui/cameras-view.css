@@ -474,10 +474,12 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   position: absolute;
   z-index: 1;
   top: 8px;
+  left: 8px;
   display: inline-flex;
   align-items: center;
   min-height: 22px;
-  max-width: 72%;
+  box-sizing: border-box;
+  max-width: calc(100% - 60px);
   overflow: hidden;
   padding: 2px 6px;
   border-radius: 3px;
@@ -488,8 +490,7 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   white-space: nowrap;
   pointer-events: none;
 }
-.cameras-player__label { left: 8px; }
-.cameras-player__tile-live { right: 8px; color: #fff; font-weight: 750; }
+.cameras-player__tile-live { top: 34px; font-weight: 750; }
 .cameras-player__tile-live[hidden] { display: none !important; }
 .cameras-player__dismiss {
   position: absolute;
@@ -518,11 +519,6 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   content: "";
 }
 .cameras-player__dismiss:focus-visible { outline: 2px solid #fff; outline-offset: -4px; border-radius: 50%; }
-.cameras-player__dismiss[hidden] { display: none; }
-.cameras-player__dismiss:not([hidden]) ~ .cameras-player__label {
-  box-sizing: border-box;
-  max-width: calc(100% - 60px);
-}
 .cameras-player__status {
   position: absolute;
   z-index: 2;
