@@ -14,30 +14,52 @@ test('management totals use exact decimal sums without truncating over 2000 rows
   assert.equal(many.count,2001);assert.equal(many.total,2001);
 });
 
-test('dashboard de tipo agrega os últimos 12 meses e rankings da filial por gasto e participação',()=>{
-  const result=model.buildManagementExpenseTypeDashboard({
+test('dashboard de tipo agrega o ano selecionado e oferece apenas anos com valores da filial e do tipo',()=>{
+  const snapshot={
     launches:[
       row('1',{date:'2026-10-02',paymentDate:'2026-10-03',product:'Cimento',supplier:'Alfa',stage:'Fundação',total:60}),
       row('2',{date:'2026-09-02',paymentDate:'2026-09-03',product:'Brita',supplier:'Beta',stage:'Estrutura',total:40}),
-      row('3',{branch:'Filial B',date:'2026-10-02',paymentDate:'2026-10-03',total:900}),
-      row('4',{product:'Locação',total:800}),
+      row('3',{branch:'Filial B',paymentDate:'2022-10-03',total:900}),
+      row('4',{product:'Locação',paymentDate:'2023-10-03',total:800}),
+      row('5',{date:'2023-12-30',paymentDate:'2024-01-02',total:25}),
+      row('6',{paymentDate:'2025-10-03',total:0}),
+      row('7',{paymentDate:'2021-10-03',total:null}),
     ],
-    provisions:[{id:'p1',branch:'Filial A',product:'Cimento',supplier:'Beta',stage:'Estrutura',dueDate:'2026-10-20',total:30}],
+    provisions:[
+      {id:'p1',branch:'Filial A',product:'Cimento',supplier:'Beta',stage:'Estrutura',dueDate:'2026-12-20',total:30},
+      {id:'p2',branch:'Filial A',product:'Brita',supplier:'Beta',stage:'Estrutura',dueDate:'2024-12-20',total:5},
+      {id:'p3',branch:'Filial A',product:'Brita',dueDate:'2020-01-02',paidDate:'2020-01-03',total:200},
+      {id:'p4',branch:'Filial A',product:'Brita',dueDate:'2019-01-02',total:15},
+    ],
     productTypes:[{product:'Cimento',expenseType:'Material'},{product:'Brita',expenseType:'Material'},{product:'Locação',expenseType:'Serviços'}],
-  },{year:'2026',month:'10',supplier:'Alfa'},{branch:'Filial A',expenseType:'MATERIAL',now:new Date('2026-10-05T12:00:00Z')});
+  };
+  const filters={year:'2026',month:'10',supplier:'Alfa'};
+  const scope={branch:'Filial A',expenseType:'MATERIAL',now:new Date('2026-10-05T12:00:00Z')};
+  const result=model.buildManagementExpenseTypeDashboard(snapshot,filters,scope);
 
+  assert.equal(result.year,2026);
+  assert.deepEqual(result.years,[2026,2024,2019]);
   assert.equal(result.total,130);
   assert.equal(result.months.length,12);
-  assert.deepEqual(result.months.map(month=>month.period),[
-    '2025-11','2025-12','2026-01','2026-02','2026-03','2026-04',
-    '2026-05','2026-06','2026-07','2026-08','2026-09','2026-10',
-  ]);
-  assert.deepEqual(result.months.slice(-2).map(month=>month.total),[40,90]);
+  assert.equal(result.months[0].period,'2026-01');
+  assert.deepEqual(result.months.slice(-4).map(month=>month.total),[40,60,0,30]);
   assert.deepEqual(result.products.map(item=>[item.name,item.total,item.percentage]),[
     ['Cimento',90,69.23076923076923],['Brita',40,30.76923076923077],
   ]);
   assert.deepEqual(result.suppliers.map(item=>item.name),['Beta','Alfa']);
   assert.deepEqual(result.stages.map(item=>item.name),['Estrutura','Fundação']);
+
+  const previous=model.buildManagementExpenseTypeDashboard(snapshot,filters,{...scope,year:2024});
+  assert.equal(previous.year,2024);
+  assert.equal(previous.total,30);
+  assert.deepEqual(previous.months[0],{period:'2024-01',paid:25,forecast:0,total:25});
+  assert.deepEqual(previous.months[11],{period:'2024-12',paid:0,forecast:5,total:5});
+  assert.deepEqual(previous.products.map(item=>[item.name,item.total]),[['Cimento',25],['Brita',5]]);
+  const empty=model.buildManagementExpenseTypeDashboard(snapshot,filters,{...scope,now:new Date('2027-01-04T12:00:00Z')});
+  assert.equal(empty.year,2027);
+  assert.deepEqual(empty.years,[2026,2024,2019]);
+  assert.deepEqual(empty.products,[]);
+  assert.equal(empty.total,0);
 });
 
 test('management line multiplication preserves half-cent amounts before Brazilian money rounding',async()=>{

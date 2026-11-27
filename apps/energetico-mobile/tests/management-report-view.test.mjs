@@ -146,7 +146,9 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   const launch={...row,date:'2026-10-02',paymentDate:'2026-10-03'};
   const {view,root,dom}=setup(t,async()=>{loads++;return {
     launches:[launch,{...launch,id:'2',product:'Brita',supplier:'Beta',stage:'Estrutura',total:40},
-      {...launch,id:'3',paymentDate:'2026-09-03'}],
+      {...launch,id:'3',paymentDate:'2026-09-03'},
+      {...launch,id:'4',product:'Brita',supplier:'Histórico',date:'2024-02-01',paymentDate:'2024-02-02',total:70},
+      {...launch,id:'5',branch:'Outra filial',date:'2023-02-01',paymentDate:'2023-02-02',total:90}],
     provisions:[{id:'p1',branch:row.branch,product:'Cimento',supplier:'Beta',stage:'Estrutura',dueDate:'2026-10-20',total:30}],
     productTypes:[{product:'Cimento',expenseType:'MATERIAL'},{product:'Brita',expenseType:'MATERIAL'}],
   };});
@@ -161,21 +163,24 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   assert.equal(root.querySelector('.gm-dialog').inert,true);
   assert.match(dashboard.textContent,/MATERIAL/);
   assert.match(dashboard.textContent,/004 - EDIFÍCIO XAVANTE/);
+  const year=dashboard.querySelector('select[name="analysis-year"]');
+  assert.equal(year?.value,'2026');
+  assert.deepEqual([...year.options].map(option=>option.value),['2026','2024']);
   assert.equal(dashboard.querySelectorAll('.gm-expense-dashboard-series.is-total circle').length,12);
   const visibleValues=field=>[...dashboard.querySelectorAll(
     `.gm-expense-dashboard-series.is-${field}:not([hidden]) .gm-dashboard-value-label:not([hidden])`
   )].map(label=>label.textContent);
   assert.deepEqual(visibleValues('total'),['95']);
-  assert.deepEqual(visibleValues('paid').slice(-2),['25','65']);
+  assert.deepEqual(visibleValues('paid').filter(value=>value!=='0'),['25','65']);
   const paidLegend=dashboard.querySelector('.gm-dashboard-legend-item.is-paid');
   paidLegend.click();
-  assert.deepEqual(visibleValues('total').slice(-2),['25','95']);
+  assert.deepEqual(visibleValues('total').filter(value=>value!=='0'),['25','95']);
   paidLegend.click();
   assert.deepEqual(visibleValues('total'),['95']);
   const monthDetail=dashboard.querySelector('.gm-expense-dashboard-month-detail');
   assert.ok(monthDetail);
   const trend=dashboard.querySelector('.gm-expense-dashboard-trend');
-  const september=trend.querySelector('.gm-expense-dashboard-series.is-total [data-month-index="10"]');
+  const september=trend.querySelector('.gm-expense-dashboard-series.is-total [data-month-index="8"]');
   trend.dispatchEvent(new dom.window.MouseEvent('pointermove',{bubbles:true,clientX:Number(september.getAttribute('cx'))}));
   assert.equal(monthDetail.dataset.month,'2026-09');
   const octoberPaid=[...dashboard.querySelectorAll('.gm-expense-dashboard-series.is-paid circle')]
@@ -186,12 +191,24 @@ test('clicar no nome do tipo abre dashboard acima do relatório e fechar retorna
   assert.deepEqual([...dashboard.querySelectorAll('.gm-expense-dashboard-ranking h3')].map(node=>node.textContent),
     ['Principais produtos','Principais fornecedores','Principais etapas']);
   assert.equal(dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent.replace(/\u00a0/g,' '),'R$ 120,00');
+  year.focus();
+  year.value='2024';
+  year.dispatchEvent(new dom.window.Event('change',{bubbles:true}));
+  assert.equal(dom.window.document.activeElement,year);
+  assert.match(dashboard.querySelector('.gm-expense-dashboard-trend-card h3').textContent,/2024/);
+  assert.equal(dashboard.querySelector('.gm-dashboard-month-label').textContent,'jan/24');
+  assert.deepEqual([...dashboard.querySelectorAll('.gm-expense-dashboard-metric strong')]
+    .map(metric=>metric.textContent.replace(/\s/g,'')),['R$70,00','R$70,00','R$0,00']);
+  assert.deepEqual([...dashboard.querySelectorAll('.is-suppliers .gm-dashboard-rank-name')].map(node=>node.textContent),['Histórico']);
   dashboard.querySelector('.gm-expense-dashboard-close').click();
   assert.equal(root.querySelector('.gm-expense-dashboard-backdrop').hidden,true);
   assert.equal(root.querySelector('.gm-dialog').inert,false);
   assert.equal(root.ownerDocument.activeElement,focused);
   assert.equal(loads,1);
   assert.equal(expandButton.getAttribute('aria-expanded'),'false');
+  typeButton.click();
+  assert.equal(year.value,'2026');
+  dashboard.querySelector('.gm-expense-dashboard-close').click();
   expandButton.click();
   assert.equal(expandButton.getAttribute('aria-expanded'),'true');
 });
@@ -399,6 +416,8 @@ test('nome do fornecedor abre o gráfico da filial e preserva a expansão de lan
       { ...october, id: '4', supplier: 'Alfa Serviços', total: 600 },
       { ...october, id: '5', supplier: 'ALFA', total: 700 },
       { ...october, id: '6', product: 'Areia', total: 800 },
+      { ...october, id: '7', date: '2024-10-01', paymentDate: '2024-10-02', total: 19 },
+      { ...october, id: '8', date: '2023-10-01', paymentDate: '2023-10-02', product: 'Areia', total: 20 },
     ],
     provisions: [provision, { ...provision, id: '9', paidDate: '2026-10-09', total: 900 }],
     productTypes: [],
@@ -430,8 +449,13 @@ test('nome do fornecedor abre o gráfico da filial e preserva a expansão de lan
     .map(metric => metric.textContent.replace(/\s/g, '')), ['R$100,00', 'R$66,00', 'R$34,00']);
   const paid = dashboard.querySelector('.gm-expense-dashboard-series.is-paid');
   assert.equal(paid.querySelectorAll('circle').length, 12);
-  assert.match(paid.querySelector('circle[data-month-index="10"]').getAttribute('aria-label'), /set\/26: R\$\s*41,00/);
-  assert.match(paid.querySelector('circle[data-month-index="11"]').getAttribute('aria-label'), /out\/26: R\$\s*25,00/);
+  assert.match(paid.querySelector('circle[data-month-index="8"]').getAttribute('aria-label'), /set\/26: R\$\s*41,00/);
+  assert.match(paid.querySelector('circle[data-month-index="9"]').getAttribute('aria-label'), /out\/26: R\$\s*25,00/);
+  const year = dashboard.querySelector('select[name=analysis-year]');
+  assert.deepEqual([...year.options].map(option => option.value), ['2026','2024']);
+  year.value = '2024';
+  year.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.match(dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent, /19,00/);
 
   dashboard.querySelector('button').click();
   assert.equal(dashboard.hidden, true);
@@ -439,6 +463,29 @@ test('nome do fornecedor abre o gráfico da filial e preserva a expansão de lan
   assert.equal(toggle.getAttribute('aria-expanded'), 'true');
   assert.equal(scroll.scrollTop, 120);
   assert.equal(product.value, row.product);
+});
+
+test('análise inicia no ano atual vazio e só permite escolher o ano com dispêndio', async t => {
+  const { view, root, dom } = setup(t, async () => ({
+    launches: [{ ...row, date: '2024-10-01', paymentDate: '2024-10-02' }],
+    productTypes: [],
+    provisions: [],
+  }));
+  await view.open();
+  const reportYear = root.querySelector('[name=year]');
+  reportYear.value = '2024';
+  reportYear.dispatchEvent(new dom.window.Event('change'));
+  root.querySelector('[data-section=expense] [data-expense-type]').click();
+  const dashboard = root.querySelector('.gm-expense-dashboard');
+  const year = dashboard.querySelector('select[name=analysis-year]');
+  const total = () => dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent.replace(/\s/g, '');
+  assert.equal(year.value, '2026');
+  assert.deepEqual([...year.options].filter(option => !option.disabled).map(option => option.value), ['2024']);
+  assert.equal(total(), 'R$0,00');
+  year.value = '2024';
+  year.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+  assert.equal(total(), 'R$25,00');
+  assert.equal(reportYear.value, '2024');
 });
 
 for (const [section, field, subject, breakdown, totals, september] of [
@@ -497,7 +544,7 @@ for (const [section, field, subject, breakdown, totals, september] of [
       .map(metric => metric.textContent.replace(/\s/g, '')), totals);
     const paid = [...dashboard.querySelectorAll('.gm-expense-dashboard-series.is-paid circle')];
     assert.equal(paid.length, 12);
-    assert.equal(paid[10].getAttribute('aria-label').replace(/\s+/g, ' '), `Pago em set/26: R$ ${september}`);
+    assert.equal(paid[8].getAttribute('aria-label').replace(/\s+/g, ' '), `Pago em set/26: R$ ${september}`);
     assert.equal(dashboard.querySelectorAll('.gm-expense-dashboard-ranking.is-stages').length,
       field === 'stage' ? 0 : 1);
 
