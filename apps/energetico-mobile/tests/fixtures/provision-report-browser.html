@@ -73,6 +73,7 @@ try {
     await waitForPdf(boletoName);
     const viewport=get('.attachment-preview-pdf-viewport'),status=get('.attachment-preview-status');
     const pdfRatio=viewport.clientHeight/dialog.clientHeight;
+    const {top,bottom}=dialog.getBoundingClientRect(),dialogBounds={top,bottom};
     const titleInfo={text:title.textContent,fullName:title.title,height:title.offsetHeight};
     const layout={
       horizontal:dialog.offsetWidth>dialog.offsetHeight,
@@ -95,7 +96,7 @@ try {
     const returns=!dialog.open&&!root.hidden&&document.activeElement===trigger&&reportScroll.scrollTop===before;
     if(params.has('capture')){trigger.click();await waitForPdf(boletoName);}
     document.documentElement.dataset.layout=JSON.stringify({
-      pdfRatio,titleInfo,layout,secondPageVisible,nextWorks,startsAtTop,returns,exported,mirroredName,boletoName,
+      pdfRatio,dialogBounds,titleInfo,layout,secondPageVisible,nextWorks,startsAtTop,returns,exported,mirroredName,boletoName,
     });
   }else{
   const rect=node=>{

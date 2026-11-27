@@ -456,7 +456,9 @@ export function createAttachmentPreview({
     session.progressTask.complete();
     session.previewReady = true;
     const badge = session.loader.querySelector('[role="progressbar"]');
-    if (['nfe-report-pdf', 'provision-report-pdf'].includes(session.layout)) badge?.setAttribute('data-preview-complete', '');
+    if (session.layout === 'nfe-report-pdf' || (session.layout === 'provision-report-pdf' && session.kind === 'pdf')) {
+      badge?.setAttribute('data-preview-complete', '');
+    }
     if (session.layout === 'payslip-report-pdf') {
       reportMeta.replaceChildren(badge, documentRef.createTextNode(` ${message}`));
       reportMeta.hidden = false;

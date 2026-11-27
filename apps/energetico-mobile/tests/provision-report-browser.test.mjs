@@ -17,7 +17,7 @@ test('provision PDFs with long mirrored names give most of the screen to the doc
   const capture=process.env.PROVISION_PDF_CAPTURE_DIR;
   try{
     await server.listen();
-    for(const [width,height,safeAreaInsets] of [[1280,589],[568,320],[844,390,{left:47,right:47,bottom:21}],[390,844]]){
+    for(const [width,height,safeAreaInsets] of [[1280,589],[568,320],[844,390,{left:47,right:47,bottom:21}],[390,844,{top:59,bottom:34}]]){
       const {stdout,screenshot}=await runBrowserLayout(browser,{
         width,height,safeAreaInsets,captureScreenshot:Boolean(capture),
         url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/provision-report-browser.html?grouped&attachment${capture?'&capture':''}`,
@@ -33,6 +33,7 @@ test('provision PDFs with long mirrored names give most of the screen to the doc
       assert.equal(result.titleInfo.text,result.boletoName,detail);
       assert.equal(result.titleInfo.fullName,result.mirroredName,detail);
       assert.ok(result.titleInfo.height<=22,detail);
+      if(height>width)assert.ok(result.dialogBounds.top>=safeAreaInsets.top-1&&result.dialogBounds.bottom<=height-safeAreaInsets.bottom+1,detail);
       assert.ok(result.secondPageVisible&&result.nextWorks&&result.startsAtTop&&result.returns,detail);
       assert.deepEqual(result.exported,[result.mirroredName],detail);
       t.diagnostic(`${width}×${height}: document uses ${Math.round(result.pdfRatio*100)}% of the viewer height`);

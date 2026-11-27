@@ -158,6 +158,10 @@
     height: 100vw;
     transform: translate(-50%, -50%) rotate(90deg);
   }
+  .attachment-preview-dialog[data-layout="provision-report-pdf"] {
+    top: calc(50% + (env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2);
+    width: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
 }
 .attachment-preview-dialog[data-compact-report-pdf]::backdrop { background: #091c2745; }
 .attachment-preview-dialog[data-compact-report-pdf] .attachment-preview-header { padding: 4px 8px; gap: 8px; }
