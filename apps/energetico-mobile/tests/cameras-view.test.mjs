@@ -117,11 +117,14 @@ test('câmera off-line sem horário conhecido informa que ainda não há histór
 });
 
 test('identifica um canal sem sinal quando outro canal da câmera está on-line, mesmo fora do visual', async t => {
-  const { document } = setup(t, { accountKey: 'conta', catalog: [
-    { id: 'cam-1', label: 'Portão', cameraGroup: 'cam-1', status: 'offline' },
-    { id: 'cam-2', label: 'Pátio', cameraGroup: 'cam-1', status: 'online' },
-    { id: 'cam-3', label: 'Outra câmera', status: 'offline' },
-  ] });
+  const { document } = setup(t, { accountKey: 'conta',
+    catalog: [
+      { id: 'cam-1', label: 'Portão', cameraGroup: 'cam-1', status: 'offline' },
+      { id: 'cam-2', label: 'Pátio', cameraGroup: 'cam-1', status: 'online' },
+      { id: 'cam-3', label: 'Outra câmera', status: 'offline' },
+    ],
+    startError: ({ id }) => id === 'cam-1' ? new Error('Não foi possível abrir o canal') : null,
+  });
   document.defaultView.localStorage.setItem('energetico:camera-visual:v1:conta',
     JSON.stringify([{ name: 'Visual 1', cameraIds: ['cam-1', 'cam-3'] }]));
   await flush();
@@ -130,7 +133,10 @@ test('identifica um canal sem sinal quando outro canal da câmera está on-line,
   assert.equal(open.querySelector('[data-camera-status]').textContent, 'Canal sem sinal');
   assert.match(open.getAttribute('aria-label'), /canal sem sinal/i);
   open.click();
-  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Canal sem sinal');
+  await flush();
+  const header = document.querySelector('.cameras-player__live-state');
+  assert.equal(header.textContent, 'Canal sem sinal');
+  assert.equal(header.dataset.state, 'group');
   document.querySelector('[data-camera-player-back]').click();
 
   document.querySelector('[data-camera-tab="visuals"]').click();
@@ -185,6 +191,47 @@ test('reclassifica a queda da câmera física na grade conforme seus canais falh
 
   first.closest('.cameras-player__tile').querySelector('.cameras-player__focus').click();
   assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Canal sem sinal');
+});
+
+test('atualiza a lista e o visual quando vence a evidência de um canal fora da tela', async t => {
+  const timerControl = { cleared: [] };
+  const { document } = setup(t, { timerControl, catalog: [
+    { id: 'cam-1', label: 'Portão', cameraGroup: 'cam-1', status: 'offline' },
+    { id: 'cam-2', label: 'Pátio', cameraGroup: 'cam-1', status: 'offline' },
+  ] });
+  const { defaultView: window } = document;
+  Object.defineProperty(document, 'hidden', { value: false });
+  let now = 120_000;
+  window.Date.now = () => now;
+  await flush();
+  document.querySelector('[data-camera-open="cam-2"]').click();
+  document.querySelector('[data-camera-video="cam-2"]').dispatchEvent(new window.Event('playing'));
+  document.querySelector('[data-camera-player-back]').click();
+
+  const cardStatus = () => document.querySelector('[data-camera-open="cam-1"] [data-camera-status]').textContent;
+  assert.equal(cardStatus(), 'Canal sem sinal');
+  now += 60_001;
+  timerControl.callback();
+  await flush();
+  assert.equal(cardStatus(), 'OFF-LINE');
+  assert.equal(document.activeElement.dataset.cameraOpen, 'cam-2');
+
+  document.querySelector('[data-camera-grid]').click();
+  document.querySelector('[data-camera-select="cam-1"]').click();
+  document.querySelector('[data-camera-select="cam-2"]').click();
+  document.querySelector('[data-camera-open-grid]').click();
+  const second = document.querySelector('[data-camera-video="cam-2"]');
+  second.dispatchEvent(new window.Event('playing'));
+  const header = document.querySelector('.cameras-player__live-state');
+  now += 60_001;
+  timerControl.callback();
+  assert.equal(header.textContent, '1/2 ao vivo');
+  assert.equal(document.querySelector('.cameras-player__status').textContent, 'Canal sem sinal');
+  second.closest('.cameras-player__tile').querySelector('[data-camera-dismiss]').click();
+  assert.equal(header.textContent, 'Canal sem sinal');
+  now += 60_001;
+  timerControl.callback();
+  assert.equal(header.textContent, 'OFF-LINE');
 });
 
 test('oculta câmeras off-line e ao vivo sem reabrir os outros vídeos ou editar o visual salvo', async t => {

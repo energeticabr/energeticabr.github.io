@@ -105,6 +105,7 @@ export function createCamerasView(documentRef) {
     const selected = new Set();
     const thumbnails = new Map();
     const liveChannelSeenAt = new Map();
+    const windowRef = documentRef.defaultView;
 
     function rememberLiveVideo(item) {
       if (item.cameraGroup && item.mode === 'live' && item.connected) {
@@ -116,7 +117,21 @@ export function createCamerasView(documentRef) {
       const seenAt = liveChannelSeenAt.get(channelId);
       return seenAt !== undefined && windowRef.Date.now() - seenAt < CAMERA_STATUS_REFRESH_MS;
     }
-    const windowRef = documentRef.defaultView;
+
+    function expireLiveVideoEvidence() {
+      if (documentRef.hidden || !liveChannelSeenAt.size) return;
+      const cutoff = windowRef.Date.now() - CAMERA_STATUS_REFRESH_MS;
+      let expired = false;
+      for (const [channelId, seenAt] of liveChannelSeenAt) {
+        if (seenAt > cutoff) continue;
+        liveChannelSeenAt.delete(channelId);
+        expired = true;
+      }
+      if (!expired) return;
+      playback[0]?.updateHeader?.();
+      if (activeTab === 'cameras') renderUpdatedChannels();
+    }
+
     const android = /\bAndroid\b/i.test(windowRef.navigator.userAgent);
     const storagePrefix = thumbnailStoragePrefix(accountKey);
     const nameStoragePrefix = cameraNameStoragePrefix(accountKey);
@@ -663,6 +678,18 @@ export function createCamerasView(documentRef) {
       });
     }
 
+    function renderUpdatedChannels() {
+      const focused = documentRef.activeElement;
+      const focusedOpenId = focused?.dataset?.cameraOpen;
+      const focusedSelectId = focused?.dataset?.cameraSelect;
+      render();
+      if (focused === gridButton && !gridButton.hidden) gridButton.focus({ preventScroll: true });
+      else if (focusedOpenId && activeTab === 'cameras' && !creatingVisual) Array.from(dialog.querySelectorAll('[data-camera-open]'))
+        .find(button => button.dataset.cameraOpen === focusedOpenId)?.focus({ preventScroll: true });
+      else if (focusedSelectId && activeTab === 'cameras' && choosing) Array.from(dialog.querySelectorAll('[data-camera-select]'))
+        .find(input => input.dataset.cameraSelect === focusedSelectId)?.focus({ preventScroll: true });
+    }
+
     async function refreshChannels({ initial = false } = {}) {
       if (page.signal.aborted || player || (!initial && documentRef.hidden) || refreshing) return;
       refreshing = true;
@@ -677,10 +704,6 @@ export function createCamerasView(documentRef) {
         cameraLoadError = '';
         camerasLoaded = true;
         if (changed) {
-          const focused = documentRef.activeElement;
-          const focusedOpenId = focused?.dataset?.cameraOpen;
-          const focusedSelectId = focused?.dataset?.cameraSelect;
-          const focusGrid = focused === gridButton;
           cameraGroups = nextGroups;
           channels = flatNextChannels;
           for (const id of selected) if (!channels.some(channel => channel.id === id)) selected.delete(id);
@@ -692,12 +715,7 @@ export function createCamerasView(documentRef) {
           status.textContent = creatingVisual ? 'Selecione até 8 câmeras para este visual.'
             : activeTab === 'visuals' ? savedVisualStatus()
               : channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.';
-          render();
-          if (focusGrid && !gridButton.hidden) gridButton.focus({ preventScroll: true });
-          else if (focusedOpenId && activeTab === 'cameras' && !creatingVisual) Array.from(dialog.querySelectorAll('[data-camera-open]'))
-            .find(button => button.dataset.cameraOpen === focusedOpenId)?.focus({ preventScroll: true });
-          else if (focusedSelectId && activeTab === 'cameras' && choosing) Array.from(dialog.querySelectorAll('[data-camera-select]'))
-            .find(input => input.dataset.cameraSelect === focusedSelectId)?.focus({ preventScroll: true });
+          renderUpdatedChannels();
         }
       } catch (error) {
         if (!camerasLoaded && !page.signal.aborted) {
@@ -741,6 +759,8 @@ export function createCamerasView(documentRef) {
     }
     function stopPlayer({ restoreFocus = true, preserveReturnFocus = false } = {}) {
       const hadPlayer = Boolean(player);
+      const refreshCatalog = hadPlayer && !preserveReturnFocus && activeTab === 'cameras'
+        && (liveChannelSeenAt.size > 0 || playback.some(item => item.cameraGroup));
       clearBackgroundTimer();
       stopLeaseRenewal();
       saveCurrentThumbnails();
@@ -757,7 +777,7 @@ export function createCamerasView(documentRef) {
       playerSuspended = false;
       player?.remove(); player = null;
       for (const node of background) node.inert = false;
-      if (thumbnailsChanged) {
+      if (thumbnailsChanged || refreshCatalog) {
         thumbnailsChanged = false;
         render();
       }
@@ -778,6 +798,7 @@ export function createCamerasView(documentRef) {
       stopLeaseRenewal();
       gridRequest?.abort(); gridRequest = null;
       for (const item of playback) {
+        rememberLiveVideo(item);
         clearOfflineDeadline(item);
         item.controller.abort();
         if (item.searchController) {
@@ -877,6 +898,7 @@ export function createCamerasView(documentRef) {
     }
     function pageHidden() { saveCurrentThumbnails(); suspendPlayer(); }
     function resumeCameraView() {
+      expireLiveVideoEvidence();
       resumePlayer();
       if ((activeTab === 'visuals' || pendingLegacyVisuals) && !documentRef.hidden) void refreshVisuals();
     }
@@ -905,6 +927,7 @@ export function createCamerasView(documentRef) {
       }
     }
     function showWaiting(item, reconnecting) {
+      if (item.played) rememberLiveVideo(item);
       item.connected = false;
       item.connectionState = reconnecting ? 'waiting' : 'connecting';
       item.failureLabel = '';
@@ -1326,7 +1349,7 @@ export function createCamerasView(documentRef) {
           const offline = item.offline && (!members || members.every(channel => {
             const current = itemsById.get(channel.id);
             if (current?.mode === 'live') {
-              return current.offline || (channel.status === 'offline' && !liveChannelSeenAt.has(channel.id));
+              return current.offline || (channel.status === 'offline' && !current.connected && !hasRecentLiveVideo(channel.id));
             }
             return channel.status === 'offline' && !hasRecentLiveVideo(channel.id);
           }));
@@ -1349,7 +1372,7 @@ export function createCamerasView(documentRef) {
                 : playback.some(item => !item.offline && item.connectionState === 'waiting') ? 'Reconectando…' : 'Conectando…');
         liveState.dataset.mode = count === 1 && first.mode === 'playback' ? 'playback' : 'live';
         liveState.dataset.connected = String(playback.every(item => item.connectionState === 'playing'));
-        liveState.dataset.state = allOffline ? 'error' : count === 1 ? first.connectionState : 'group';
+        liveState.dataset.state = allOffline ? 'error' : count === 1 && !first.offline ? first.connectionState : 'group';
       }
       playback.forEach(item => { item.updateHeader = updateHeader; });
 
@@ -1563,6 +1586,7 @@ export function createCamerasView(documentRef) {
       if (pendingLegacyVisuals || activeTab === 'visuals') void refreshVisuals();
     });
     if (windowRef?.setInterval) refreshTimer = windowRef.setInterval(() => {
+      expireLiveVideoEvidence();
       void refreshChannels();
       void renewPlayingCameras();
       if ((activeTab === 'visuals' || pendingLegacyVisuals) && !documentRef.hidden) void refreshVisuals();
