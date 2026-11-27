@@ -97,8 +97,9 @@ class CameraGatewayTest(unittest.TestCase):
         duplicate = json.loads(self.request("POST", CATALOG, "owner", {**legacy, "occurrence": 1})[2])["visual"]
         self.assertNotEqual(duplicate["id"], visual["id"])
         self.assertEqual(duplicate["cameraIds"], legacy["cameraIds"])
+        self.assertEqual(self.request("POST", CATALOG, "owner", {**legacy, "name": "\u0085"})[0], 200)
         for invalid in [{"cameraIds": ["ch-1", "ch-1"]}, {"cameraIds": ["INVALID"]}, {"name": " "},
-                        {"occurrence": True}, {"name": "\ud800"}]:
+                        {"occurrence": True}, {"name": "\ud800"}, {"name": "\ufeff"}]:
             with self.subTest(invalid=invalid):
                 self.assertEqual(self.request("POST", CATALOG, "owner", {**legacy, **invalid})[0], 400)
 

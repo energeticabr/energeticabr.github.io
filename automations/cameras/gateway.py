@@ -28,6 +28,8 @@ MEDIA_ROUTE = re.compile(rf"{MEDIA}/([A-Za-z0-9_-]{{43}})/({MEDIA_FILE.pattern})
 CHANNEL_ID = re.compile(r"[a-z0-9-]{1,48}")
 VISUAL_ID = re.compile(r"(?:[a-f0-9]{32}|[a-f0-9]{64})")
 VISUAL_ACTIONS = {"list-visuals", "create-visual", "import-visual", "rename-visual"}
+# Match the whitespace accepted by the app's String.trim(), including for legacy names.
+VISUAL_BLANK = re.compile(r"[\t-\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*")
 CHANNEL_LABEL_SUFFIX = re.compile(r"\s*[·•–—-]\s*canal\s+\d+\s*$", re.IGNORECASE)
 GRAPH_ME = "https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,userType"
 MAX_STREAMS = 8
@@ -52,7 +54,7 @@ class PlaybackError(Exception):
 
 
 def visual_name(value):
-    if not isinstance(value, str) or not value.strip() or len(value.encode("utf-16-le")) > 240:
+    if not isinstance(value, str) or VISUAL_BLANK.fullmatch(value) or len(value.encode("utf-16-le")) > 240:
         raise ValueError("invalid visual name")
     return value
 

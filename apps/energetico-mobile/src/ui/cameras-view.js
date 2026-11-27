@@ -82,6 +82,7 @@ export function createCamerasView(documentRef) {
     let activeTab = 'cameras', creatingVisual = false, camerasLoaded = false, visuals = [];
     let visualRefresh, visualSyncError = false, visualsLoaded = !listVisuals, savingVisual = false;
     let pendingLegacyVisuals = false;
+    let cameraLoadError = '';
     let cameraOrientationBinding = null;
     let nameEditor = null, nameEditorReturnFocus = null, nameEditorChannelId = null;
     let visualNameEditor = null, visualNameEditorReturnFocus = null;
@@ -139,51 +140,66 @@ export function createCamerasView(documentRef) {
     }
 
     async function migrateVisuals() {
-      if (!visualStorageKey || !importVisual) return;
+      const imported = [];
+      if (!visualStorageKey || !importVisual) return { imported, pending: [] };
       let storage, snapshot;
       try {
         storage = windowRef?.localStorage;
         snapshot = storage?.getItem(visualStorageKey);
-      } catch { return; }
+      } catch { return { imported, pending: [] }; }
       if (!snapshot) {
         pendingLegacyVisuals = false;
-        return;
+        return { imported, pending: [] };
       }
+      const legacy = parseVisuals(snapshot);
       const occurrences = new Map();
-      for (const visual of parseVisuals(snapshot)) {
+      for (const visual of legacy) {
         const key = JSON.stringify(visual);
         const occurrence = occurrences.get(key) ?? 0;
         occurrences.set(key, occurrence + 1);
-        await importVisual({ ...visual, occurrence }, { signal: page.signal });
-        if (page.signal.aborted) return;
+        try {
+          imported.push(await importVisual({ ...visual, occurrence }, { signal: page.signal }));
+        } catch { break; }
+        if (page.signal.aborted) break;
       }
-      try {
-        if (storage.getItem(visualStorageKey) === snapshot) {
-          storage.removeItem(visualStorageKey);
-          pendingLegacyVisuals = false;
-        }
-      } catch { /* Retrying the same import does not duplicate it. */ }
+      const pending = legacy.slice(imported.length);
+      if (!pending.length && !page.signal.aborted) {
+        try {
+          if (storage.getItem(visualStorageKey) === snapshot) {
+            storage.removeItem(visualStorageKey);
+            pendingLegacyVisuals = false;
+          }
+        } catch { /* Retrying the same import does not duplicate it. */ }
+      }
+      return { imported, pending };
     }
 
     function savedVisualStatus() {
+      if (cameraLoadError) return cameraLoadError;
       if (visualSyncError) return 'Não foi possível sincronizar os visuais. Tente novamente em instantes.';
+      if (!camerasLoaded) return 'Carregando câmeras…';
       if (visuals.length) return '';
-      return visualsLoaded && camerasLoaded ? 'Nenhum visual salvo.' : 'Carregando visuais…';
+      return visualsLoaded ? 'Nenhum visual salvo.' : 'Carregando visuais…';
     }
 
     function refreshVisuals() {
       if (!listVisuals || page.signal.aborted || player || savingVisual || visualNameEditor) return;
       if (visualRefresh) return visualRefresh;
       visualRefresh = (async () => {
-        let next;
-        let failed = false;
-        try {
-          await migrateVisuals();
-          if (page.signal.aborted) return;
-          next = await listVisuals({ signal: page.signal });
-        } catch { failed = true; }
+        const { imported, pending } = await migrateVisuals();
         if (page.signal.aborted) return;
-        const changed = next && JSON.stringify(next) !== JSON.stringify(visuals);
+        let next;
+        let failed = pending.length > 0;
+        try {
+          next = await listVisuals({ signal: page.signal });
+        } catch {
+          failed = true;
+          next = [...new Map([...visuals.filter(visual => visual.id), ...imported]
+            .map(visual => [visual.id, visual])).values()];
+        }
+        if (page.signal.aborted) return;
+        next = [...next, ...pending];
+        const changed = JSON.stringify(next) !== JSON.stringify(visuals);
         const updateStatus = changed || failed !== visualSyncError || !visualsLoaded;
         visualSyncError = failed;
         visualsLoaded = true;
@@ -398,7 +414,7 @@ export function createCamerasView(documentRef) {
       const error = editor.querySelector('[role="alert"]');
       const cancel = editor.querySelector('[data-camera-visual-cancel]');
       const submit = form.querySelector('[type="submit"]');
-      let newId;
+      let newVisual;
       if (original) input.value = original.name;
       visualNameEditor = editor;
       visualNameEditorReturnFocus = trigger;
@@ -427,9 +443,16 @@ export function createCamerasView(documentRef) {
           if (original) {
             saved = await renameVisual({ id: original.id, name, previousName: original.name }, options);
           } else {
-            newId ??= Array.from(windowRef.crypto.getRandomValues(new Uint8Array(16)),
-              byte => byte.toString(16).padStart(2, '0')).join('');
-            saved = await createVisual({ id: newId, name, cameraIds }, options);
+            newVisual ??= {
+              id: Array.from(windowRef.crypto.getRandomValues(new Uint8Array(16)),
+                byte => byte.toString(16).padStart(2, '0')).join(''),
+              name,
+              cameraIds,
+            };
+            saved = await createVisual(newVisual, options);
+            if (saved.name !== name) {
+              saved = await renameVisual({ id: saved.id, name, previousName: newVisual.name }, options);
+            }
           }
         } catch (failure) {
           if (page.signal.aborted) return;
@@ -517,6 +540,7 @@ export function createCamerasView(documentRef) {
           details.append(make('span', 'camera-visual-card__count', `${visual.cameraIds.length} ${visual.cameraIds.length === 1 ? 'câmera' : 'câmeras'}`));
           const openButton = make('button', 'camera-visual-card__open', 'Abrir visual');
           openButton.type = 'button'; openButton.dataset.cameraVisualOpen = String(index);
+          openButton.disabled = !camerasLoaded;
           openButton.setAttribute('aria-label', `Abrir visual ${visual.name}`);
           openButton.addEventListener('click', () => openVisual(visual, openButton));
           card.append(details, openButton);
@@ -619,6 +643,7 @@ export function createCamerasView(documentRef) {
         const flatNextChannels = nextGroups.flat();
         const initial = !camerasLoaded;
         const changed = initial || !sameChannels(flatNextChannels);
+        cameraLoadError = '';
         camerasLoaded = true;
         if (changed) {
           const focused = documentRef.activeElement;
@@ -644,7 +669,10 @@ export function createCamerasView(documentRef) {
             .find(input => input.dataset.cameraSelect === focusedSelectId)?.focus({ preventScroll: true });
         }
       } catch (error) {
-        if (initial && !page.signal.aborted) status.textContent = error.message || 'Não foi possível carregar as câmeras.';
+        if (!camerasLoaded && !page.signal.aborted) {
+          cameraLoadError = error.message || 'Não foi possível carregar as câmeras.';
+          status.textContent = cameraLoadError;
+        }
       } finally {
         refreshing = false;
       }
@@ -1337,7 +1365,8 @@ export function createCamerasView(documentRef) {
     dialog.querySelector('[data-camera-back]').addEventListener('click', close);
     cameraTab.addEventListener('click', () => {
       activeTab = 'cameras'; creatingVisual = false; choosing = false; selected.clear();
-      status.textContent = camerasLoaded ? channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.' : 'Carregando câmeras…';
+      status.textContent = camerasLoaded ? channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.'
+        : cameraLoadError || 'Carregando câmeras…';
       render();
     });
     visualsTab.addEventListener('click', () => {

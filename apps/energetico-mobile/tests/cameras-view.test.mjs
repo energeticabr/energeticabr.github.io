@@ -48,11 +48,12 @@ test('importa o visual do aparelho de origem e o exibe em outro sem armazenament
   const key = 'energetico:camera-visual:v1:conta';
   const localVisual = { name: 'Portão e pátio', cameraIds: ['site-4', 'site-2'] };
   const imported = { ...localVisual, id: 'a'.repeat(64) };
+  const alreadyShared = { id: 'b'.repeat(32), name: 'Obra', cameraIds: ['site-1'] };
   let online = false;
   let saved = [];
   let imports = 0;
   const visualService = {
-    listVisuals: async () => saved,
+    listVisuals: async () => [...saved, alreadyShared],
     importVisual: async (visual, options) => {
       imports++;
       assert.deepEqual(visual, { ...localVisual, occurrence: 0 });
@@ -70,6 +71,8 @@ test('importa o visual do aparelho de origem e o exibe em outro sem armazenament
   assert.ok(storage.getItem(key), 'preserva o visual se a importação falhar');
   online = true;
   origin.document.querySelector('[data-camera-tab="visuals"]').click();
+  assert.deepEqual([...origin.document.querySelectorAll('[data-camera-visual-card] strong')].map(node => node.textContent),
+    [alreadyShared.name, localVisual.name]);
   await flush();
   assert.equal(imports, 2);
   assert.equal(storage.getItem(key), null);
@@ -988,6 +991,48 @@ test('não salva nome vazio nem confirma quando o servidor rejeita o visual', as
   assert.equal(attempts.length, 1);
   assert.match(editor.querySelector('[role="alert"]').textContent, /não foi possível salvar/i);
   assert.equal(document.querySelectorAll('[data-camera-visual-card]').length, 0);
+});
+
+test('retoma a criação sem duplicar se a resposta se perder e o nome for corrigido', async t => {
+  let saved;
+  const visualService = {
+    listVisuals: async () => saved ? [saved] : [],
+    createVisual: async visual => {
+      if (saved) {
+        assert.deepEqual(visual, saved);
+        return saved;
+      }
+      saved = visual;
+      throw new Error('Resposta perdida');
+    },
+    renameVisual: async ({ id, name, previousName }) => {
+      assert.equal(id, saved.id);
+      assert.equal(previousName, saved.name);
+      saved = { ...saved, name };
+      return saved;
+    },
+  };
+  const { document } = setup(t, { accountKey: 'conta', visualService });
+  await flush();
+  document.querySelector('[data-camera-tab="visuals"]').click();
+  document.querySelector('[data-camera-create-visual]').click();
+  document.querySelector('[data-camera-select="site-1"]').click();
+  document.querySelector('[data-camera-open-grid]').click();
+  const editor = document.querySelector('[data-camera-visual-editor]');
+  const input = editor.querySelector('[data-camera-visual-name]');
+  const submit = () => editor.querySelector('[data-camera-visual-form]').dispatchEvent(
+    new document.defaultView.Event('submit', { bubbles: true, cancelable: true }),
+  );
+  input.value = 'Entrada';
+  submit();
+  await flush();
+  assert.match(editor.querySelector('[role="alert"]').textContent, /não foi possível salvar/i);
+  input.value = 'Entrada da obra';
+  submit();
+  await flush();
+  assert.equal(document.querySelector('[data-camera-visual-editor]'), null);
+  assert.equal(document.querySelector('[data-camera-visual-card] strong').textContent, 'Entrada da obra');
+  assert.equal(document.querySelectorAll('[data-camera-visual-card]').length, 1);
 });
 
 test('informa quando membros do visual estão indisponíveis e abre os demais', async t => {
