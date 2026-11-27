@@ -92,7 +92,8 @@ export function createManagementReportView({document:doc=globalThis.document,dat
   function openSpendingDashboard(buildDashboard, group, button) {
     if(root.hidden||!snapshot||destroyed)return;
     reportPosition={top:content.scrollTop,left:content.scrollLeft};
-    spendingDashboard.open(buildDashboard(snapshot,selected(),{...group,now:now()}),button);
+    const source=snapshot, filters=selected(), openedAt=now();
+    spendingDashboard.open(year=>buildDashboard(source,filters,{...group,now:openedAt,year}),button);
   }
   function productCell(tr,product,branch,kind) {
     const td=cell(tr,'name','');

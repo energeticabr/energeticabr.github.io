@@ -27,7 +27,9 @@ test('gráfico de despesas preenche a largura e conserva os valores legíveis ao
         assert.ok(layout.valueHeight >= 14 && layout.monthHeight >= 14 && layout.rankSize >= 13, details);
         assert.ok(layout.noOverlap && layout.detailVisible && layout.months === 12 && layout.resized > 65, details);
         assert.match(layout.lastLabel, /137,2\s+mil/);
-        assert.match(layout.detail.replace(/\u00a0/g, ' '), /nov\/26.*R\$ 137\.200,00/);
+        assert.match(layout.detail.replace(/\u00a0/g, ' '), /dez\/26.*R\$ 137\.200,00/);
+        assert.ok(layout.yearFits && layout.yearRetainedFocus, details);
+        assert.equal(layout.switchedYear, 'jan/24', details);
         assert.deepEqual(layout.equalMonthLabels, ['paid'], details);
         assert.equal(layout.sharedColor, 'rgb(0, 0, 0)', details);
         assert.deepEqual(layout.differentMonthColors, ['rgb(48, 84, 150)', 'rgb(20, 108, 67)'], details);
