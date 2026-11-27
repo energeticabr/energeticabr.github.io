@@ -1,5 +1,9 @@
+import json
+import subprocess
+import sys
 import unittest
 from io import BufferedReader, BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -11,6 +15,67 @@ class CaptureError(Exception):
 
 
 class CameraSourceTest(unittest.TestCase):
+    def test_adapter_exits_after_the_source_ends_while_its_control_pipe_is_still_open(self):
+        fixture = """
+import sys
+import threading
+import time
+from types import ModuleType, SimpleNamespace
+
+import icsee_source
+
+def module(name):
+    result = ModuleType(name)
+    sys.modules[name] = result
+    return result
+
+module("xmplayer")
+core = module("xmplayer.core")
+core.legacy_api = module("xmplayer.core.legacy_api")
+core.legacy_api.RpsLiveChain = SimpleNamespace(run=lambda *args, **kwargs: None)
+core.service = module("xmplayer.core.service")
+core.service.MonitorCaptureError = RuntimeError
+module("xmplayer.config")
+module("xmplayer.config.loader").load_monitor_config = SimpleNamespace
+module("xmplayer.media")
+module("xmplayer.media.live_hevc").LiveXStreamHevcAssembler = SimpleNamespace
+
+received = threading.Event()
+directions = []
+class Queue:
+    def enqueue_pulse(self, direction, **kwargs):
+        directions.append(direction)
+        if len(directions) == 2:
+            received.set()
+module("xmplayer.core.ptz").PtzCommandQueue = Queue
+
+def end_source(*args, **kwargs):
+    assert received.wait(3)
+    print(",".join(directions), file=sys.stderr, flush=True)
+    time.sleep(0.1)
+core.service.run_monitor_live_stream = end_source
+
+icsee_source.install_transport = lambda *args: None
+icsee_source.main()
+"""
+        settings = {"cloudId": "fixture", "channel": 0, "tlsPins": {}, "username": "", "password": ""}
+        frames = [settings, {"move": "left"}, {"move": "right"}]
+        pipe_data = b"".join(json.dumps(frame).encode() + b"\n" for frame in frames)
+        child = subprocess.Popen([sys.executable, "-B", "-c", fixture],
+                                 cwd=Path(__file__).parent, stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        with child:
+            try:
+                child.stdin.write(pipe_data)
+                child.stdin.flush()
+                status = child.wait(timeout=8)
+                errors = child.stderr.read().decode(errors="replace")
+                self.assertEqual(status, 0, errors)
+                self.assertEqual(errors.strip(), "left,right")
+            finally:
+                if child.poll() is None:
+                    child.kill()
+
     def test_motion_reader_keeps_commands_prefetched_with_the_initial_settings_line(self):
         stream = BufferedReader(BytesIO(b'{"cloudId":"AB12345678"}\n{"move":"left"}\n'))
         self.assertEqual(stream.readline(), b'{"cloudId":"AB12345678"}\n')
