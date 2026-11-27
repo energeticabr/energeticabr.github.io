@@ -158,6 +158,7 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
             labelPoint = paidPlot.points[index];
           }
           const { label, width: labelWidth } = labelPoint;
+          label.classList.toggle('is-shared', labelPoint !== point);
           const labelY = valueLabelOffsets.map(offset => y - 10 + offset).find(candidate =>
             candidate >= 16 && candidate <= bottom + 16 && !occupied.some(other =>
               Math.abs(other.x - x) < (other.width + labelWidth) / 2 + 4 && Math.abs(other.y - candidate) < 19));
