@@ -34,6 +34,7 @@ test('gráfico de despesas preenche a largura e conserva os valores legíveis ao
         assert.equal(layout.sharedColor, 'rgb(0, 0, 0)', details);
         assert.deepEqual(layout.differentMonthColors, ['rgb(48, 84, 150)', 'rgb(20, 108, 67)'], details);
         assert.deepEqual([layout.totalOnlyColor, layout.paidOnlyColor], layout.differentMonthColors, details);
+        assert.equal(layout.selectedRankVisible, true, details);
       } finally {
         dom.window.close();
       }

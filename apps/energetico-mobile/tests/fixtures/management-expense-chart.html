@@ -12,6 +12,7 @@
   import '../../src/ui/management-report.css';
   import { bindReportLandscape } from '../../src/ui/report-landscape.js';
   import { createManagementExpenseTypeDashboardView } from '../../src/ui/management-expense-type-dashboard-view.js';
+  import { buildManagementRankingDashboard } from '../../src/chat/spending-reports-model.js';
 
   const root = document.querySelector('main');
   bindReportLandscape(root);
@@ -120,10 +121,26 @@
   paidLegend.click();
   const totalOnlyColor = getComputedStyle(pointLabel(crowdedChart, 'total', 3)).fill;
 
+  const launches = Array.from({ length: 9 }, (_, index) => ({
+    branch: 'Xavante', stage: 'Obra', product: 'Cimento', supplier: `Fornecedor ${index + 1}`,
+    paymentDate: index === 8 ? '2026-10-01' : '2026-09-01', total: index === 8 ? 1 : 100 + index,
+  }));
+  dashboard.open((year = 2026, chartFilter) =>
+    buildManagementRankingDashboard({ launches }, {}, { branch: 'Xavante', field: 'stage', name: 'Obra', year, chartFilter }));
+  root.querySelector('.is-total [data-month-index="9"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  const deepRank = () => root.querySelector('[data-chart-option="supplier:Fornecedor 9"]');
+  deepRank().scrollIntoView({ block: 'center', behavior: 'instant' });
+  deepRank().click();
+  const selectedBounds = deepRank().getBoundingClientRect();
+  const visibleBounds = root.querySelector('.gm-expense-dashboard-scroll').getBoundingClientRect();
+  const selectedRankVisible = document.activeElement === deepRank() &&
+    selectedBounds.left >= visibleBounds.left - 1 && selectedBounds.right <= visibleBounds.right + 1 &&
+    selectedBounds.top >= visibleBounds.top - 1 && selectedBounds.bottom <= visibleBounds.bottom + 1;
+
   document.documentElement.dataset.layout = JSON.stringify({
     coverage: drawnWidth / cardWidth, valueHeight, monthHeight, noOverlap, rankSize,
     lastLabel, detail: detail.textContent, detailVisible, resized: drawnWidth - resized, months: monthsLabels.length,
     equalMonthLabels, sharedColor, differentMonthColors, paidOnlyColor, totalOnlyColor,
-    yearFits, switchedYear, yearRetainedFocus,
+    yearFits, switchedYear, yearRetainedFocus, selectedRankVisible,
   });
 </script>
