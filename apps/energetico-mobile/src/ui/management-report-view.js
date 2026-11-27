@@ -3,7 +3,7 @@ import { addReportCloseControl } from './report-close-control.js';
 import {
   buildSpendingReport9, buildManagementProductDetail,
   buildManagementRankingBreakdown, buildManagementRankingLaunchMonths, buildManagementExpenseTypeDashboard,
-  buildManagementRankingDashboard, buildManagementProductPurchaseAnalytics,
+  buildManagementRankingDashboard, buildManagementProductPurchaseAnalytics, buildManagementBranchDashboard,
 } from '../chat/spending-reports-model.js';
 import {
   createManagementProductDetailView, formatDetailDate, formatDetailQuantity, formatDetailUnit,
@@ -94,6 +94,18 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     reportPosition={top:content.scrollTop,left:content.scrollLeft};
     const source=snapshot, filters=selected(), openedAt=now();
     spendingDashboard.open((year,chartFilter)=>buildDashboard(source,filters,{...group,now:openedAt,year,chartFilter}),button);
+  }
+  function branchDashboardCell(tr,branch,span=1,className='') {
+    const td=cell(tr,'branch',branch,span,className);
+    const button=make('button','gm-branch-link',branch);button.type='button';
+    button.setAttribute('aria-haspopup','dialog');
+    button.setAttribute('aria-label',`Analisar gastos da filial ${branch}`);
+    button.addEventListener('click',event=>{
+      event.stopPropagation();
+      openSpendingDashboard(buildManagementBranchDashboard,{branch},button);
+    });
+    td.replaceChildren(button);
+    return td;
   }
   function productCell(tr,product,branch,kind) {
     const td=cell(tr,'name','');
@@ -198,7 +210,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
       let branchCell;
       branch.expenseTypes.forEach((group,index)=>{
         const tr=make('tr');
-        if(index===0)branchCell=cell(tr,'branch',branch.name,branch.expenseTypes.length+1,'gm-branch');
+        if(index===0)branchCell=branchDashboardCell(tr,branch.name,branch.expenseTypes.length+1,'gm-branch');
         const nameCell=cell(tr,'name',group.name);
         const label=make('div','gm-expense-label');
         const toggle=make('button','gm-expense-toggle');toggle.type='button';
@@ -243,7 +255,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     const branches=table('branches','TOTAL GASTO ACUMULADO POR FILIAL',
       ['FILIAL','PAGO','PREVISTO','% DO TOTAL DO MÊS','TOTAL GERAL'],[32,16,16,16,20]);
     for(const branch of result.expenseBranches){
-      const tr=make('tr');cell(tr,'branch',branch.name);
+      const tr=make('tr');branchDashboardCell(tr,branch.name);
       const share=branch.total==null||result.summary.total==null?null:result.summary.total===0?0:branch.total/result.summary.total*100;
       expenseAmounts(tr,{...branch,percentage:share},result.comparisonPeriod);branches.append(tr);
     }
@@ -262,7 +274,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
         let branchCell;
         groups.forEach((group,index)=>{
           const tr=make('tr');
-          if(index===0)branchCell=cell(tr,'branch',branch.name,groups.length+1,'gm-branch');
+          if(index===0)branchCell=branchDashboardCell(tr,branch.name,groups.length+1,'gm-branch');
           if(withQuantity)productCell(tr,group.name,branch.name,'launches');
           else {
             const name=cell(tr,'name',group.name);

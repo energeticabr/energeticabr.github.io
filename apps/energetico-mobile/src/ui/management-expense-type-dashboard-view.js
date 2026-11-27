@@ -256,8 +256,9 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
   }
   function render(data){
     trendObserver?.disconnect();trendObserver=undefined;
-    title.textContent=data.name??data.expenseType;subtitle.textContent=data.branch;
-    const subject={supplier:'do fornecedor',stage:'da etapa',account:'da conta'}[data.field]??'do tipo de despesa';
+    title.textContent=data.name??data.expenseType;
+    subtitle.textContent=data.branch;subtitle.hidden=data.field==='branch';
+    const subject={supplier:'do fornecedor',stage:'da etapa',account:'da conta',branch:'da filial'}[data.field]??'do tipo de despesa';
     dialog.setAttribute('aria-label',`Análise ${subject}`);
     closeButton.setAttribute('aria-label',`Fechar análise ${subject}`);
     const metrics=make('section','gm-expense-dashboard-metrics');

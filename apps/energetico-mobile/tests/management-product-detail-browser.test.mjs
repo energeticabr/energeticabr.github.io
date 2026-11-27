@@ -21,7 +21,7 @@ test('popup do produto e detalhes dos rankings cabem no celular e PC',{timeout:1
       const dom=new JSDOM(stdout);
       try {
         const result=JSON.parse(dom.window.document.documentElement.dataset.layout);
-        assert.deepEqual(result,{rows:32,forecastOrange:true,paidOrange:false,
+        assert.deepEqual(result,{rows:32,branchAnalysis:true,branchFocus:true,forecastOrange:true,paidOrange:false,
           subtotals:[['TOTAL DO MÊS','63','','R$ 822,50'],['TOTAL DO MÊS','2','','R$ 25,25']],
           inside:true,fillsReportHeight:true,closeHit:true,scrolls:true,overflow:false,
           backgroundInert:true,preciseUnit:true,returned:true,sameDOM:true,sameScroll:true,focus:true,

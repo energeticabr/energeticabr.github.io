@@ -367,6 +367,13 @@ export function buildManagementRankingDashboard(snapshot, filters = {},
   return Object.freeze({ branch, field, name, ...buildManagementSpendingDashboard(rows, year, chartFilter, field) });
 }
 
+export function buildManagementBranchDashboard(snapshot, filters = {},
+  { branch, now = new Date(), year = now.getFullYear(), chartFilter } = {}) {
+  const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "" })
+    .filter(row => equals(scalar(row.branch) || "-", branch));
+  return Object.freeze({ branch, field: "branch", name: branch, ...buildManagementSpendingDashboard(rows, year, chartFilter) });
+}
+
 function buildManagementSpendingDashboard(rows, year, chartFilter, selectedField) {
   const availableYears = new Set();
   const yearRows = [];
