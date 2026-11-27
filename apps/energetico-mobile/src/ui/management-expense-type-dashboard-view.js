@@ -246,7 +246,7 @@ export function createManagementExpenseTypeDashboardView({root,onClose=()=>{}}) 
       row.setAttribute('aria-pressed',String(chartFilter?.field===field&&chartFilter.value===item.name));
       row.setAttribute('aria-label',`${item.name}: ${money(item.total)}, ${Number.isFinite(item.percentage)?item.percentage.toLocaleString('pt-BR',{maximumFractionDigits:1}):'incompleto'} por cento`);
       row.addEventListener('click',()=>selectChart(field,item.name,key));
-      const rank=make('span','gm-dashboard-rank-number',String(index+1).padStart(2,'0'));
+      const rank=make('span','gm-dashboard-rank-number',String(item.rank??index+1).padStart(2,'0'));
       const label=make('span','gm-dashboard-rank-name',item.name);
       const track=make('span','gm-dashboard-rank-track'),bar=make('span','gm-dashboard-rank-bar');bar.style.width=`${max>0&&Number.isFinite(item.total)?Math.max(0,item.total/max*100):0}%`;bar.title=`${money(item.total)} · ${Number.isFinite(item.percentage)?item.percentage.toLocaleString('pt-BR',{maximumFractionDigits:2}):'INCOMPLETO'}%`;
       const value=make('strong','gm-dashboard-rank-value',money(item.total));

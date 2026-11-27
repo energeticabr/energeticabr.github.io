@@ -397,9 +397,15 @@ function buildManagementSpendingDashboard(rows, year, chartFilter, selectedField
   const { paid, forecast } = paymentAmounts(filteredRows);
   const total = completeSum(filteredRows, "total");
   const breakdown = field => {
-    const source = field === chartFilter?.field ? yearRows : filteredRows;
-    const denominator = source === yearRows ? completeSum(yearRows, "total") : total;
-    return Object.freeze(grouped(source, field, denominator, 8).map(item => Object.freeze(item)));
+    if (field !== chartFilter?.field) return Object.freeze(grouped(filteredRows, field, total, 8));
+    const annual = grouped(yearRows, field, completeSum(yearRows, "total"));
+    const items = annual.slice(0, 8);
+    // A month or another ranking can reveal a category outside the annual top eight.
+    const selectedRank = annual.findIndex(item => item.name === chartFilter.value);
+    if (selectedRank >= items.length) {
+      items.push(Object.freeze({ ...annual[selectedRank], rank: selectedRank + 1 }));
+    }
+    return Object.freeze(items);
   };
   const years = Object.freeze([...availableYears].sort((a, b) => b - a));
   return { year, years, total, paid, forecast, months: Object.freeze(months), products: breakdown("product"),

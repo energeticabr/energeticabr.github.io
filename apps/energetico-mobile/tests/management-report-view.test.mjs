@@ -549,6 +549,32 @@ test('os gráficos de uma etapa cruzam produto, fornecedor e mês sem mudar o es
   assert.equal(total(), 'R$10,00');
 });
 
+test('um fornecedor revelado pelo mês fica selecionável mesmo fora dos oito maiores do ano', async t => {
+  const october = { ...row, paymentDate: '2026-10-03' };
+  const { view, root, dom } = setup(t, async () => ({
+    launches: [october, ...Array.from({ length: 8 }, (_, index) => ({
+      ...october, id: String(index + 2), supplier: `Fornecedor ${index}`, paymentDate: '2026-09-03', total: 100 + index,
+    }))],
+    provisions: [],
+    productTypes: [],
+  }));
+  await view.open();
+  root.querySelector('[data-section=stages] button[aria-haspopup=dialog]').click();
+  const dashboard = root.querySelector('.gm-expense-dashboard');
+  const supplier = () => [...dashboard.querySelectorAll('.is-suppliers .gm-dashboard-rank-row')]
+    .find(button => button.querySelector('.gm-dashboard-rank-name').textContent === 'Alfa');
+  assert.equal(supplier(), undefined);
+  dashboard.querySelector('.gm-expense-dashboard-series.is-total circle[data-month-index="9"]')
+    .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  supplier().click();
+  assert.equal(supplier()?.getAttribute('aria-pressed'), 'true');
+  assert.equal(dom.window.document.activeElement, supplier());
+  assert.equal(supplier().querySelector('.gm-dashboard-rank-number').textContent, '09');
+  supplier().click();
+  assert.equal(supplier(), undefined);
+  assert.match(dashboard.querySelector('.gm-expense-dashboard-metric.is-total strong').textContent, /853,00/);
+});
+
 test('gráficos de compra de um produto cruzam fornecedor, quantidade e valor mensal', async t => {
   const october = { ...row, paymentDate: '2026-10-03' };
   const { view, root, dom } = setup(t, async () => ({
