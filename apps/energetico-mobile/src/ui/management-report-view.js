@@ -95,14 +95,14 @@ export function createManagementReportView({document:doc=globalThis.document,dat
     const source=snapshot, filters=selected(), openedAt=now();
     spendingDashboard.open((year,chartFilter)=>buildDashboard(source,filters,{...group,now:openedAt,year,chartFilter}),button);
   }
-  function branchDashboardCell(tr,branch,span=1,className='') {
-    const td=cell(tr,'branch',branch,span,className);
+  function branchDashboardCell(tr,branch,{span=1,exactBranch=false}={}) {
+    const td=cell(tr,'branch',branch,span,span>1?'gm-branch':'');
     const button=make('button','gm-branch-link',branch);button.type='button';
     button.setAttribute('aria-haspopup','dialog');
     button.setAttribute('aria-label',`Analisar gastos da filial ${branch}`);
     button.addEventListener('click',event=>{
       event.stopPropagation();
-      openSpendingDashboard(buildManagementBranchDashboard,{branch},button);
+      openSpendingDashboard(buildManagementBranchDashboard,{branch,exactBranch},button);
     });
     td.replaceChildren(button);
     return td;
@@ -210,7 +210,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
       let branchCell;
       branch.expenseTypes.forEach((group,index)=>{
         const tr=make('tr');
-        if(index===0)branchCell=branchDashboardCell(tr,branch.name,branch.expenseTypes.length+1,'gm-branch');
+        if(index===0)branchCell=branchDashboardCell(tr,branch.name,{span:branch.expenseTypes.length+1});
         const nameCell=cell(tr,'name',group.name);
         const label=make('div','gm-expense-label');
         const toggle=make('button','gm-expense-toggle');toggle.type='button';
@@ -274,7 +274,7 @@ export function createManagementReportView({document:doc=globalThis.document,dat
         let branchCell;
         groups.forEach((group,index)=>{
           const tr=make('tr');
-          if(index===0)branchCell=branchDashboardCell(tr,branch.name,groups.length+1,'gm-branch');
+          if(index===0)branchCell=branchDashboardCell(tr,branch.name,{span:groups.length+1,exactBranch:true});
           if(withQuantity)productCell(tr,group.name,branch.name,'launches');
           else {
             const name=cell(tr,'name',group.name);

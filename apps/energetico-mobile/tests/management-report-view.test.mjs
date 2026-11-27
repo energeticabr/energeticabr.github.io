@@ -85,7 +85,8 @@ test('o nome da filial abre sua análise anual a partir do acumulado e dos ranki
     branch(section).click();
     assert.equal(dashboard.hidden, false, section);
     assert.equal(root.querySelector('.gm-product-backdrop').hidden, true, section);
-    assert.deepEqual(totals(), ['R$75,00', 'R$55,00', 'R$20,00'], section);
+    assert.deepEqual(totals(), section === 'expense' ? ['R$75,00', 'R$55,00', 'R$20,00']
+      : ['R$55,00', 'R$55,00', 'R$0,00'], section);
     dashboard.querySelector('.gm-expense-dashboard-close').click();
     assert.equal(dom.window.document.activeElement, branch(section), section);
   }

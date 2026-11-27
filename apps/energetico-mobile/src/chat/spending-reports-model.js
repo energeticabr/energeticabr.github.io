@@ -368,9 +368,12 @@ export function buildManagementRankingDashboard(snapshot, filters = {},
 }
 
 export function buildManagementBranchDashboard(snapshot, filters = {},
-  { branch, now = new Date(), year = now.getFullYear(), chartFilter } = {}) {
+  { branch, exactBranch = false, now = new Date(), year = now.getFullYear(), chartFilter } = {}) {
   const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "" })
-    .filter(row => equals(scalar(row.branch) || "-", branch));
+    .filter(row => {
+      const name = scalar(row.branch) || "-";
+      return exactBranch ? name === branch : equals(name, branch);
+    });
   return Object.freeze({ branch, field: "branch", name: branch, ...buildManagementSpendingDashboard(rows, year, chartFilter) });
 }
 
