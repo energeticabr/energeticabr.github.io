@@ -26,6 +26,25 @@ class Client:
     def ensure_attachment(self,item,name,content,mime,target_list):
         self.writes.append((item,name));self.files.setdefault(item,[]).append({'filename':name,'content':content})
         if self.uncertain:raise RuntimeError('upload result unknown')
+    def _list_endpoint(self,target):
+        return 'web/lists/TestMovements'
+    def _request(self,method,endpoint,**kwargs):
+        item='items(101)'
+        name='Demonstrativo-Energetico-Sicoob-101.pdf'
+        url='/movements/Attachments/101/'+name
+        attachment=f"{self._list_endpoint(None)}/{item}/AttachmentFiles('{name}')"
+        if method=='GET' and endpoint==attachment:
+            return {'ServerRelativeUrl':url}
+        if method=='GET' and endpoint==f"web/GetFileByServerRelativeUrl('{url}')":
+            return {'ETag':'"generated-v1"'}
+        if method=='POST' and endpoint==attachment+'/$value':
+            assert kwargs['headers']['X-HTTP-Method']=='PUT'
+            assert kwargs['headers']['If-Match']=='"generated-v1"'
+            self.writes.append((101,name))
+            next(f for f in self.files[101] if f['filename']==name)['content']=kwargs['data']
+            if self.uncertain:raise RuntimeError('upload result unknown')
+            return {}
+        raise AssertionError((method,endpoint))
 
 class GeneratedReceiptTests(unittest.TestCase):
     def setUp(self):
@@ -108,11 +127,40 @@ class GeneratedReceiptTests(unittest.TestCase):
         p.mark_generated_only(c,[r]);self.assertFalse(r.get('_generated_only'))
 
     def test_changed_receiver_is_not_accepted_as_the_existing_pdf(self):
-        for changes in [{'RAZAOSOCIALRECEBEDOR':'OUTRO RECEBEDOR'},{'DOCUMENTORECEBEDOR':'98712345612'}]:
-            c=Client([row()]);self.reconcile(c,[row()])
-            changed=row(**changes);c.rows[101]=changed
+        first=row(DOCUMENTORECEBEDOR='98712345612')
+        for changes in [{'RAZAOSOCIALRECEBEDOR':'OUTRO RECEBEDOR'},{'DOCUMENTORECEBEDOR':'98712345699'}]:
+            c=Client([first]);self.reconcile(c,[first])
+            changed={**first,**changes};c.rows[101]=changed
             self.assertEqual(self.reconcile(c,[changed],[changed])['failed'],1)
             self.assertEqual(len(c.writes),1)
+
+    def test_run_repairs_provisional_pdf_after_receiver_enrichment(self):
+        provisional=row(RAZAOSOCIALRECEBEDOR='N/A',DOCUMENTORECEBEDOR=None)
+        current=row(DOCUMENTORECEBEDOR='98712345612',Attachments=True)
+        bank=row(RAZAOSOCIALRECEBEDOR='N/A',DOCUMENTORECEBEDOR=None)
+        c=Client([current])
+        old=self.render.render_receipt(provisional,PAYER)
+        original={'filename':'original.pdf','content':b'original'}
+        c.files[101]=[original,{'filename':self.sync.filename(101),'content':old}]
+        day=self.sync.FIRST_DAY
+        with (patch.object(self.sync.m,'sharepoint_client',return_value=c),
+              patch.object(self.sync.m,'assert_destination'),
+              patch.object(self.sync.boleto_stage,'list_movements',return_value=[current]),
+              patch.object(self.sync.m,'read_bank',return_value=(PAYER['conta'],{(day,day):{}})),
+              patch.object(self.sync.m,'payment_rows',return_value=[bank]),
+              patch.object(self.sync,'bank_context',return_value=(PAYER,{}))):
+            self.assertEqual(self.sync.run(check=True)['attached'],1)
+            self.assertEqual(c.files[101][1]['content'],old)
+            self.assertEqual(c.writes,[])
+            c.uncertain=True
+            self.assertEqual(self.sync.run()['attached'],1)
+            self.assertEqual(self.sync.run()['already_attached'],1)
+        self.assertEqual(c.files[101][0],original)
+        self.assertEqual(len(c.files[101]),2)
+        self.assertEqual(len(c.writes),1)
+        updated=c.files[101][1]['content']
+        self.sync.valid_existing(updated,current)
+        self.assertIn('PESSOA EXEMPLO',PdfReader(BytesIO(updated)).pages[0].extract_text())
 
     def test_pix_enrichment_rejects_competing_unidentified_rows_and_claimed_ids(self):
         eid='E'+'25536764'+'20261119'+'1223'+'ABCDEFGHIJK'
