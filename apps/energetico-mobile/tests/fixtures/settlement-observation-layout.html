@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Observação da baixa de pagamento</title>
+<link rel="stylesheet" href="../../src/styles.css">
+<main id="app"></main>
+<script type="module">
+  import { commandFromTarget, renderChatMarkup } from '../../src/ui/chat-view.js';
+
+  const root = document.querySelector('#app');
+  const shortObservation = 'Conferida';
+  const longObservation = `NF-e fictícia · Chave: ${'1234567890'.repeat(8)} ${'Observação do comprovante de pagamento. '.repeat(12)}`;
+
+  function measure(observation) {
+    const fullLabel = `MANTER OBSERVAÇÃO: ${observation}`;
+    root.innerHTML = renderChatMarkup({
+      sessionStatus: 'authenticated',
+      account: { name: 'Teste' },
+      activeFlow: { id: 'payment_settlement', title: 'APONTAR PAGAMENTO DA PROVISÃO' },
+      messages: [{
+        id: 'settlement-observation', role: 'assistant', type: 'poll',
+        question: '💬 QUAL É A OBSERVAÇÃO PARA TODOS OS ITENS DESTE DESCRITIVO?\nDigite um texto ou escolha SEM OBSERVAÇÃO.',
+        options: [
+          { id: 'choice:observacao_grupo_baixa:description_observation_keep', reply: 'description_observation_keep', label: fullLabel },
+          { id: 'choice:observacao_grupo_baixa:description_observation_blank', reply: 'description_observation_blank', label: 'SEM OBSERVAÇÃO' },
+        ],
+      }],
+    });
+
+    const keep = root.querySelector('[data-reply-id="description_observation_keep"]');
+    const blank = root.querySelector('[data-reply-id="description_observation_blank"]');
+    const bubble = keep.closest('.chat-bubble');
+    const label = keep.firstElementChild || keep;
+    const bubbleBounds = bubble.getBoundingClientRect();
+    const bubbleStyle = getComputedStyle(bubble);
+    const left = bubbleBounds.left + parseFloat(bubbleStyle.paddingLeft);
+    const right = bubbleBounds.right - parseFloat(bubbleStyle.paddingRight);
+    const labelStyle = getComputedStyle(label);
+    const lines = label.clientHeight / parseFloat(labelStyle.lineHeight);
+    return {
+      fitsCard: [keep, blank].every(button => {
+        const bounds = button.getBoundingClientRect();
+        return bounds.left >= left - 1 && bounds.right <= right + 1;
+      }),
+      fitsScreen: bubbleBounds.right <= innerWidth,
+      lines,
+      verticallyClipped: label.scrollHeight > label.clientHeight,
+      choicesOverflow: keep.parentElement.scrollWidth > keep.parentElement.clientWidth,
+      lineClamp: labelStyle.webkitLineClamp,
+      fullLabelPreserved: label.textContent === fullLabel && commandFromTarget(label)?.label === fullLabel,
+      keepReply: commandFromTarget(label)?.replyId,
+      blankReply: commandFromTarget(blank)?.replyId,
+      blankLabel: blank.textContent,
+    };
+  }
+
+  try {
+    await document.fonts.ready;
+    const short = measure(shortObservation);
+    const long = measure(longObservation);
+    document.documentElement.dataset.layout = JSON.stringify({ short, long });
+  } catch (error) {
+    document.documentElement.dataset.layout = JSON.stringify({ error: error.message });
+  }
+</script>
+</html>

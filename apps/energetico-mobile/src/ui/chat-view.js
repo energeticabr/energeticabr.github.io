@@ -833,7 +833,11 @@ function pollButton(option, busy, { deleteButton = false, deleteClass = "chat-dr
   if (replyId.trim().toLowerCase() === "document_signing_draw_signature") {
     return `<button class="chat-choice-button${toneClass}${galleryClass}${launchMenuClass}" type="button" data-action="open-signature-pad" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${formatChatText(label)}</button>`;
   }
-  return `<button class="chat-choice-button${toneClass}${galleryClass}${launchMenuClass}${suppliesClass}${diaryClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${content}</button>`;
+  const observationClass = replyId === "description_observation_keep"
+    || replyId === "choice:observacao_grupo_baixa:description_observation_keep"
+    ? " chat-choice-button--observation" : "";
+  if (observationClass) content = `<span class="chat-choice-button__observation">${content}</span>`;
+  return `<button class="chat-choice-button${toneClass}${galleryClass}${launchMenuClass}${suppliesClass}${diaryClass}${observationClass}" type="button" data-action="select-reply" data-reply-id="${escapeHtml(replyId)}" data-label="${escapeHtml(label)}"${galleryAttribute}${disabled ? " disabled" : ""}>${content}</button>`;
 }
 
 function compressionPreviewData(message) {
