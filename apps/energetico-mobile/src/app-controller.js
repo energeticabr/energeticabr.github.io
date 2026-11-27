@@ -25,7 +25,7 @@ import { recommendEffectivePaymentDate } from "./chat/launch-payment-date-option
 import { attachmentFinishOption, isDiaryAttachmentPrompt, isDocumentAttachmentPrompt } from "./chat/attachment-finish.js";
 import { isDiaryAttachmentFinalization, paintDiaryCompletion } from "./chat/diary-attachment-progress.js";
 import { audioTranscriptionText, isAudioFile, isConstructionDiaryFlow } from "./chat/audio-transcription.js";
-import { buildRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidOutOfRangeCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
+import { buildDailyRhidAttendanceTable, isRhidAttendanceDayFinalized, isValidRhidReportDate, rhidIrregularCountsByDate, rhidOutOfRangeCountsByDate, rhidUpdateLabel, shiftRhidReportDate } from "./chat/rhid-attendance-table.js";
 import { rhidMascotAmbiguousNames, rhidMascotDay, rhidMascotFilters, rhidMascotMonths, rhidMascotPageSize } from './chat/rhid-mascot-report.js';
 import { attendanceEditablePunchContext, attendanceRhidOptionContext, attendanceRhidPollEligible, attendanceValidationDate, buildAttendanceRhidBadge, isPendingAttendancePoll, pendingAttendanceDeletionContext } from "./chat/attendance-rhid-badges.js";
 import { createAttendanceIrregularityData } from './chat/attendance-irregularity-data.js';
@@ -3340,7 +3340,7 @@ export function createAppController({
         const reportDate = formatDatePickerValue(reportDay);
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
         progress.acquired();
-        const table = { ...buildRhidAttendanceTable(rows), reportDate: reportDay };
+        const table = { ...buildDailyRhidAttendanceTable(rows), reportDate: reportDay };
         table.pendingValidationCount = Number.isSafeInteger(report.pendingValidationCount) && report.pendingValidationCount >= 0
           ? report.pendingValidationCount : 0;
         const updateLabel = rhidUpdateLabel(report);
@@ -3641,7 +3641,7 @@ export function createAppController({
         const rows = Array.isArray(report.rows) ? report.rows.filter(row => row && typeof row === "object") : [];
         store.replaceMessage(id, {
           ...currentMessage,
-          detail_table: { ...currentTable, ...buildRhidAttendanceTable(rows), updateLabel: rhidUpdateLabel(report),
+          detail_table: { ...currentTable, ...buildDailyRhidAttendanceTable(rows), updateLabel: rhidUpdateLabel(report),
             adjustmentRefreshRequired: false, navigationBusy: false, navigationError: "" },
         });
       } catch {
