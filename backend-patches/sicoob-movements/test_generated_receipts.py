@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 from pypdf import PdfReader
+from reportlab.pdfgen.canvas import Canvas
 
 HERE=Path(__file__).parent
 
@@ -161,6 +162,45 @@ class GeneratedReceiptTests(unittest.TestCase):
         updated=c.files[101][1]['content']
         self.sync.valid_existing(updated,current)
         self.assertIn('PESSOA EXEMPLO',PdfReader(BytesIO(updated)).pages[0].extract_text())
+
+    def test_existing_pdf_can_have_unknown_receiver_document_sentinel(self):
+        previous=row(DOCUMENTORECEBEDOR=self.sync.m.UNKNOWN)
+        current=row(DOCUMENTORECEBEDOR='98712345612')
+        content=self.render.render_receipt(previous,PAYER)
+        self.assertTrue(self.sync.needs_receiver_refresh(content,current))
+
+    def test_refresh_refuses_pdf_with_copied_fingerprint_but_no_generated_footer(self):
+        previous=row(RAZAOSOCIALRECEBEDOR=self.sync.m.UNKNOWN)
+        current=row()
+        c=Client([current])
+        output=BytesIO()
+        pdf=Canvas(output)
+        pdf.setAuthor('Energético')
+        pdf.setKeywords(self.render.VERSION+':'+self.render.fingerprint(previous))
+        pdf.drawString(20,100,'Não emitido pelo banco.')
+        pdf.save()
+        c.files[101]=[{'filename':self.sync.filename(101),'content':output.getvalue()}]
+        self.assertEqual(self.reconcile(c,[current])['failed'],1)
+        self.assertEqual(c.writes,[])
+
+    def test_refresh_refuses_movement_changed_during_file_preflight(self):
+        previous=row(RAZAOSOCIALRECEBEDOR=self.sync.m.UNKNOWN)
+        current=row()
+        c=Client([current])
+        content=self.render.render_receipt(previous,PAYER)
+        c.files[101]=[{'filename':self.sync.filename(101),'content':content}]
+        request=c._request
+
+        def change_movement_after_file_metadata(method,endpoint,**kwargs):
+            result=request(method,endpoint,**kwargs)
+            if endpoint.startswith('web/GetFileByServerRelativeUrl'):
+                c.rows[101]['RAZAOSOCIALRECEBEDOR']='OUTRO RECEBEDOR'
+            return result
+
+        with patch.object(c,'_request',side_effect=change_movement_after_file_metadata):
+            self.assertEqual(self.reconcile(c,[current])['failed'],1)
+        self.assertEqual(c.writes,[])
+        self.assertEqual(c.files[101][0]['content'],content)
 
     def test_pix_enrichment_rejects_competing_unidentified_rows_and_claimed_ids(self):
         eid='E'+'25536764'+'20261119'+'1223'+'ABCDEFGHIJK'

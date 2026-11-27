@@ -46,25 +46,31 @@ def validate_bank(row,bank):
         if not bank_document or bank_document!=m.tax_id(row.get('DOCUMENTORECEBEDOR')):raise ValueError('Statement receiver name mismatch')
 
 
-def pdf_fingerprint(content):
+def pdf_fingerprint(content,item):
     pdf=PdfReader(BytesIO(content))
-    if len(pdf.pages)!=1 or 'Não emitido pelo banco' not in pdf.pages[0].extract_text():
+    metadata=pdf.metadata or {}
+    if len(pdf.pages)!=1 or metadata.get('/Author')!='Energético':
         raise ValueError('Generated PDF identity mismatch')
-    return (pdf.metadata or {}).get('/Keywords')
+    text=pdf.pages[0].extract_text()
+    footer=f'Fonte: Sicoob | Movimento {item}'
+    if 'Não emitido pelo banco' not in text or not any(line.strip()==footer for line in text.splitlines()):
+        raise ValueError('Generated PDF identity mismatch')
+    return metadata.get('/Keywords')
 
 
 def valid_existing(content,row):
-    if pdf_fingerprint(content)!=VERSION+':'+fingerprint(row):
+    if pdf_fingerprint(content,row['Id'])!=VERSION+':'+fingerprint(row):
         raise ValueError('Generated PDF identity mismatch')
 
 
 def needs_receiver_refresh(content,row):
-    saved=pdf_fingerprint(content)
+    saved=pdf_fingerprint(content,row['Id'])
     if saved==VERSION+':'+fingerprint(row):return False
     name=row.get('RAZAOSOCIALRECEBEDOR')
     document=row.get('DOCUMENTORECEBEDOR')
-    names=(name,None,'','N/A') if m.text(name).upper() not in ('','N/A') else (name,)
-    documents=(document,None,'') if m.tax_id(document) else (document,)
+    unknown=(None,'',m.UNKNOWN)
+    names=(name,*unknown) if m.text(name).upper() not in ('',m.UNKNOWN) else (name,)
+    documents=(document,*unknown) if m.tax_id(document) else (document,)
     for old_name in names:
         for old_document in documents:
             previous={**row,'RAZAOSOCIALRECEBEDOR':old_name,'DOCUMENTORECEBEDOR':old_document}
@@ -76,13 +82,16 @@ def generated_attachments(client,item,name):
     return [f['content'] for f in client.get_item_attachments(item,m.LIST) if f['filename']==name]
 
 
-def refresh_attachment(client,item,name,previous,content):
+def refresh_attachment(client,row,name,previous,content):
+    item=row['Id']
     endpoint=f"{client._list_endpoint(m.LIST)}/items({int(item)})/AttachmentFiles('{name}')"
     file_url=client._request('GET',endpoint)['ServerRelativeUrl'].replace("'","''")
     file_endpoint=f"web/GetFileByServerRelativeUrl('{file_url}')"
     etag=client._request('GET',file_endpoint,params={'$select':'ETag'}).get('ETag')
     if not etag or etag=='*' or generated_attachments(client,item,name)!=[previous]:
         raise ValueError('Generated attachment changed before refresh')
+    if not _same(row,client.get_item_fields(item,FIELDS,m.LIST)):
+        raise ValueError('Movement changed during PDF rendering')
     client._request('POST',endpoint+'/$value',data=content,headers={
         'Content-Type':'application/pdf','X-HTTP-Method':'PUT','If-Match':etag,
     })
@@ -131,12 +140,13 @@ def reconcile(client,rows,bank_rows=(),payer=None,*,pix_details=None,boleto_deta
             if check:
                 # Planning counts are never parsed as a successful published stage.
                 result['attached']+=1;continue
-            if not _same(row,client.get_item_fields(item,FIELDS,m.LIST)):raise ValueError('Movement changed during PDF rendering')
             try:
                 if previous is None:
+                    if not _same(row,client.get_item_fields(item,FIELDS,m.LIST)):
+                        raise ValueError('Movement changed during PDF rendering')
                     client.ensure_attachment(item,name,content,'application/pdf',target_list=m.LIST)
                 else:
-                    refresh_attachment(client,item,name,previous,content)
+                    refresh_attachment(client,row,name,previous,content)
             except Exception:
                 # Upload may have been accepted despite an uncertain response.
                 if generated_attachments(client,item,name)!=[content]:raise
