@@ -79,7 +79,8 @@ function ConvertFrom-NfseXml([string]$Text,[string]$Nsu,[string]$CompanyCnpj){
         $values=$inf.SelectSingleNode("./*[local-name()='valores']")
         if($null -eq $prest -or $null -eq $values){throw 'NFS-e incompleta: prestador ou valores ausentes.'}
         $status=Get-NfseXmlValue $inf "./*[local-name()='cStat']"
-        if($status -notin @('100','102','103','107')){throw "cStat NFS-e desconhecido: $status."}
+        # cStat 101 is the newly issued replacement NFS-e.
+        if($status -notin @('100','101','102','103','107')){throw "cStat NFS-e desconhecido: $status."}
         $f.SITUACAO='AUTORIZADA';$f.STATUS_IMPORTACAO='XML_COMPLETO';$f.STATUS_DANFE='PENDENTE_GERACAO'
         Add-NfseField $f 'CNPJ_FORNECEDOR' $prest "./*[local-name()='CNPJ' or local-name()='CPF']"
         Add-NfseField $f 'Title' $prest "./*[local-name()='xNome']"

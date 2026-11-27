@@ -147,7 +147,7 @@ def parse_fiscal_xml(raw, key, company_cnpj=COMPANY, required_environment=None):
         dps = single(invoice, 'DPS/infDPS')
         environment = text(dps, 'tpAmb')
         if (len(key) != 50 or invoice.get('Id') != 'NFS'+key
-                or text(invoice, 'cStat') not in ('100', '102', '103', '107')):
+                or text(invoice, 'cStat') not in ('100', '101', '102', '103', '107')):
             raise ValueError('INVALID_AUTHORIZATION')
         parties = [text(dps, p) for p in ['prest/CNPJ', 'toma/CNPJ', 'interm/CNPJ']]
         provider_id = text(dps, 'prest/CNPJ') or text(dps, 'prest/CPF') or text(dps, 'prest/NIF')

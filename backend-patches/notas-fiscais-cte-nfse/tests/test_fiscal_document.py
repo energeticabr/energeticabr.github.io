@@ -30,6 +30,13 @@ class FiscalDocumentTests(unittest.TestCase):
         self.assertEqual(str(doc.net), '921.50')
         self.assertEqual(doc.issued_at, '2026-10-01T23:45:59-03:00')
 
+    def test_nfse_accepts_issued_replacement_for_danfse(self):
+        raw = nfse_xml().replace(b'<cStat>100</cStat>', b'<cStat>101</cStat>')
+        doc = parse_fiscal_xml(raw, NFSE_KEY, COMPANY, required_environment='1')
+        self.assertEqual(doc.kind, 'NFSe')
+        self.assertEqual(doc.fiscal_type, 'NFS-e')
+        self.assertEqual(str(doc.amount), '1000.00')
+
     def test_company_cannot_be_taken_from_unrelated_free_text(self):
         for raw, key in [(cte_xml(), CTE_KEY), (nfse_xml(), NFSE_KEY)]:
             raw = raw.replace(COMPANY.encode(), b'11111111000111')
