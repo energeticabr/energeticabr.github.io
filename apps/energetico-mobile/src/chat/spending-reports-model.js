@@ -327,7 +327,7 @@ export function buildManagementRankingLaunchMonths(rows) {
 }
 
 export function buildManagementExpenseTypeDashboard(snapshot, filters = {},
-  { branch, expenseType, now = new Date() } = {}) {
+  { branch, expenseType, now = new Date(), year = now.getFullYear() } = {}) {
   const productTypes = new Map();
   for (const row of snapshot?.productTypes || []) {
     const product = scalar(row.product).toLocaleLowerCase("pt-BR");
@@ -336,35 +336,45 @@ export function buildManagementExpenseTypeDashboard(snapshot, filters = {},
   const typeFor = row => !row.product ? "SEM PRODUTO"
     : productTypes.get(scalar(row.product).toLocaleLowerCase("pt-BR")) || "SEM TIPO DE DESPESA";
   // This view analyzes the full selected type; the report's date and ranking filters
-  // must not silently truncate the twelve-month trend or its category shares.
+  // must not silently truncate the annual trend or its category shares.
   const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "", product: "", supplier: "", stage: "", order: "" })
     .filter(row => equals(scalar(row.branch) || "-", branch) && equals(typeFor(row), expenseType));
-  return Object.freeze({ branch, expenseType, ...buildManagementSpendingDashboard(rows, now) });
+  return Object.freeze({ branch, expenseType, ...buildManagementSpendingDashboard(rows, year) });
 }
 
 export function buildManagementRankingDashboard(snapshot, filters = {},
-  { branch, field, name, now = new Date() }) {
+  { branch, field, name, now = new Date(), year = now.getFullYear() }) {
   const rows = selectedExpenses(snapshot, { ...filters, year: "", month: "", branch: "", [field]: "" })
     .filter(row => (scalar(row.branch) || "-") === branch && (scalar(row[field]) || "-") === name);
-  return Object.freeze({ branch, field, name, ...buildManagementSpendingDashboard(rows, now, field) });
+  return Object.freeze({ branch, field, name, ...buildManagementSpendingDashboard(rows, year, field) });
 }
 
-function buildManagementSpendingDashboard(rows, now, selectedField) {
-  const current = new Date(now.getFullYear(), now.getMonth(), 1);
-  const months = Array.from({ length: 12 }, (_, index) => {
-    const date = new Date(current.getFullYear(), current.getMonth() - 11 + index, 1);
-    const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    const monthRows = rows.filter(row => (row.paymentDate || row.dueDate || "").slice(0, 7) === period);
+function buildManagementSpendingDashboard(rows, year, selectedField) {
+  const availableYears = new Set();
+  const trendRows = [];
+  const rowsByMonth = Array.from({ length: 12 }, () => []);
+  for (const row of rows) {
+    const date = row.paymentDate || row.dueDate;
+    const rowYear = Number(date.slice(0, 4));
+    const monthRows = rowsByMonth[Number(date.slice(5, 7)) - 1];
+    if (!monthRows) continue;
+    if (Number.isFinite(row.total) && row.total !== 0) availableYears.add(rowYear);
+    if (rowYear === year) {
+      trendRows.push(row);
+      monthRows.push(row);
+    }
+  }
+  const months = rowsByMonth.map((monthRows, index) => {
+    const period = `${year}-${String(index + 1).padStart(2, "0")}`;
     const paid = completeSum(monthRows.filter(row => row.paymentDate), "total");
     const forecast = completeSum(monthRows.filter(row => !row.paymentDate), "total");
     return Object.freeze({ period, paid, forecast,
       total: paid == null || forecast == null ? null : new Decimal(paid).plus(forecast).toNumber() });
   });
-  const inRange = new Set(months.map(item => item.period));
-  const trendRows = rows.filter(row => inRange.has((row.paymentDate || row.dueDate || "").slice(0, 7)));
   const total = completeSum(trendRows, "total");
   const breakdown = field => Object.freeze(grouped(trendRows, field, total, 8).map(item => Object.freeze(item)));
-  return { total, months: Object.freeze(months), products: breakdown("product"),
+  const years = Object.freeze([...availableYears].sort((a, b) => b - a));
+  return { year, years, total, months: Object.freeze(months), products: breakdown("product"),
     ...(selectedField === "supplier" ? {} : { suppliers: breakdown("supplier") }),
     ...(selectedField === "stage" ? {} : { stages: breakdown("stage") }) };
 }

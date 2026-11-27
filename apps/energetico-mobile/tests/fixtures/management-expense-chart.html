@@ -16,17 +16,21 @@
   const root = document.querySelector('main');
   bindReportLandscape(root);
   const paid = [0, 974, 1200, 547, 133, 46900, 63400, 34500, 25200, 31700, 52500, 102400];
-  const months = paid.map((value, index) => {
+  const periodFor = (year, index) => `${year}-${String(index + 1).padStart(2, '0')}`;
+  const monthsFor = year => paid.map((value, index) => {
     const forecast = index === 11 ? 34800 : 0;
-    return { period: index === 0 ? '2025-12' : `2026-${String(index).padStart(2, '0')}`,
+    return { period: periodFor(year, index),
       paid: value, forecast, total: value + forecast };
   });
   const rank = [{ name: 'CONCRETO USINADO', total: 97500, percentage: 24.7 }];
   const dashboard = createManagementExpenseTypeDashboardView({ root });
-  dashboard.open({
-    expenseType: 'MATERIAL', branch: '004 - EDIFÍCIO XAVANTE', months,
-    total: months.reduce((sum, month) => sum + month.total, 0),
-    products: rank, suppliers: rank, stages: rank,
+  dashboard.open((year = 2026) => {
+    const months = monthsFor(year);
+    return {
+      year, years: [2026, 2024], expenseType: 'MATERIAL', branch: '004 - EDIFÍCIO XAVANTE', months,
+      total: months.reduce((sum, month) => sum + month.total, 0),
+      products: rank, suppliers: rank, stages: rank,
+    };
   });
 
   const waitForLayout = async () => {
@@ -77,17 +81,29 @@
   const pointLabel = (chart, series, index) =>
     chart.querySelectorAll(`.is-${series} .gm-dashboard-value-label`)[index];
   const differentMonthColors = ['total', 'paid'].map(series => getComputedStyle(pointLabel(svg, series, 11)).fill);
+  const year = root.querySelector('select[name=analysis-year]');
+  const dialogBounds = root.querySelector('.gm-expense-dashboard').getBoundingClientRect();
+  const yearBounds = year.getBoundingClientRect();
+  const yearFits = yearBounds.width >= 34 && yearBounds.height >= 34 &&
+    yearBounds.left >= dialogBounds.left && yearBounds.right <= dialogBounds.right &&
+    yearBounds.top >= dialogBounds.top && yearBounds.bottom <= dialogBounds.bottom;
+  year.focus();
+  year.value = '2024';
+  year.dispatchEvent(new Event('change', { bubbles: true }));
+  const switchedYear = root.querySelector('.gm-dashboard-month-label').textContent;
+  const yearRetainedFocus = document.activeElement === year;
+
   const crowdedMonths = [
     [335441, 7441], [265673, 0], [319062, 160], [721837, 0], [571681, 19672], [531881, 0],
     [194166, 7128], [267269, 0], [475641, 0], [214545, 0], [412853, 10081], [125867, 0],
   ].map(([paid, forecast], index) => ({
-    period: months[index].period, paid, forecast, total: paid + forecast,
+    period: periodFor(2026, index), paid, forecast, total: paid + forecast,
   }));
-  dashboard.open({
-    expenseType: 'MATERIAL', branch: '004 - EDIFÍCIO XAVANTE', months: crowdedMonths,
+  dashboard.open(() => ({
+    year: 2026, years: [2026], expenseType: 'MATERIAL', branch: '004 - EDIFÍCIO XAVANTE', months: crowdedMonths,
     total: crowdedMonths.reduce((sum, month) => sum + month.total, 0),
     products: rank, suppliers: rank, stages: rank,
-  });
+  }));
   const crowdedChart = root.querySelector('svg');
   Object.assign(crowdedChart.style, { width: '508px', height: '190px' });
   await waitForLayout();
@@ -106,5 +122,6 @@
     coverage: drawnWidth / cardWidth, valueHeight, monthHeight, noOverlap, rankSize,
     lastLabel, detail: detail.textContent, detailVisible, resized: drawnWidth - resized, months: monthsLabels.length,
     equalMonthLabels, sharedColor, differentMonthColors, paidOnlyColor, totalOnlyColor,
+    yearFits, switchedYear, yearRetainedFocus,
   });
 </script>

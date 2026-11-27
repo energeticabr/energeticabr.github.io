@@ -103,6 +103,9 @@
 .gm-expense-dashboard-header>div { min-width:0; }
 .gm-expense-dashboard-header h2 { margin:0; color:#173b64; font-size:clamp(15px,calc(2 * var(--report-vw,1vw)),23px); overflow-wrap:anywhere; }
 .gm-expense-dashboard-header p { margin:3px 0 0; color:#5b6d80; font-size:clamp(10px,calc(1.15 * var(--report-vw,1vw)),14px); }
+.gm-expense-dashboard-actions { display:flex; flex:none; align-items:center; gap:8px; }
+.gm-expense-dashboard-year { display:flex; align-items:center; gap:5px; color:#173b64; font:bold 13px Arial,sans-serif; }
+.gm-expense-dashboard-year select { min-height:34px; padding:4px; border:1px solid #9bafc4; border-radius:6px; background:#fff; color:#173b64; font:inherit; font-size:16px; }
 .gm-expense-dashboard-close { flex:none; min-height:34px; padding:5px 14px; border:1px solid #b33a42; border-radius:6px; background:#fff; color:#9c1e2b; font:bold 13px Arial,sans-serif; cursor:pointer; }
 .gm-expense-dashboard-scroll { container-type:inline-size; min-width:0; min-height:0; flex:1; overflow:auto; overscroll-behavior:contain; padding:8px 2px 2px; }
 .gm-expense-dashboard-metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-bottom:8px; }
