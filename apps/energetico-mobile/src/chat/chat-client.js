@@ -792,6 +792,21 @@ export function createChatClient({
     }, response => parsePortalResponse(response, 'A confirmação do pagamento DDA'));
     return validateDdaPaymentReceipt(result?.ddaPaymentConfirmation, { itemId, key });
   }
+  async function scheduleDdaPayment(operation, payload = {}, { signal } = {}) {
+    if (!['list', 'quote', 'confirm', 'status'].includes(operation)) throw new Error('Operação de agendamento inválida.');
+    if (apiPrefix === '/api/demo') return { status: 'unavailable' };
+    const token = await cancellableToken(tokenProvider, signal);
+    const result = await request(chatUrl.href, {
+      method: 'POST', signal,
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, action: `dda_schedule_${operation}` }), cache: 'no-store', credentials: 'omit',
+    }, response => parsePortalResponse(response, 'O agendamento DDA'), operation !== 'confirm');
+    const schedule = result?.ddaSchedule;
+    if (!schedule || typeof schedule.status !== 'string' || (operation === 'list' && !Array.isArray(schedule.entries))) {
+      throw new Error('O servidor não confirmou a situação do agendamento.');
+    }
+    return schedule;
+  }
   function refreshDda(options) { return ddaRequest('dda_refresh', options?.requestId || null, options); }
   function getDdaRefreshStatus(requestId, options) { return ddaRequest('dda_refresh_status', requestId, options); }
   function getDdaRefreshPending(options) { return ddaRequest('dda_refresh_status', null, options, {mode:'pending'}); }
@@ -1149,6 +1164,6 @@ export function createChatClient({
     createCameraVisual: writeCameraVisual.bind(null, "create-visual"),
     importCameraVisual: writeCameraVisual.bind(null, "import-visual"),
     renameCameraVisual: writeCameraVisual.bind(null, "rename-visual"),
-    listCameraChannels, listCameraStatusEvents, startCameraPlayback, prepareCameraGrid, renewCameraPlayback, cameraPlaybackIsGone, moveCamera, listCameraRecordings, playCameraRecording, swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence,
+    listCameraChannels, listCameraStatusEvents, startCameraPlayback, prepareCameraGrid, renewCameraPlayback, cameraPlaybackIsGone, moveCamera, listCameraRecordings, playCameraRecording, swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, scheduleDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence,
   });
 }

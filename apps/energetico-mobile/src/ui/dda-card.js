@@ -61,7 +61,7 @@ export async function copyDdaText(doc,text){
  finally{area.remove();if(focused?.isConnected)focused.focus?.();}
 }
 /** Compact presentation only: never changes bank status or financial values. */
-export function renderDdaCard({document:doc,container,rowId,title,value,raw=value,now=new Date(),copyText=text=>copyDdaText(doc,text),onConfirmPayment,onCreateProvision,provisionBusy=false}){
+export function renderDdaCard({document:doc,container,rowId,title,value,raw=value,now=new Date(),copyText=text=>copyDdaText(doc,text),onConfirmPayment,onCreateProvision,provisionBusy=false,onSchedule,scheduleEntry}){
  const el=(tag,cls,text)=>{const e=doc.createElement(tag);e.className=cls;if(text!==undefined)e.textContent=text;return e;};
  const heading=el('div','rg-dda-heading');heading.append(el('strong','rg-row-title',title),el('span','rg-dda-id','ID '+rowId));container.append(heading);
  const actions=el('div','rg-dda-card-actions');
@@ -78,6 +78,12 @@ export function renderDdaCard({document:doc,container,rowId,title,value,raw=valu
   button.disabled=provisionBusy;button.setAttribute('aria-label','Criar provisão de pagamento com anexos do DDA '+rowId);
   button.addEventListener('click',()=>onCreateProvision(button));actions.append(button);
  }
+ if(onSchedule){
+  const label=scheduleEntry?'ACOMPANHAR':'AGENDAR';
+  const button=el('button','rg-dda-schedule-payment',label);button.type='button';button.dataset.ddaSchedule=String(rowId);
+  button.setAttribute('aria-label',label==='AGENDAR'?'Agendar pagamento do DDA '+rowId:'Acompanhar agendamento do DDA '+rowId);
+  button.addEventListener('click',()=>onSchedule(button));actions.append(button);
+ }
  if(actions.childNodes.length)heading.append(actions);
  const pair=(parent,field,label,symbol,cls='')=>{
   const cell=el('div','rg-dda-field '+cls);cell.dataset.field=field;
@@ -90,6 +96,13 @@ export function renderDdaCard({document:doc,container,rowId,title,value,raw=valu
  const status=pair(core,'SITUACAO','Situação','status','rg-dda-metric rg-dda-status');
  const normalized=String(value('SITUACAO')).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
  status.dataset.statusTone=/^(pago|liquidado)/.test(normalized)?'paid':/^agendado/.test(normalized)?'scheduled':/^em aberto/.test(normalized)?'open':'neutral';
+ if(scheduleEntry?.status==='scheduled'&&status.dataset.statusTone==='scheduled'){
+  status.querySelector('dd').append(el('span','rg-dda-scheduled-date',dayKey(scheduleEntry.date).split('-').reverse().join('/')));
+ }
+ if(scheduleEntry?.status==='approval'||scheduleEntry?.status==='pending'){
+  status.querySelector('dd').textContent=scheduleEntry.status==='approval'?'Aguardando assinatura':'Aguardando confirmação';
+  status.dataset.statusTone='neutral';
+ }
  container.append(core);
  if(!refused&&ddaPaidManually(raw('PGTO_CONFIRMADO'))){
   const audit=el('p','rg-dda-payment-audit','Confirmado pelo usuário');

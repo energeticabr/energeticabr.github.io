@@ -19,6 +19,7 @@ import { renderDdaCard, updateDdaDueTones, ddaTodayKey } from './dda-card.js';
 import { DDA_REFUSED_STATUS, isDdaOpenStatus } from '../chat/dda-bank-status.js';
 import { createDdaSyncReceipt } from './dda-sync-receipt.js';
 import { createDdaPaymentConfirmation } from './dda-payment-confirmation.js';
+import { createDdaSchedulingDialog } from './dda-scheduling-dialog.js';
 import { createDdaGalleryMetrics } from './dda-gallery-metrics.js';
 import { renderProvisionDescriptionCard, provisionDescriptionIcon } from './provision-description-card.js';
 import { createProvisionDescriptionDetail } from './provision-description-detail-view.js';
@@ -167,7 +168,7 @@ function knownAttachmentCount(row) {
   return null;
 }
 
-export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, refreshBank, syncMonitor, confirmPayment, onStartLaunch, onStartProvision, descriptionTimeoutMs = 30_000 } = {}) {
+export function createRegistrationGallery({ document: doc = globalThis.document, kind, data, onHome, onCreate, openMediaCollection, refreshBank, syncMonitor, confirmPayment, schedulePayment, onStartLaunch, onStartProvision, descriptionTimeoutMs = 30_000 } = {}) {
   const model = REGISTRATION_GALLERY_MODELS[kind];
   let parentNavigation = null;
   if (!model || !doc?.body || typeof data?.loadSnapshot !== "function") {
@@ -395,6 +396,42 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       ddaSnapshot = { ...ddaSnapshot, rows };
       populateFilters(); render();
     } }) : null;
+  let schedulingAllowed = false;
+  let scheduleRevision = 0;
+  const scheduleEntries = new Map();
+  const scheduleDialog = kind === 'dda' && typeof schedulePayment === 'function'
+    ? createDdaSchedulingDialog({ document: doc, host: root, request: schedulePayment, onResult: receipt => {
+      scheduleRevision++;
+      const id = String(receipt.itemId);
+      if (['none', 'rejected', 'not_sent'].includes(receipt.status)) scheduleEntries.delete(id);
+      else scheduleEntries.set(id, receipt);
+      populateFilters();
+      render();
+    } }) : null;
+
+  function scheduleForRow(row) {
+    const entry = scheduleEntries.get(String(row.id));
+    if (entry?.key !== registrationRawField(row.fields, 'CHAVE_DDA', model)) return null;
+    if (!isDdaOpenStatus(fieldValue(row.fields, 'SITUACAO', model))
+      || registrationRawField(row.fields, 'DDA_CICLO_AGENDAMENTO', model) === 'PAGO_AGENDADO') return null;
+    return entry;
+  }
+
+  function scheduleControl(row) {
+    const key = registrationRawField(row.fields, 'CHAVE_DDA', model);
+    const itemId = Number(row.id);
+    const entry = scheduleForRow(row);
+    const pending = ['pending', 'approval'].includes(entry?.status);
+    if (!schedulingAllowed || !Number.isSafeInteger(itemId) || itemId < 1 || !/^[a-f0-9]{64}$/.test(key || '')) return {};
+    const canSchedule = !entry && rowFieldValue(row, 'SITUACAO') === 'Em aberto'
+      && /^[0-9]{44}$/.test(registrationRawField(row.fields, 'CODIGO_BARRAS', model) || '')
+      && !/^(sim|s|1|true)$/i.test(String(registrationRawField(row.fields, 'BLOQUEADO', model) || '').trim());
+    return { scheduleEntry: entry, onSchedule: pending || canSchedule ? trigger => {
+      if (destroyed || root.hidden || bankController || provisionController || paymentConfirmation?.isOpen
+        || root.getAttribute('aria-busy') === 'true') return;
+      scheduleDialog.show({ itemId, key, existing: pending ? entry : null }, trigger);
+    } : undefined };
+  }
   const bankReceipt = kind === 'dda' ? createDdaSyncReceipt({ document: doc, host: root,
     format: (row, name) => rowFieldValue(row, name) || '—', onClose: () => refreshShortcut.sync() }) : null;
   const pendingBankReceipts = [];
@@ -560,6 +597,9 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       const status = fieldValue(row.fields, field, model);
       if (status !== DDA_REFUSED_STATUS
         && String(registrationRawField(row.fields, 'DDA_CICLO_AGENDAMENTO', model) ?? '').trim() === 'PAGO_AGENDADO') return 'Pago';
+      const schedule = scheduleForRow(row);
+      if (schedule?.status === 'scheduled') return 'Agendado';
+      if (schedule?.status === 'effective') return 'Pago';
       return status;
     }
     if (kind === 'provisionDescription' && field === 'STATUS') {
@@ -1069,11 +1109,11 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
         const main = el("div", "rg-row-main");
         if (kind === 'workDiary') renderWorkDiaryCardDetails({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
         else if (kind === 'asset') renderAssetGalleryCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field) });
-        else if (kind === 'dda') renderDdaCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field), raw: field => registrationRawField(row.fields, field, model),
+        else if (kind === 'dda') renderDdaCard({ document: doc, container: main, rowId: row.id, title: primary, value: field => rowFieldValue(row, field), raw: field => registrationRawField(row.fields, field, model), ...scheduleControl(row),
           onCreateProvision: typeof onStartProvision === 'function' ? () => { void startDdaProvision(row); } : undefined,
           provisionBusy: Boolean(provisionController),
           onConfirmPayment: trigger => {
-            if (destroyed || root.hidden || bankController || provisionController || root.getAttribute('aria-busy') === 'true') return;
+            if (destroyed || root.hidden || bankController || provisionController || scheduleDialog?.isOpen || root.getAttribute('aria-busy') === 'true') return;
             paymentConfirmation.show({ itemId: row.id, key: registrationRawField(row.fields, 'CHAVE_DDA', model),
               supplier: primary, amount: rowFieldValue(row, 'VALOR'), due: rowFieldValue(row, 'VENCIMENTO') }, trigger);
           } });
@@ -1286,6 +1326,17 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       page = 1;
       render();
       task.complete();
+      if (scheduleDialog) {
+        const revision = scheduleRevision;
+        void schedulePayment('list', {}, { signal: activeLoad.signal }).then(result => {
+          if (destroyed || root.hidden || current !== request || revision !== scheduleRevision || result.status !== 'available') return;
+          schedulingAllowed = true;
+          scheduleEntries.clear();
+          for (const entry of result.entries) scheduleEntries.set(String(entry.itemId), entry);
+          populateFilters();
+          render();
+        }).catch(() => {});
+      }
     } catch (error) {
       if (destroyed || root.hidden || !root.isConnected || current !== request) return;
       loadFailed = true;
@@ -1308,6 +1359,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
     provisionController = null;
     assetReport?.close();
     paymentConfirmation?.close();
+    scheduleDialog?.close();
     clearPendingBankReceipts();
     bankReceipt?.close();
     bankController?.abort();
@@ -1338,6 +1390,7 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
   }
   function navigateBack() {
     if (destroyed || root.hidden) return;
+    if (scheduleDialog?.isOpen) { scheduleDialog.dismiss(); return; }
     if (dismissGalleryOverlay(root)) return;
     hide();
     void parentNavigation?.();
@@ -1412,6 +1465,6 @@ export function createRegistrationGallery({ document: doc = globalThis.document,
       if(returnPending)returnedForManual=true;showBankNotice();await load();showBankNotice();
     },
     close: hide,
-    destroy() { searchBinding.destroy(); provisionController?.abort(); provisionController = null; unsubscribeMovements?.(); unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); clearPendingBankReceipts(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); assetReport?.destroy(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
+    destroy() { searchBinding.destroy(); provisionController?.abort(); provisionController = null; unsubscribeMovements?.(); unsubscribeFiscal?.(); unsubscribeBank?.(); paymentConfirmation?.destroy(); scheduleDialog?.close(); clearPendingBankReceipts(); bankReceipt?.destroy(); bankController?.abort(); stopDdaClock(); loadController?.abort(); assetReport?.destroy(); descriptionDetail?.destroy(); loadingScreen.destroy(); createShortcut.destroy(); refreshShortcut.destroy(); recordActions.destroy(); searchableFilters.destroy(); destroyed = true; request += 1; filterEpoch += 1; attachmentCountQueue = []; root.remove(); },
   };
 }
