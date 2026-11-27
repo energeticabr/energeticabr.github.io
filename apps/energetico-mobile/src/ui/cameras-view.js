@@ -10,6 +10,7 @@ const HEVC_MIME = 'video/mp4; codecs="hvc1.1.6.L120.B0"';
 const GRID_RECONNECT_DELAY_MS = 30_000;
 const GRID_RECONNECT_JITTER_MS = 5_000;
 const CAMERA_STATUS_REFRESH_MS = 60_000;
+const LIVE_RENEWAL_INTERVAL_MS = 5 * 60_000;
 const LIVE_WAIT_NOTICE_MS = 2_000;
 const LIVE_STALL_MS = 20_000;
 const LIVE_STABLE_MS = 30_000;
@@ -80,12 +81,13 @@ export function createCamerasView(documentRef) {
   }
 
   function open({ accountKey, list, listVisuals, createVisual, importVisual, renameVisual,
-    start, prepareGrid, move, listRecordings, playRecording }) {
+    start, prepareGrid, renewLive, playbackIsGone, move, listRecordings, playRecording }) {
     if (dialog) return true;
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
     let player, gridRequest, playback = [], playerChannels = [], channels = [], choosing = false;
     let refreshTimer = null, refreshing = false;
+    let leaseRenewal = null, nextLeaseRenewal = 0;
     let cameraGroups = [];
     let activeTab = 'cameras', creatingVisual = false, camerasLoaded = false, visuals = [];
     let visualRefresh, visualSyncError = false, visualsLoaded = !listVisuals, savingVisual = false;
@@ -695,9 +697,32 @@ export function createCamerasView(documentRef) {
       item.video.load();
     }
 
+    async function renewPlayingCameras() {
+      if (!renewLive || !player || playerSuspended || documentRef.hidden || leaseRenewal) return;
+      const now = windowRef.Date.now();
+      if (now < nextLeaseRenewal) return;
+      const urls = playback.filter(item => item.connected && item.liveUrl).map(item => item.liveUrl);
+      if (!urls.length) return;
+      const attempt = new AbortController();
+      leaseRenewal = attempt;
+      try {
+        await renewLive(urls, { signal: attempt.signal });
+        if (!attempt.signal.aborted) nextLeaseRenewal = now + LIVE_RENEWAL_INTERVAL_MS;
+      } catch {
+        // Retry on the next status tick while the current video remains attached.
+      } finally {
+        if (leaseRenewal === attempt) leaseRenewal = null;
+      }
+    }
+    function stopLeaseRenewal() {
+      leaseRenewal?.abort();
+      leaseRenewal = null;
+      nextLeaseRenewal = 0;
+    }
     function stopPlayer({ restoreFocus = true, preserveReturnFocus = false } = {}) {
       const hadPlayer = Boolean(player);
       clearBackgroundTimer();
+      stopLeaseRenewal();
       saveCurrentThumbnails();
       gridRequest?.abort(); gridRequest = null;
       for (const item of playback) {
@@ -728,6 +753,7 @@ export function createCamerasView(documentRef) {
       if (!player || playerSuspended) return;
       saveCurrentThumbnails();
       playerSuspended = true;
+      stopLeaseRenewal();
       gridRequest?.abort(); gridRequest = null;
       for (const item of playback) {
         item.controller.abort();
@@ -859,6 +885,7 @@ export function createCamerasView(documentRef) {
       if (Boolean(item.recordingId) !== Boolean(recordingId)) item.networkRetries = 0;
       item.recordingId = recordingId;
       item.mode = recordingId ? 'playback' : 'live';
+      item.liveUrl = null;
       updateSavedFrame(item);
       item.thumbnailTime = null;
       item.played = false;
@@ -926,14 +953,14 @@ export function createCamerasView(documentRef) {
       const reopenLive = previousUrl => {
         const open = item.preview && prepareGrid
           ? (id, options) => prepareGrid([id], { ...options, previousUrl })(id, options)
-          : start;
+          : (id, options) => start(id, { ...options, previousUrl });
         void connect(item, channel, null, open, { preserveViewState: true });
       };
       const retryCompatible = previousUrl => {
         item.codecs = [];
         reopenLive(previousUrl);
       };
-      function retryNetwork(resumeOfflineAttempt = false) {
+      function retryNetwork({ resumeOfflineAttempt = false, previousUrl } = {}) {
         if (item.cancelRecovery) return true;
         const pauseStarted = item.waitStartedAt ?? windowRef.Date.now();
         if (item.playingSince !== null && pauseStarted - item.playingSince >= LIVE_STABLE_MS) {
@@ -956,7 +983,7 @@ export function createCamerasView(documentRef) {
             };
             return;
           }
-          reopenLive();
+          reopenLive(previousUrl);
         }
         // Keep trying a failed tile without restarting the grid or sending bursts during an outage.
         const retryDelay = item.networkRetries > LIVE_NETWORK_RETRIES
@@ -1004,6 +1031,7 @@ export function createCamerasView(documentRef) {
           nativeHls ? null : import('hls.js'),
         ]);
         if (signal.aborted) return;
+        if (!recordingId) item.liveUrl = url;
         const failed = (network = false, { stalled = false } = {}) => {
           if (signal.aborted || item.cancelRecovery) return;
           clearWaiting(item);
@@ -1013,7 +1041,8 @@ export function createCamerasView(documentRef) {
             retryCompatible(url);
             return;
           }
-          if (!recordingId && network && (stalled || item.preview || item.played || item.networkRetries) && retryNetwork()) return;
+          if (!recordingId && network && (stalled || item.preview || item.played || item.networkRetries)
+            && retryNetwork({ previousUrl: url })) return;
           showDisconnected('Transmissão interrompida.');
         };
         item.onPlaybackError = failed;
@@ -1040,7 +1069,7 @@ export function createCamerasView(documentRef) {
         const networkUnavailable = error?.code === 'NETWORK_UNAVAILABLE' || error instanceof TypeError;
         const recoverable = networkUnavailable || [404, 408, 429, 500, 502, 503, 504].includes(error?.status);
         const offline = networkUnavailable && windowRef.navigator.onLine === false;
-        if (!recordingId && recoverable && retryNetwork(offline && item.networkRetries > 0)) return;
+        if (!recordingId && recoverable && retryNetwork({ resumeOfflineAttempt: offline && item.networkRetries > 0 })) return;
         item.connected = false; item.connectionState = 'error'; item.failureLabel = 'Falha ao conectar';
         item.liveBadge.hidden = true; item.status.dataset.loading = 'false';
         item.retry.hidden = true; item.updateControls?.(); item.updateHeader?.();
@@ -1158,6 +1187,13 @@ export function createCamerasView(documentRef) {
           item.waitingTimer = windowRef.setTimeout(() => {
             showWaiting(item, true);
             scheduleStallRecovery(item, LIVE_STALL_MS - LIVE_WAIT_NOTICE_MS);
+            if (playbackIsGone && item.liveUrl) {
+              const deadline = item.waitingTimer;
+              const { signal } = item.controller;
+              void playbackIsGone(item.liveUrl, { signal }).then(gone => {
+                if (gone && !signal.aborted && item.waitingTimer === deadline) item.onPlaybackError?.(true);
+              }).catch(() => {});
+            }
           }, LIVE_WAIT_NOTICE_MS);
         });
         video.addEventListener('error', () => {
@@ -1428,6 +1464,7 @@ export function createCamerasView(documentRef) {
     });
     if (windowRef?.setInterval) refreshTimer = windowRef.setInterval(() => {
       void refreshChannels();
+      void renewPlayingCameras();
       if ((activeTab === 'visuals' || pendingLegacyVisuals) && !documentRef.hidden) void refreshVisuals();
     }, CAMERA_STATUS_REFRESH_MS);
     return true;
