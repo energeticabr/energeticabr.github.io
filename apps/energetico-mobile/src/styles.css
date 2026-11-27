@@ -1175,6 +1175,15 @@ button.chat-rhid-attendance-card__cluster:focus-visible { outline: 3px solid #15
 .chat-audit-status--deleted { background: #fbd9d9; color: #8b2020; }
 .chat-draft-option { display: grid; grid-template-columns: minmax(0, 1fr) var(--compact-control-size); gap: 8px; align-items: stretch; }
 .chat-choice-list button, .chat-media-button { width: 100%; min-height: var(--control-height); padding: var(--control-padding-block) var(--control-padding-inline); font-size: var(--control-font-size); line-height: 1.25; }
+.chat-choice-button--observation { min-width: 0; }
+.chat-choice-button__observation {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
 .chat-draft-option .chat-draft-delete { display: grid; place-items: center; padding: 8px; border: 1px solid #c98b8b; border-radius: 14px; color: #8a2727; background: #fff8f8; font-size: 1.1rem; }
 .chat-draft-option .chat-draft-delete:hover { border-color: #9e3d3d; background: #fff0f0; }
 .chat-document-option { display: grid; grid-template-columns: var(--compact-control-size) minmax(0, 1fr); gap: 8px; align-items: stretch; }
