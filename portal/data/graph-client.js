@@ -1,3 +1,4 @@
+import { stringifyJsonWithPlainNumbers } from "./json-with-plain-numbers.js";
 import { notifyDataMutation } from './data-mutations.js';
 
 const GRAPH_ROOT = "https://graph.microsoft.com/v1.0";
@@ -65,7 +66,7 @@ function normalizeRequest(options) {
   let body = options.body;
   if (body !== undefined && body !== null && typeof body !== "string") {
     headers["Content-Type"] ||= "application/json";
-    body = JSON.stringify(body);
+    body = stringifyJsonWithPlainNumbers(body);
   }
   return { method, headers, body };
 }

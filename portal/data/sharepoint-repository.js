@@ -1,3 +1,4 @@
+import { stringifyJsonWithPlainNumbers } from "./json-with-plain-numbers.js";
 import {
   FULL_CONTROL_MASK,
   maskForPermissionNames,
@@ -687,7 +688,7 @@ function restLiteral(value) {
 function jsonRestBody(body) {
   return {
     headers: { "Content-Type": "application/json;odata=verbose" },
-    body: JSON.stringify(body),
+    body: stringifyJsonWithPlainNumbers(body),
   };
 }
 
@@ -707,7 +708,7 @@ function restWriteFields(fields) {
 function jsonRestItemBody(fields) {
   return {
     headers: { "Content-Type": "application/json;odata=nometadata" },
-    body: JSON.stringify(restWriteFields(fields)),
+    body: stringifyJsonWithPlainNumbers(restWriteFields(fields)),
   };
 }
 
