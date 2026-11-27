@@ -494,7 +494,7 @@ test('nome do fornecedor abre o gráfico da filial e preserva a expansão de lan
 
   const ranking = root.querySelector('[data-section=suppliers]');
   const dashboard = root.querySelector('.gm-expense-dashboard-backdrop');
-  const supplier = [...ranking.querySelectorAll('button[aria-haspopup=dialog]')]
+  const supplier = [...ranking.querySelectorAll('.gm-ranking-link')]
     .find(button => button.textContent === row.supplier && button.getAttribute('aria-label').includes(row.branch));
   assert.ok(supplier, 'o nome do fornecedor deve abrir o gráfico');
   const toggle = supplier.closest('tr').querySelector('.gm-expense-toggle');
@@ -566,7 +566,7 @@ test('os gráficos de uma etapa cruzam produto, fornecedor e mês sem mudar o es
     productTypes: [],
   }));
   await view.open();
-  [...root.querySelectorAll('[data-section=stages] button[aria-haspopup=dialog]')]
+  [...root.querySelectorAll('[data-section=stages] .gm-ranking-link')]
     .find(button => button.textContent === row.stage).click();
   const dashboard = root.querySelector('.gm-expense-dashboard');
   const scroll = dashboard.querySelector('.gm-expense-dashboard-scroll');
@@ -614,7 +614,7 @@ test('um fornecedor revelado pelo mês fica selecionável mesmo fora dos oito ma
     productTypes: [],
   }));
   await view.open();
-  root.querySelector('[data-section=stages] button[aria-haspopup=dialog]').click();
+  root.querySelector('[data-section=stages] .gm-ranking-link').click();
   const dashboard = root.querySelector('.gm-expense-dashboard');
   const supplier = () => [...dashboard.querySelectorAll('.is-suppliers .gm-dashboard-rank-row')]
     .find(button => button.querySelector('.gm-dashboard-rank-name').textContent === 'Alfa');
@@ -702,7 +702,7 @@ for (const [section, field, subject, breakdown, totals, september] of [
 
     const ranking = root.querySelector(`[data-section=${section}]`);
     const dashboard = root.querySelector('.gm-expense-dashboard-backdrop');
-    const button = [...ranking.querySelectorAll('button[aria-haspopup=dialog]')]
+    const button = [...ranking.querySelectorAll('.gm-ranking-link')]
       .find(button => button.textContent === row[field] && button.getAttribute('aria-label').includes(row.branch));
     assert.ok(button, `o nome ${subject} deve abrir o gráfico`);
     const toggle = button.closest('tr').querySelector('.gm-expense-toggle');
