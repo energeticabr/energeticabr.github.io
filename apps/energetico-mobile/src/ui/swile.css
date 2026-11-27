@@ -226,6 +226,21 @@
 .trancid-card-selection > input { order: -1; flex: none; margin: 0; }
 .trancid-recharge-dialog .trancid-card-amount { padding-inline: .35rem; }
 .trancid-payment { display: grid; gap: .25rem; flex: 1 1 9rem; align-self: stretch; }
+.trancid-provision .swile-dates label { flex: 0 1 20rem; }
+.trancid-provision-cards { max-height: none; }
+.trancid-provision-cards li { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.trancid-provision-cards label { display: grid; grid-column: 1 / -1; gap: .3rem; min-width: 0; }
+.trancid-provision :is(input, select) { width: 100%; min-width: 0; max-width: 100%; }
+.trancid-gallery-page .trancid-provision :is(input, select) {
+  min-height: 2.65rem;
+  border: 1px solid #cbd1dd;
+  border-radius: .5rem;
+  padding: .5rem .75rem;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+.trancid-gallery-page .trancid-order-provision { margin: .25rem .65rem .6rem; }
 .trancid-order {
   margin-bottom: .5rem;
   border: 1px solid #dce2eb;

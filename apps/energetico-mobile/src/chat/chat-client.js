@@ -739,9 +739,11 @@ export function createChatClient({
   }
   async function trancidRechargeRequest(operation, payload = {}, { signal } = {}) {
     if (apiPrefix === '/api/demo') throw new Error('A integração Trancid está disponível no ambiente da empresa.');
-    if (!['directory', 'preview', 'confirm', 'history', 'details', 'boleto'].includes(operation)) throw new TypeError('Operação Trancid inválida.');
+    if (!['directory', 'preview', 'confirm', 'history', 'details', 'boleto', 'provision_preview', 'provision'].includes(operation)) {
+      throw new TypeError('Operação Trancid inválida.');
+    }
     const token = await cancellableToken(tokenProvider, signal);
-    const readOnly = operation !== 'confirm';
+    const readOnly = !['confirm', 'provision'].includes(operation);
     try {
       const result = await request(chatUrl.href, {
         method: 'POST', signal, redirect: 'error',
@@ -752,7 +754,10 @@ export function createChatClient({
       if (!result?.trancid || typeof result.trancid !== 'object') throw new Error('A integração Trancid ainda não está disponível.');
       return result.trancid;
     } catch (error) {
-      if (!readOnly && (error.code === 'NETWORK_UNCERTAIN' || !error.status || error.status >= 500)) {
+      if (operation === 'provision' && error.code === 'NETWORK_UNCERTAIN') {
+        throw new Error('A confirmação da provisão não foi recebida. Abra a conferência novamente para retomar.', { cause: error });
+      }
+      if (operation === 'confirm' && (error.code === 'NETWORK_UNCERTAIN' || !error.status || error.status >= 500)) {
         throw Object.assign(new Error('O envio ficou sem confirmação. Confira a Galeria Trancid antes de reenviar.', { cause: error }), {
           code: 'TRANCID_CONFIRMATION_UNCERTAIN',
         });

@@ -183,7 +183,7 @@ def parse_cards(html):
     return cards
 
 
-def parse_order_report(report, order_code):
+def parse_order_report(report, order_code, *, include_card_ids=False):
     """Match the exact order and reconcile its credit rows before exposing masked details."""
     text = normalize(report)
     orders = set(re.findall(rf"(?m)^[ \t]*PEDIDO:[ \t]*({ORDER_CODE})\b", text))
@@ -221,7 +221,33 @@ def parse_order_report(report, order_code):
 
     if len(items) != int(next(iter(counts))) or sum(item["amountCents"] for item in items.values()) != cents(next(iter(totals))):
         raise PortalError("Os cartões do relatório não conferem com o valor do pedido Trancid.")
-    return [item for item in items.values() if item["amountCents"] > 0]
+    return [
+        ({**item, "id": card_id} if include_card_ids else item)
+        for card_id, item in items.items() if item["amountCents"] > 0
+    ]
+
+
+def parse_boleto_terms(report):
+    """Read the due date and document total from the labeled boleto columns."""
+    lines = report.splitlines()
+
+    def field(label, value):
+        values = set()
+        for heading, data in zip(lines, lines[1:]):
+            match = re.search(rf"(?i)(?:^|(?<=[ \t])){label}[ \t]*$", heading)
+            if match and (entry := re.fullmatch(rf"[ \t]*({value})[ \t]*", data[match.start():])):
+                # Do not accept a token cut in half at the column boundary.
+                if match.start() == 0 or not data[match.start() - 1:match.start()].strip():
+                    values.add(entry[1])
+        if len(values) != 1:
+            raise PortalError("O boleto da Trancid não confirmou um vencimento e valor únicos.")
+        return values.pop()
+
+    due = portal_date(field(r"V[ \t]*encimento", DATE))
+    total = cents(field(r"Valor[ \t]+do[ \t]+Documento", MONEY))
+    if total <= 0:
+        raise PortalError("O boleto da Trancid não confirmou o valor do documento.")
+    return due, total
 
 
 def require_tenant(form):
@@ -550,6 +576,14 @@ class Portal:
 
     def order_boleto(self, order_code):
         """Print the existing boleto for the selected corporate order."""
+        raw, _ = self._verified_boleto(order_code)
+        return raw
+
+    def order_boleto_terms(self, order_code):
+        _, report = self._verified_boleto(order_code)
+        return parse_boleto_terms(report)
+
+    def _verified_boleto(self, order_code):
         if not isinstance(order_code, str) or not re.fullmatch(ORDER_CODE, order_code):
             raise PortalError("Código de pedido da Trancid inválido.")
         url, form, order, row = self._order_row(order_code, boleto=True)
@@ -576,12 +610,13 @@ class Portal:
         if report.path != BOLETO_REPORT or len(parse_qs(report.query).get("parameters", [])) != 1:
             raise PortalError("A Trancid retornou um endereço de boleto inválido.")
         raw = self._pdf_bytes(report_url)
-        codes = set(re.findall(rf"(?i)\bPedido de Carga:[ \t]*({ORDER_CODE})\b", extract_pdf_text(raw)))
+        text = extract_pdf_text(raw)
+        codes = set(re.findall(rf"(?i)\bPedido de Carga:[ \t]*({ORDER_CODE})\b", text))
         if codes != {order_code}:
             raise PortalError("A Trancid retornou um boleto de outro pedido ou sem identificação.")
-        return raw
+        return raw, text
 
-    def order_details(self, order_code):
+    def order_details(self, order_code, *, include_card_ids=False):
         """Open the portal's read-only order report, never the order edit form."""
         if not isinstance(order_code, str) or not re.fullmatch(ORDER_CODE, order_code):
             raise PortalError("Código de pedido da Trancid inválido.")
@@ -607,7 +642,7 @@ class Portal:
             download = urljoin(url, json.loads(export[1]) + "PDF")
         except ValueError as error:
             raise PortalError("A exportação do pedido Trancid retornou um endereço inválido.") from error
-        return parse_order_report(self._pdf_text(download), order_code)
+        return parse_order_report(self._pdf_text(download), order_code, include_card_ids=include_card_ids)
 
     def _reopen_draft(self, order_code, today):
         url, form, order, row = self._order_row(order_code)
