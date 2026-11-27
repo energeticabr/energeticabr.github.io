@@ -2131,3 +2131,37 @@ test('recycleItem fails closed when a REST transport is unavailable and never se
   await assert.rejects(repository.recycleItem('company', recycleListId, '42', {eTag: '"1"'}), /REST/);
   assert.deepEqual(graph.calls, []);
 });
+
+test("POST REST e PATCH Graph enviam decimal sem expoente e preservam os tipos JSON", async () => {
+  const listId = "12345678-1234-1234-1234-123456789abc";
+  const fields = { FRETE: 5.92e-9, DESCONTO: -1e-7, GRANDE: 1.25e21, OBS: 'Texto "5.92e-9" e barra \\ com 1e+21.' };
+  const writes = [];
+  const graph = createGraphClient(async () => "synthetic-token", {
+    async fetch(url, options) {
+      if (options.method === "PATCH") {
+        writes.push(options);
+        return jsonResponse(204);
+      }
+      return jsonResponse(200, url.includes("/items/") ? { id: "3", fields } : { id: "site-id" });
+    },
+  });
+  const repository = createSharePointRepository(graph, { personal: personalRestSite, company: companyGraphSite }, {
+    restTransport: {
+      async request(_site, _path, options) {
+        writes.push(options);
+        return { ID: 3, ...fields };
+      },
+    },
+  });
+  await repository.createItem("personal", listId, fields);
+  await repository.updateItem("company", listId, "3", fields, { eTag: '"3,1"' });
+
+  assert.equal(writes.length, 2);
+  for (const { body } of writes) {
+    assert.match(body, /"FRETE":0\.00000000592[,}]/);
+    assert.match(body, /"DESCONTO":-0\.0000001[,}]/);
+    assert.match(body, /"GRANDE":1250000000000000000000[,}]/);
+    assert.deepEqual(JSON.parse(body), fields);
+  }
+  assert.equal(writes[1].headers["If-Match"], '"3,1"');
+});
