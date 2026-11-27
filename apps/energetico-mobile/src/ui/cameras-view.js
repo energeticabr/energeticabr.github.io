@@ -71,7 +71,8 @@ export function createCamerasView(documentRef) {
     } catch { /* Preview storage is optional. */ }
   }
 
-  function open({ accountKey, list, start, prepareGrid, move, listRecordings, playRecording }) {
+  function open({ accountKey, list, listVisuals, createVisual, importVisual, renameVisual,
+    start, prepareGrid, move, listRecordings, playRecording }) {
     if (dialog) return true;
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
@@ -79,6 +80,9 @@ export function createCamerasView(documentRef) {
     let refreshTimer = null, refreshing = false;
     let cameraGroups = [];
     let activeTab = 'cameras', creatingVisual = false, camerasLoaded = false, visuals = [];
+    let visualRefresh, visualSyncError = false, visualsLoaded = !listVisuals, savingVisual = false;
+    let pendingLegacyVisuals = false;
+    let cameraLoadError = '';
     let cameraOrientationBinding = null;
     let nameEditor = null, nameEditorReturnFocus = null, nameEditorChannelId = null;
     let visualNameEditor = null, visualNameEditorReturnFocus = null;
@@ -113,13 +117,13 @@ export function createCamerasView(documentRef) {
         for (const item of saved) {
           if (!item || typeof item !== 'object' || typeof item.name !== 'string'
               || !Array.isArray(item.cameraIds)) continue;
-          const name = item.name.trim();
+          const name = item.name.trim().replace(/[\uD800-\uDFFF]/gu, '\ufffd');
           if (!name || name.length > 120) continue;
           const cameraIds = [];
           for (const value of item.cameraIds) {
             if (typeof value !== 'string' && typeof value !== 'number') continue;
             const id = String(value).trim();
-            if (id && !cameraIds.includes(id)) cameraIds.push(id);
+            if (/^[a-z0-9-]{1,48}$/.test(id) && !cameraIds.includes(id)) cameraIds.push(id);
             if (cameraIds.length >= GRID_LIMIT) break;
           }
           if (cameraIds.length) valid.push({ name, cameraIds });
@@ -133,6 +137,88 @@ export function createCamerasView(documentRef) {
       try {
         return parseVisuals(windowRef?.localStorage?.getItem(visualStorageKey));
       } catch { return []; }
+    }
+
+    async function migrateVisuals() {
+      const imported = [];
+      if (!visualStorageKey || !importVisual) return { imported, pending: [] };
+      let storage, snapshot;
+      try {
+        storage = windowRef?.localStorage;
+        snapshot = storage?.getItem(visualStorageKey);
+      } catch { return { imported, pending: [] }; }
+      if (!snapshot) {
+        pendingLegacyVisuals = false;
+        return { imported, pending: [] };
+      }
+      const legacy = parseVisuals(snapshot);
+      const occurrences = new Map();
+      for (const visual of legacy) {
+        const key = JSON.stringify(visual);
+        const occurrence = occurrences.get(key) ?? 0;
+        occurrences.set(key, occurrence + 1);
+        try {
+          imported.push(await importVisual({ ...visual, occurrence }, { signal: page.signal }));
+        } catch { break; }
+        if (page.signal.aborted) break;
+      }
+      const pending = legacy.slice(imported.length);
+      if (!pending.length && !page.signal.aborted) {
+        try {
+          if (storage.getItem(visualStorageKey) === snapshot) {
+            storage.removeItem(visualStorageKey);
+            pendingLegacyVisuals = false;
+          }
+        } catch { /* Retrying the same import does not duplicate it. */ }
+      }
+      return { imported, pending };
+    }
+
+    function savedVisualStatus() {
+      if (cameraLoadError) return cameraLoadError;
+      if (visualSyncError) return 'Não foi possível sincronizar os visuais. Tente novamente em instantes.';
+      if (!camerasLoaded) return 'Carregando câmeras…';
+      if (visuals.length) return '';
+      return visualsLoaded ? 'Nenhum visual salvo.' : 'Carregando visuais…';
+    }
+
+    function refreshVisuals() {
+      if (!listVisuals || page.signal.aborted || player || savingVisual || visualNameEditor) return;
+      if (visualRefresh) return visualRefresh;
+      visualRefresh = (async () => {
+        const { imported, pending } = await migrateVisuals();
+        if (page.signal.aborted) return;
+        let next;
+        let failed = pending.length > 0;
+        try {
+          next = await listVisuals({ signal: page.signal });
+        } catch {
+          failed = true;
+          next = [...new Map([...visuals.filter(visual => visual.id), ...imported]
+            .map(visual => [visual.id, visual])).values()];
+        }
+        if (page.signal.aborted) return;
+        next = [...next, ...pending];
+        const changed = JSON.stringify(next) !== JSON.stringify(visuals);
+        const updateStatus = changed || failed !== visualSyncError || !visualsLoaded;
+        visualSyncError = failed;
+        visualsLoaded = true;
+        if (changed) {
+          const focused = documentRef.activeElement;
+          const rename = focused?.dataset.cameraVisualRename;
+          const open = focused?.dataset.cameraVisualOpen;
+          const focusedId = visuals[rename ?? open]?.id;
+          visuals = next;
+          if (activeTab === 'visuals') {
+            render();
+            const index = focusedId ? visuals.findIndex(visual => visual.id === focusedId) : -1;
+            if (index >= 0) dialog.querySelector(
+              `[data-camera-visual-${rename === undefined ? 'open' : 'rename'}="${index}"]`)?.focus({ preventScroll: true });
+          }
+        }
+        if (activeTab === 'visuals' && updateStatus) status.textContent = savedVisualStatus();
+      })().finally(() => { visualRefresh = null; });
+      return visualRefresh;
     }
 
     function loadThumbnails() {
@@ -302,6 +388,7 @@ export function createCamerasView(documentRef) {
         target?.focus({ preventScroll: true });
       }
       visualNameEditorReturnFocus = null;
+      if (restoreFocus && activeTab === 'visuals') void refreshVisuals();
     }
 
     function openVisualNameEditor(trigger, { cameraIds, visualIndex }) {
@@ -325,17 +412,21 @@ export function createCamerasView(documentRef) {
       const form = editor.querySelector('[data-camera-visual-form]');
       const input = editor.querySelector('[data-camera-visual-name]');
       const error = editor.querySelector('[role="alert"]');
+      const cancel = editor.querySelector('[data-camera-visual-cancel]');
+      const submit = form.querySelector('[type="submit"]');
+      let newVisual;
       if (original) input.value = original.name;
       visualNameEditor = editor;
       visualNameEditorReturnFocus = trigger;
       editor.addEventListener('cancel', event => {
         event.preventDefault();
         event.stopPropagation();
-        closeVisualNameEditor();
+        if (!savingVisual) closeVisualNameEditor();
       });
-      editor.querySelector('[data-camera-visual-cancel]').addEventListener('click', () => closeVisualNameEditor());
-      form.addEventListener('submit', event => {
+      cancel.addEventListener('click', () => closeVisualNameEditor());
+      form.addEventListener('submit', async event => {
         event.preventDefault();
+        if (savingVisual) return;
         error.textContent = '';
         const name = input.value.trim();
         if (!name || name.length > 120) {
@@ -343,37 +434,51 @@ export function createCamerasView(documentRef) {
           input.focus();
           return;
         }
+        savingVisual = input.disabled = cancel.disabled = submit.disabled = true;
+        let saved;
         try {
-          const storage = windowRef?.localStorage;
-          if (!visualStorageKey || !storage) throw new Error('Visual storage is unavailable.');
-          const next = parseVisuals(storage.getItem(visualStorageKey));
+          if (visualRefresh) await visualRefresh;
+          if (page.signal.aborted) return;
+          const options = { signal: page.signal };
           if (original) {
-            const current = next[visualIndex];
-            if (current?.cameraIds.length !== original.cameraIds.length
-                || original.cameraIds.some((id, index) => id !== current.cameraIds[index])) {
-              throw new Error('Visual is no longer available.');
-            }
-            next[visualIndex] = { ...current, name };
+            saved = await renameVisual({ id: original.id, name, previousName: original.name }, options);
           } else {
-            next.push({ name, cameraIds });
+            newVisual ??= {
+              id: Array.from(windowRef.crypto.getRandomValues(new Uint8Array(16)),
+                byte => byte.toString(16).padStart(2, '0')).join(''),
+              name,
+              cameraIds,
+            };
+            saved = await createVisual(newVisual, options);
+            if (saved.name !== name) {
+              saved = await renameVisual({ id: saved.id, name, previousName: newVisual.name }, options);
+            }
           }
-          storage.setItem(visualStorageKey, JSON.stringify(next));
-          visuals = next;
-        } catch {
-          error.textContent = 'Não foi possível salvar este visual neste dispositivo.';
-          input.focus();
+        } catch (failure) {
+          if (page.signal.aborted) return;
+          error.textContent = failure?.status === 409
+            ? 'Este visual foi renomeado em outro aparelho. Feche e abra a edição novamente.'
+            : 'Não foi possível salvar este visual na sua conta. Tente novamente.';
           return;
+        } finally {
+          savingVisual = input.disabled = cancel.disabled = submit.disabled = false;
+          if (error.textContent && !page.signal.aborted) input.focus();
         }
+        if (page.signal.aborted) return;
+        let index = visuals.findIndex(visual => visual.id === saved.id);
+        if (index < 0) index = visuals.length;
+        visuals[index] = saved;
         closeVisualNameEditor({ restoreFocus: false });
         creatingVisual = false;
         choosing = false;
         activeTab = 'visuals';
         selected.clear();
-        status.textContent = original ? 'Nome do visual atualizado.' : 'Visual salvo.';
+        status.textContent = original ? 'Nome do visual atualizado.' : 'Visual salvo na sua conta.';
         render();
-        const focusSelector = original ? `[data-camera-visual-rename="${visualIndex}"]`
-          : `[data-camera-visual-open="${visuals.length - 1}"]`;
+        const focusSelector = original ? `[data-camera-visual-rename="${index}"]`
+          : `[data-camera-visual-open="${index}"]`;
         dialog.querySelector(focusSelector)?.focus({ preventScroll: true });
+        void refreshVisuals();
       });
       documentRef.body.append(editor);
       editor.showModal();
@@ -428,18 +533,19 @@ export function createCamerasView(documentRef) {
           rename.setAttribute('aria-label', `Editar nome do visual ${visual.name}`);
           rename.title = 'Editar nome do visual';
           rename.innerHTML = PENCIL_ICON;
+          rename.disabled = Boolean(listVisuals && !visual.id);
           rename.addEventListener('click', () => openVisualNameEditor(rename, { visualIndex: index }));
           heading.append(make('strong', 'camera-visual-card__name', visual.name), rename);
           details.append(heading);
           details.append(make('span', 'camera-visual-card__count', `${visual.cameraIds.length} ${visual.cameraIds.length === 1 ? 'câmera' : 'câmeras'}`));
           const openButton = make('button', 'camera-visual-card__open', 'Abrir visual');
           openButton.type = 'button'; openButton.dataset.cameraVisualOpen = String(index);
+          openButton.disabled = !camerasLoaded;
           openButton.setAttribute('aria-label', `Abrir visual ${visual.name}`);
           openButton.addEventListener('click', () => openVisual(visual, openButton));
           card.append(details, openButton);
           cards.append(card);
         });
-        if (!visuals.length && camerasLoaded && !status.textContent) status.textContent = 'Nenhum visual salvo.';
         return;
       }
 
@@ -537,7 +643,7 @@ export function createCamerasView(documentRef) {
         const flatNextChannels = nextGroups.flat();
         const initial = !camerasLoaded;
         const changed = initial || !sameChannels(flatNextChannels);
-        if (initial) visuals = loadVisuals();
+        cameraLoadError = '';
         camerasLoaded = true;
         if (changed) {
           const focused = documentRef.activeElement;
@@ -553,7 +659,7 @@ export function createCamerasView(documentRef) {
             return;
           }
           status.textContent = creatingVisual ? 'Selecione até 8 câmeras para este visual.'
-            : activeTab === 'visuals' ? visuals.length ? '' : 'Nenhum visual salvo.'
+            : activeTab === 'visuals' ? savedVisualStatus()
               : channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.';
           render();
           if (focusGrid && !gridButton.hidden) gridButton.focus({ preventScroll: true });
@@ -563,7 +669,10 @@ export function createCamerasView(documentRef) {
             .find(input => input.dataset.cameraSelect === focusedSelectId)?.focus({ preventScroll: true });
         }
       } catch (error) {
-        if (initial && !page.signal.aborted) status.textContent = error.message || 'Não foi possível carregar as câmeras.';
+        if (!camerasLoaded && !page.signal.aborted) {
+          cameraLoadError = error.message || 'Não foi possível carregar as câmeras.';
+          status.textContent = cameraLoadError;
+        }
       } finally {
         refreshing = false;
       }
@@ -697,17 +806,20 @@ export function createCamerasView(documentRef) {
       cameraOrientationBinding?.destroy(); cameraOrientationBinding = null;
       documentRef.removeEventListener('visibilitychange', visibilityChanged);
       windowRef?.removeEventListener('pagehide', pageHidden);
-      windowRef?.removeEventListener('pageshow', pageShown);
+      windowRef?.removeEventListener('pageshow', resumeCameraView);
       dialog.remove(); dialog = null; closeCurrent = null;
       suspendCurrent = null; resumeCurrent = null;
       previousFocus?.focus?.();
     }
     function visibilityChanged() {
       if (documentRef.hidden) scheduleSuspension();
-      else resumePlayer();
+      else resumeCameraView();
     }
     function pageHidden() { saveCurrentThumbnails(); suspendPlayer(); }
-    function pageShown() { resumePlayer(); }
+    function resumeCameraView() {
+      resumePlayer();
+      if ((activeTab === 'visuals' || pendingLegacyVisuals) && !documentRef.hidden) void refreshVisuals();
+    }
     function clearWaiting(item) {
       if (item.waitingTimer === null) return;
       windowRef.clearTimeout(item.waitingTimer);
@@ -1239,10 +1351,10 @@ export function createCamerasView(documentRef) {
     }
     closeCurrent = close;
     suspendCurrent = scheduleSuspension;
-    resumeCurrent = resumePlayer;
+    resumeCurrent = resumeCameraView;
     documentRef.addEventListener('visibilitychange', visibilityChanged);
     windowRef?.addEventListener('pagehide', pageHidden);
-    windowRef?.addEventListener('pageshow', pageShown);
+    windowRef?.addEventListener('pageshow', resumeCameraView);
     dialog.addEventListener('cancel', event => {
       event.preventDefault();
       if (nameEditor) closeNameEditor();
@@ -1253,13 +1365,15 @@ export function createCamerasView(documentRef) {
     dialog.querySelector('[data-camera-back]').addEventListener('click', close);
     cameraTab.addEventListener('click', () => {
       activeTab = 'cameras'; creatingVisual = false; choosing = false; selected.clear();
-      status.textContent = camerasLoaded ? channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.' : 'Carregando câmeras…';
+      status.textContent = camerasLoaded ? channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.'
+        : cameraLoadError || 'Carregando câmeras…';
       render();
     });
     visualsTab.addEventListener('click', () => {
       activeTab = 'visuals'; creatingVisual = false; choosing = false; selected.clear();
-      status.textContent = camerasLoaded ? visuals.length ? '' : 'Nenhum visual salvo.' : 'Carregando câmeras…';
+      status.textContent = savedVisualStatus();
       render();
+      void refreshVisuals();
     });
     createVisualButton.addEventListener('click', () => {
       if (!channels.length) return;
@@ -1270,9 +1384,10 @@ export function createCamerasView(documentRef) {
     });
     gridCancel.addEventListener('click', () => {
       activeTab = 'visuals'; creatingVisual = false; choosing = false; selected.clear();
-      status.textContent = visuals.length ? '' : 'Nenhum visual salvo.';
+      status.textContent = savedVisualStatus();
       render();
       createVisualButton.focus({ preventScroll: true });
+      void refreshVisuals();
     });
     gridButton.addEventListener('click', () => { choosing = !choosing; selected.clear(); render(); });
     gridOpen.addEventListener('click', () => {
@@ -1283,8 +1398,17 @@ export function createCamerasView(documentRef) {
     documentRef.body.append(dialog); dialog.showModal();
     cameraOrientationBinding = reportOrientation.bindCameraPlayer(dialog);
     status.textContent = 'Carregando câmeras…';
-    Promise.resolve().then(() => refreshChannels({ initial: true }));
-    if (windowRef?.setInterval) refreshTimer = windowRef.setInterval(() => { void refreshChannels(); }, CAMERA_STATUS_REFRESH_MS);
+    Promise.resolve().then(() => {
+      if (page.signal.aborted) return;
+      visuals = loadVisuals();
+      pendingLegacyVisuals = Boolean(importVisual && visuals.length);
+      void refreshChannels({ initial: true });
+      if (pendingLegacyVisuals || activeTab === 'visuals') void refreshVisuals();
+    });
+    if (windowRef?.setInterval) refreshTimer = windowRef.setInterval(() => {
+      void refreshChannels();
+      if ((activeTab === 'visuals' || pendingLegacyVisuals) && !documentRef.hidden) void refreshVisuals();
+    }, CAMERA_STATUS_REFRESH_MS);
     return true;
   }
   return {

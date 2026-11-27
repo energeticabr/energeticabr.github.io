@@ -149,7 +149,51 @@ class CameraStatusStore:
             "INSERT OR IGNORE INTO camera_status_meta(key, value) VALUES ('event_generation', ?)",
             (uuid.uuid4().hex,),
         )
+        self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS camera_visuals (
+                viewer TEXT NOT NULL,
+                id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                camera_ids TEXT NOT NULL,
+                UNIQUE (viewer, id)
+            )
+        """)
         self._connection.commit()
+
+    @staticmethod
+    def _visual(row):
+        return {"id": row[0], "name": row[1], "cameraIds": json.loads(row[2])}
+
+    def list_visuals(self, viewer):
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT id, name, camera_ids FROM camera_visuals WHERE viewer = ? ORDER BY rowid",
+                (viewer,),
+            ).fetchall()
+        return [self._visual(row) for row in rows]
+
+    def create_visual(self, viewer, visual_id, name, camera_ids):
+        with self._lock, self._connection:
+            self._connection.execute("""
+                INSERT INTO camera_visuals(viewer, id, name, camera_ids) VALUES (?, ?, ?, ?)
+                ON CONFLICT(viewer, id) DO NOTHING
+            """, (viewer, visual_id, name, json.dumps(camera_ids)))
+            row = self._connection.execute(
+                "SELECT id, name, camera_ids FROM camera_visuals WHERE viewer = ? AND id = ?",
+                (viewer, visual_id),
+            ).fetchone()
+        return self._visual(row)
+
+    def rename_visual(self, viewer, visual_id, name, previous_name):
+        with self._lock, self._connection:
+            self._connection.execute("""
+                UPDATE camera_visuals SET name = ? WHERE viewer = ? AND id = ? AND name = ?
+            """, (name, viewer, visual_id, previous_name))
+            row = self._connection.execute(
+                "SELECT id, name, camera_ids FROM camera_visuals WHERE viewer = ? AND id = ?",
+                (viewer, visual_id),
+            ).fetchone()
+        return self._visual(row) if row else None
 
     def get(self, channel_id):
         with self._lock:
