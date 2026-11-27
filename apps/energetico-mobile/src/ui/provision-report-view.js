@@ -165,7 +165,7 @@ export function createProvisionReportView({document:doc=globalThis.document,data
         await openMediaCollection(items.map(({fileName,mimeType})=>({fileName,mimeType,source:options=>{
           signal.throwIfAborted();
           return data.downloadProvisionReportAttachment(kind,id,fileName,{...options,signal:options?.signal??signal});
-        }})),{signal,returnLabel:'Voltar ao relatório',resolveReturnFocus:()=>control.isConnected?control:panel});
+        }})),{layout:'provision-report-pdf',signal,resolveReturnFocus:()=>control.isConnected?control:panel});
       }catch{if(current())showAttachmentNotice(`Falha ao abrir os anexos ${itemLabel}. Tente novamente.`);}
       finally{if(current())control.disabled=false;}
     }
