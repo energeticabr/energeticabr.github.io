@@ -75,8 +75,11 @@ def supplier_choices(source, store):
         return ' '.join(normalize(value).split())
 
     suppliers = []
+    name_counts = {}
     for entry in store.suppliers():
         name, branch, product = [str(entry.get(field) or '').strip() for field in ('Title', 'FILIAL', 'PROFISSAO')]
+        lookup = key(name)
+        name_counts[lookup] = name_counts.get(lookup, 0) + 1
         if type(entry.get('Id')) is int and entry['Id'] > 0 and all((name, branch, product)):
             suppliers.append({'id': entry['Id'], 'name': name, 'branch': branch, 'product': product})
     suppliers.sort(key=lambda supplier: (key(supplier['name']), supplier['id']))
@@ -87,7 +90,7 @@ def supplier_choices(source, store):
     for card in source['cards']:
         name = key(card['name'])
         matches = by_name.get(name, [])
-        if len(matches) == 1:
+        if len(matches) == 1 and name_counts[name] == 1:
             cards.append({**card, 'supplierId': matches[0]})
         else:
             similar = get_close_matches(name, by_name, n=3, cutoff=0.68)

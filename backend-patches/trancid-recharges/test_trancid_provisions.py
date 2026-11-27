@@ -74,6 +74,15 @@ class ProvisionTests(unittest.TestCase):
             register(self.service, 'owner', self.identifier, '2026-12-15', {}, self.store)
         self.store.ensure.assert_not_called()
 
+    def test_an_incomplete_homonym_still_requires_an_explicit_supplier_choice(self):
+        self.store.suppliers.return_value.append(
+            {'Id': 73, 'Title': 'Colaborador', 'FILIAL': '', 'PROFISSAO': 'SERVENTE'},
+        )
+        prepared = prepare(self.service, 'owner', self.identifier, self.store)
+        self.assertIsNone(prepared['cards'][0]['supplierId'])
+        self.assertIn(71, prepared['cards'][0]['suggestedIds'])
+        self.assertNotIn(73, {entry['id'] for entry in prepared['suppliers']})
+
     def test_partial_write_resumes_with_the_edited_due_date_and_groups_cards_by_supplier(self):
         prepared = prepare(self.service, 'owner', self.identifier, self.store)
         choices = {prepared['cards'][1]['id']: 71}
