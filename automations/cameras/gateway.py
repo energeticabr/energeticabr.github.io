@@ -28,11 +28,12 @@ MEDIA_ROUTE = re.compile(rf"{MEDIA}/([A-Za-z0-9_-]{{43}})/({MEDIA_FILE.pattern})
 CHANNEL_ID = re.compile(r"[a-z0-9-]{1,48}")
 VISUAL_ID = re.compile(r"(?:[a-f0-9]{32}|[a-f0-9]{64})")
 VISUAL_ACTIONS = {"list-visuals", "create-visual", "import-visual", "rename-visual"}
+LARGE_REQUEST_ACTIONS = VISUAL_ACTIONS | {"renew-live"}
 # Match the whitespace accepted by the app's String.trim(), including for legacy names.
 VISUAL_BLANK = re.compile(r"[\t-\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*")
 CHANNEL_LABEL_SUFFIX = re.compile(r"\s*[·•–—-]\s*canal\s+\d+\s*$", re.IGNORECASE)
 GRAPH_ME = "https://graph.microsoft.com/v1.0/me?$select=id,userPrincipalName,userType"
-MAX_STREAMS = 8
+MAX_STREAMS = 16
 MAX_STARTING_PREVIEWS = 3
 MAX_STARTING_WITH_SLOW_PREVIEWS = 4
 SLOW_PREVIEW_SECONDS = 8
@@ -287,7 +288,12 @@ class Gateway:
 
     def camera_visuals(self, viewer, action, data):
         if action == "list-visuals":
-            return {"visuals": self.status_store.list_visuals(viewer)}
+            # Older clients reject the entire list if a visual has more than eight channels.
+            max_camera_ids = data.get("maxCameraIds", 8)
+            if type(max_camera_ids) is not int or max_camera_ids < 1:
+                raise ValueError("invalid visual camera limit")
+            visuals = self.status_store.list_visuals(viewer)
+            return {"visuals": [visual for visual in visuals if len(visual["cameraIds"]) <= max_camera_ids]}
 
         name = visual_name(data.get("name"))
         visual_id = data.get("id")
@@ -779,7 +785,7 @@ def handler_for(gateway):
                 if not isinstance(data, dict):
                     raise ValueError("request type")
                 action = data.get("action")
-                if not isinstance(action, str) or (size > 1024 and action not in VISUAL_ACTIONS):
+                if not isinstance(action, str) or (size > 1024 and action not in LARGE_REQUEST_ACTIONS):
                     raise ValueError("invalid action or request size")
                 viewer = gateway.authorize(self.headers.get("Authorization", ""))
                 offered = data.get("codecs")

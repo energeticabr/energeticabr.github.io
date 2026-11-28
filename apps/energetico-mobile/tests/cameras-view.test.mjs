@@ -1020,27 +1020,28 @@ test('movimenta a câmera ao vivo e abre gravação da data escolhida', async t 
   video.dispatchEvent(new Event('playing'));
   assert.equal(document.querySelector('[data-camera-move="up"]').disabled, false);
 });
-test('grade seleciona até oito câmeras e abre todas simultaneamente', async t => {
+test('grade seleciona até dezesseis câmeras e abre todas simultaneamente', async t => {
   const lastImage = 'data:image/jpeg;base64,AAAA';
   const storage = new Map([['energetico:camera-preview:v1:owner:site-2', lastImage]]);
   const { document, starts, grids } = setup(t, {
     useGrid: true, accountKey: 'owner', storage: { getItem: key => storage.get(key) },
+    catalog: Array.from({ length: 17 }, (_, index) => ({ id: `site-${index + 1}`, label: `Obra ${index + 1}` })),
   }); await flush();
   document.querySelector('[data-camera-grid]').click();
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 16; i++) {
     document.querySelectorAll('[data-camera-select]')[i].click();
   }
-  assert.equal(document.querySelectorAll('[data-camera-select]')[8].disabled, true);
-  assert.equal(document.querySelector('[data-camera-count]').textContent, '8 de 8 selecionadas');
+  assert.equal(document.querySelectorAll('[data-camera-select]')[16].disabled, true);
+  assert.equal(document.querySelector('[data-camera-count]').textContent, '16 de 16 selecionadas');
   document.querySelector('[data-camera-open-grid]').click();
   const savedFrames = [...document.querySelectorAll('.cameras-player__saved-frame:not([hidden])')];
   assert.deepEqual(savedFrames.map(frame => frame.querySelector('img').src), [lastImage]);
   await flush();
-  const selected = Array.from({ length: 8 }, (_, index) => `site-${index + 1}`);
+  const selected = Array.from({ length: 16 }, (_, index) => `site-${index + 1}`);
   assert.deepEqual(grids.map(grid => grid.ids), [selected]);
   assert.deepEqual(starts.map(item => item.id), selected);
   const videos = [...document.querySelectorAll('.cameras-player__stage video')];
-  assert.equal(videos.length, 8);
+  assert.equal(videos.length, 16);
   assert.ok(videos.every(video => !video.controls && video.muted && video.playsInline));
   const { Event, MouseEvent } = document.defaultView;
   const resumed = [];
@@ -1111,7 +1112,7 @@ test('edita o nome pelo lápis, persiste por câmera e isola a conta', async t =
   assert.equal(first.document.querySelector('[data-camera-open="site-2"]')?.getAttribute('aria-label'), 'Abrir Portão principal');
   assert.equal(storage.getItem('energetico:camera-name:v1:bernardo%40example.com:site-2'), 'Portão principal');
   assert.equal(first.document.activeElement, first.document.querySelector('[data-camera-rename="site-2"]'));
-  assert.equal(first.document.querySelector('[data-camera-count]').textContent, '0 de 8 selecionadas');
+  assert.equal(first.document.querySelector('[data-camera-count]').textContent, '0 de 16 selecionadas');
   first.document.querySelector('[data-camera-grid]').click();
   first.document.querySelector('[data-camera-open="site-2"]').click(); await flush();
   assert.equal(first.document.querySelector('.cameras-player__title').textContent, 'Portão principal');
@@ -1197,7 +1198,7 @@ test('cria visual a partir das câmeras escolhidas, pede o nome e persiste por c
   create.click();
   first.document.querySelector('[data-camera-select="site-4"]').click();
   first.document.querySelector('[data-camera-select="site-2"]').click();
-  assert.equal(first.document.querySelector('[data-camera-count]').textContent, '2 de 8 selecionadas');
+  assert.equal(first.document.querySelector('[data-camera-count]').textContent, '2 de 16 selecionadas');
   first.document.querySelector('[data-camera-open-grid]').click();
 
   const editor = first.document.querySelector('[data-camera-visual-editor]');

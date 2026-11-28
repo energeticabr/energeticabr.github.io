@@ -22,14 +22,14 @@ test('normaliza status e última conexão no catálogo de câmeras', async () =>
 });
 
 test('sincroniza visuais no gateway autenticado e mantém a ordem dos canais', async () => {
-  const visual = { id: 'a'.repeat(32), name: 'Garagem', cameraIds: ['ch-2', 'ch-1'] };
+  const visual = { id: 'a'.repeat(32), name: 'Garagem', cameraIds: Array.from({ length: 16 }, (_, index) => `ch-${16 - index}`) };
   const imported = { ...visual, id: 'b'.repeat(64) };
   const renamed = { ...visual, name: 'Portão' };
   const requests = [
     [{ action: 'create-visual', ...visual }, { visual }],
     [{ action: 'import-visual', name: visual.name, cameraIds: visual.cameraIds, occurrence: 0 }, { visual: imported }],
     [{ action: 'rename-visual', id: visual.id, name: renamed.name, previousName: visual.name }, { visual: renamed }],
-    [{ action: 'list-visuals' }, { visuals: [renamed, imported] }],
+    [{ action: 'list-visuals', maxCameraIds: 16 }, { visuals: [renamed, imported] }],
   ];
   const { signal } = new AbortController();
   const client = clientWith(async (url, options) => {

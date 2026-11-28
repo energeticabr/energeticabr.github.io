@@ -406,6 +406,11 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   min-height: 0;
 }
 .cameras-player__grid { overflow: hidden; }
+.cameras-player__grid:has(> :nth-child(9)) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: none;
+  grid-auto-rows: minmax(0, 1fr);
+}
 .cameras-player__grid[data-count="2"] {
   grid-template-rows: repeat(2, minmax(0, 1fr));
 }
@@ -760,6 +765,7 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   .cameras-player__live-state[data-mode="playback"]::before { background: #9dc2ff; }
   .cameras-player__live-state[data-state="error"] { color: #ffaaa5; }
   .cameras-player__live-state[data-state="error"]::before { background: #ffaaa5; }
+  .cameras-player__grid:has(> :nth-child(9)) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .cameras-player__grid[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); }
   .cameras-player__grid[data-count="3"] {
     grid-template-columns: repeat(3, minmax(0, 1fr));

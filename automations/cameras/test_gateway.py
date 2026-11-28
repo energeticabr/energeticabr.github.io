@@ -222,6 +222,28 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(json.loads(self.request("POST", CATALOG, "owner", listing)[2]),
                          {"visuals": [{**visual, "name": "Obra"}]})
 
+    def test_saved_visual_accepts_sixteen_cameras_in_order(self):
+        channels = [f"ch-{index}" for index in range(17, 0, -1)]
+        for channel in channels[:-1]:
+            self.gateway.entries[channel] = {**self.gateway.entries["ch-1"], "id": channel}
+        body = {"action": "create-visual", "id": "a" * 32, "name": "Visão geral"}
+        self.assertEqual(self.request("POST", CATALOG, "owner",
+                                      {**body, "cameraIds": channels})[0], 400)
+        status, _, result = self.request("POST", CATALOG, "owner", {**body, "cameraIds": channels[:16]})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(result)["visual"]["cameraIds"], channels[:16])
+        short_visual = {"id": "b" * 32, "name": "Entrada", "cameraIds": ["ch-1"]}
+        self.assertEqual(self.request("POST", CATALOG, "owner",
+                                      {"action": "create-visual", **short_visual})[0], 200)
+
+        legacy = {"action": "list-visuals"}
+        self.assertEqual(json.loads(self.request("POST", CATALOG, "owner", legacy)[2]),
+                         {"visuals": [short_visual]})
+        modern = {**legacy, "maxCameraIds": 16}
+        visuals = json.loads(self.request("POST", CATALOG, "owner", modern)[2])["visuals"]
+        self.assertEqual({visual["id"]: visual["cameraIds"] for visual in visuals},
+                         {body["id"]: channels[:16], short_visual["id"]: ["ch-1"]})
+
     def test_legacy_visual_import_is_repeatable_and_does_not_revert_a_rename(self):
         legacy = {"action": "import-visual", "name": "Meu visual", "cameraIds": ["old-channel", "ch-1"],
                   "occurrence": 0}
@@ -392,7 +414,7 @@ class CameraGatewayTest(unittest.TestCase):
         import gateway
         from time import monotonic
 
-        for index in range(2, 9):
+        for index in range(2, 17):
             channel = f"ch-{index}"
             self.gateway.entries[channel] = {**self.gateway.entries["ch-1"], "id": channel}
         channels = list(self.gateway.entries)
@@ -442,17 +464,22 @@ class CameraGatewayTest(unittest.TestCase):
             fourth.launch.assert_called_once()
             self.assertEqual(self.request("GET", paths[channels[0]])[0], 200)
             self.assertEqual(identity.call_count, 1)
+            self.gateway.entries["ch-17"] = {**self.gateway.entries["ch-1"], "id": "ch-17"}
+            self.assertEqual(self.request("POST", CATALOG, "owner",
+                                          {"action": "play-grid", "channelIds": [*channels, "ch-17"]})[0], 400)
+            self.assertEqual(self.request("POST", CATALOG, "owner",
+                                          {"action": "play-grid", "channelIds": ["ch-17"]})[0], 429)
             self.assertEqual(self.gateway.start(channels[0], "owner"), paths[channels[0]])
             stream.last_request -= 13
             self.assertEqual(self.request("GET", paths[channels[0]])[0], 200)
             for channel in channels[1:]:
                 self.gateway.streams.pop(("owner", channel, False))
             another_grid = self.gateway.start_grid(channels, "another")
-            self.assertEqual(len(another_grid["paths"]), 7)
+            self.assertEqual(list(another_grid["paths"]), channels[:-1])
             self.assertEqual(another_grid["busy"], channels[-1:])
             self.assertEqual(self.request("GET", paths[channels[0]])[0], 200)
             self.assertEqual(self.request("POST", CATALOG, "owner",
-                                          {"action": "play-grid", "channelIds": channels + [channels[0]]})[0], 400)
+                                          {"action": "play-grid", "channelIds": [*channels[:-1], channels[0]]})[0], 400)
 
     def test_slow_previews_leave_one_opening_slot_and_expire_without_their_own_poll(self):
         import gateway
@@ -629,8 +656,18 @@ class CameraGatewayTest(unittest.TestCase):
             self.assertEqual(self.request("POST", CATALOG, "owner", request)[0], 200)
             self.assertEqual(self.request("GET", stream.path)[0], 404)
 
+    def test_full_grid_can_be_renewed_in_one_authenticated_request(self):
+        paths = [f"{MEDIA}/{index:043d}/index.m3u8" for index in range(17)]
+        with patch.object(self.gateway, "renew_live", wraps=self.gateway.renew_live) as renew:
+            body = {"action": "renew-live", "paths": paths[:16]}
+            self.assertGreater(len(json.dumps(body)), 1024)
+            self.assertEqual(self.request("POST", CATALOG, body=body)[0], 401)
+            self.assertEqual(self.request("POST", CATALOG, "owner", body)[0], 200)
+            renew.assert_called_once_with(paths[:16], "owner")
+            self.assertEqual(self.request("POST", CATALOG, "owner", {**body, "paths": paths})[0], 400)
+
     def test_authenticated_renewal_only_accepts_live_playlist_paths(self):
-        for paths in (["https://example.com/live.m3u8"], ["x"] * 9, "playlist"):
+        for paths in (["https://example.com/live.m3u8"], ["x"] * 17, "playlist"):
             with self.subTest(paths=paths):
                 self.assertEqual(self.request("POST", CATALOG, "owner",
                                               {"action": "renew-live", "paths": paths})[0], 400)
@@ -689,7 +726,7 @@ class CameraGatewayTest(unittest.TestCase):
         previous.alive.return_value = True
         others = {("owner", f"ch-{index}", True): MagicMock(preview=True, last_request=99, expires=200,
                                                           startup_deadline=None)
-                  for index in range(2, 9)}
+                  for index in range(2, gateway.MAX_STREAMS + 1)}
         self.gateway.streams = {("owner", "ch-1", True): previous, **others}
         with patch("gateway.time.monotonic", return_value=100):
             with self.assertRaises(gateway.PlaybackError) as denied:
@@ -702,7 +739,7 @@ class CameraGatewayTest(unittest.TestCase):
               patch("gateway.Stream", return_value=MagicMock(path=f"{MEDIA}/compatible/index.m3u8"))):
             result = self.gateway.start_grid(["ch-1"], "owner", replace_path=previous.path)
             self.assertEqual(result["paths"], {"ch-1": f"{MEDIA}/compatible/index.m3u8"})
-            self.assertEqual(len(self.gateway.streams), 8)
+            self.assertEqual(len(self.gateway.streams), gateway.MAX_STREAMS)
             previous.close.assert_called_once()
             for stream in others.values():
                 stream.close.assert_not_called()
@@ -725,13 +762,14 @@ class CameraGatewayTest(unittest.TestCase):
             self.assertEqual(busy.exception.status, 429)
         previous.close.assert_not_called()
 
-    def test_eight_streams_remain_available_until_individually_expired(self):
+    def test_sixteen_streams_remain_available_until_individually_expired(self):
         import gateway
         from concurrent.futures import ThreadPoolExecutor
-        names = [f"camera-{index}" for index in range(1, 10)]
+        names = [f"camera-{index}" for index in range(1, 17)]
+        overflow = "camera-17"
         config = {"origins": [], "viewers": ["owner"], "ffmpeg": "/unused", "channels": [
             {"id": name, "label": name, "format": "hevc", "command": ["/unused"]}
-            for name in names
+            for name in [*names, overflow]
         ]}
         class FakeStream:
             def __init__(self, entry, ffmpeg, viewer, *, preview=False, direct=False):
@@ -753,18 +791,18 @@ class CameraGatewayTest(unittest.TestCase):
         with patch.object(gateway, "Stream", FakeStream):
             server = Gateway(config)
             with ThreadPoolExecutor(max_workers=8) as pool:
-                list(pool.map(lambda name: server.start(name, "owner"), names[:8]))
-            for name in names[:8]:
+                list(pool.map(lambda name: server.start(name, "owner"), names))
+            for name in names:
                 self.assertEqual(server.get(name, "segment-1.ts"), b"video")
             with self.assertRaises(gateway.PlaybackError) as error:
-                server.start(names[8], "owner")
+                server.start(overflow, "owner")
             self.assertEqual(error.exception.status, 429)
             server.streams[("owner", names[0], False)].last_request -= 13
-            server.start(names[8], "owner")
+            server.start(overflow, "owner")
             with self.assertRaises(gateway.PlaybackError) as expired:
                 server.get(names[0], "segment-1.ts")
             self.assertEqual(expired.exception.status, 404)
-            self.assertEqual(server.get(names[8], "segment-1.ts"), b"video")
+            self.assertEqual(server.get(overflow, "segment-1.ts"), b"video")
 
     def test_only_the_latest_idle_single_live_stream_is_retained_and_yields_to_a_grid(self):
         import gateway
@@ -777,14 +815,15 @@ class CameraGatewayTest(unittest.TestCase):
             return stream
 
         server = self.gateway
-        for index in range(2, 10):
+        for index in range(2, gateway.MAX_STREAMS + 2):
             channel = f"ch-{index}"
             server.entries[channel] = {**server.entries["ch-1"], "id": channel}
         older, recent = mock_stream("older", 80), mock_stream("recent", 83)
-        older_key, recent_key = ("owner", "ch-1", False), ("owner", "ch-9", False)
+        recent_channel = f"ch-{gateway.MAX_STREAMS + 1}"
+        older_key, recent_key = ("owner", "ch-1", False), ("owner", recent_channel, False)
         server.streams.update({older_key: older, recent_key: recent})
         with patch.object(gateway.time, "monotonic", return_value=100):
-            self.assertEqual(server.start("ch-9", "owner"), recent.path)
+            self.assertEqual(server.start(recent_channel, "owner"), recent.path)
             self.assertNotIn(older_key, server.streams)
             older.close.assert_called_once()
             recent.close.assert_not_called()
@@ -792,8 +831,8 @@ class CameraGatewayTest(unittest.TestCase):
         with (patch.object(gateway.time, "monotonic", return_value=113),
               patch("gateway.Stream", side_effect=lambda entry, *args, **kwargs:
                     mock_stream(entry["id"], 113, preview=kwargs["preview"]))):
-            grid = server.start_grid([f"ch-{index}" for index in range(1, 9)], "owner")
-            self.assertEqual(len(grid["paths"]), 8)
+            grid = server.start_grid([f"ch-{index}" for index in range(1, gateway.MAX_STREAMS + 1)], "owner")
+            self.assertEqual(len(grid["paths"]), gateway.MAX_STREAMS)
             self.assertEqual(grid["busy"], [])
             self.assertNotIn(recent_key, server.streams)
             recent.close.assert_called_once()
