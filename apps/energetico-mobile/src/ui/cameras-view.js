@@ -1003,6 +1003,7 @@ export function createCamerasView(documentRef) {
         }
         item.connected = false;
         item.networkRetries = 0;
+        item.playlistFailures = 0;
         item.connectionState = 'connecting'; item.failureLabel = '';
         item.liveBadge.hidden = true;
         if (!item.streamUnavailable) {
@@ -1118,19 +1119,21 @@ export function createCamerasView(documentRef) {
       item.streamUnavailable = unavailable;
       if (unavailable) item.status.dataset.loading = 'false';
     }
-    function showWaiting(item, reconnecting) {
+    function showWaiting(item, reconnecting, { warning = '', watchVideo = true } = {}) {
       if (item.played) rememberLiveVideo(item);
       item.connected = false;
       item.connectionState = reconnecting ? 'waiting' : 'connecting';
       item.failureLabel = '';
       item.liveBadge.hidden = true;
       if (!item.streamUnavailable) {
-        item.status.textContent = reconnecting ? 'Reconectando…'
-          : item.mode === 'playback' ? 'Abrindo gravação…' : 'Conectando…';
-        item.status.dataset.loading = 'true';
-        if (item.mode === 'live' && item.unavailableTimer === null) {
-          // Keep one deadline across attempts until there is live video again.
+        item.status.textContent = warning || (reconnecting ? 'Reconectando…'
+          : item.mode === 'playback' ? 'Abrindo gravação…' : 'Conectando…');
+        item.status.dataset.loading = String(!warning);
+        if (watchVideo && item.mode === 'live' && item.liveUrl && item.unavailableTimer === null) {
+          // A grid channel can still be queued for its first media segment.
           item.unavailableTimer = windowRef.setTimeout(() => {
+            item.unavailableTimer = null;
+            if (windowRef.navigator.onLine === false) return;
             setStreamUnavailable(item, true);
             item.updateHeader?.();
           }, LIVE_VIDEO_UNAVAILABLE_MS);
@@ -1140,6 +1143,7 @@ export function createCamerasView(documentRef) {
     }
     async function connect(item, channel, recordingId = null, startPlayback = start, { preserveViewState = false } = {}) {
       saveThumbnail(item);
+      setStreamUnavailable(item, false);
       item.controller.abort();
       item.onPlaybackError = null;
       detachVideo(item);
@@ -1147,7 +1151,6 @@ export function createCamerasView(documentRef) {
       if (Boolean(item.recordingId) !== Boolean(recordingId)) item.networkRetries = 0;
       item.recordingId = recordingId;
       item.mode = recordingId ? 'playback' : 'live';
-      if (recordingId) setStreamUnavailable(item, false);
       item.liveUrl = null;
       updateSavedFrame(item);
       item.thumbnailTime = null;
@@ -1217,7 +1220,7 @@ export function createCamerasView(documentRef) {
         item.codecs = [];
         reopenLive(previousUrl);
       };
-      function retryNetwork({ resumeOfflineAttempt = false, previousUrl } = {}) {
+      function retryNetwork({ resumeOfflineAttempt = false, previousUrl, playlistUnavailable = false, warning = '' } = {}) {
         if (item.cancelRecovery) return true;
         const pauseStarted = item.waitStartedAt ?? windowRef.Date.now();
         if (item.playingSince !== null && pauseStarted - item.playingSince >= LIVE_STABLE_MS) {
@@ -1228,7 +1231,14 @@ export function createCamerasView(documentRef) {
           item.networkRetries = Math.min(item.networkRetries + 1, LIVE_NETWORK_RETRIES + 1);
         }
         item.playingSince = null;
-        showWaiting(item, true);
+        item.playlistFailures = playlistUnavailable ? item.playlistFailures + 1 : 0;
+        clearUnavailableDeadline(item);
+        const online = windowRef.navigator.onLine !== false;
+        if (online && item.playlistFailures > LIVE_NETWORK_RETRIES) setStreamUnavailable(item, true);
+        showWaiting(item, true, {
+          warning: online && item.networkRetries > LIVE_NETWORK_RETRIES ? warning : '',
+          watchVideo: false,
+        });
         function recoverWhenOnline() {
           item.cancelRecovery?.();
           if (signal.aborted) return;
@@ -1258,6 +1268,7 @@ export function createCamerasView(documentRef) {
       function offerLiveRetry() {
         item.reconnect = () => {
           item.networkRetries = 0;
+          item.playlistFailures = 0;
           reopenLive();
         };
         item.retry.textContent = 'Tentar novamente';
@@ -1290,7 +1301,11 @@ export function createCamerasView(documentRef) {
           nativeHls ? null : import('hls.js'),
         ]);
         if (signal.aborted) return;
-        if (!recordingId) item.liveUrl = url;
+        if (!recordingId) {
+          item.liveUrl = url;
+          item.playlistFailures = 0;
+          if (item.connectionState !== 'playing') showWaiting(item, reconnecting);
+        }
         const failed = (network = false, { stalled = false } = {}) => {
           if (signal.aborted || item.cancelRecovery) return;
           clearWaiting(item);
@@ -1300,7 +1315,9 @@ export function createCamerasView(documentRef) {
             retryCompatible(url);
             return;
           }
-          if (!recordingId && network && retryNetwork({ previousUrl: url })) return;
+          if (!recordingId && network && retryNetwork({
+            previousUrl: url, warning: item.played ? '' : 'Falha ao reproduzir',
+          })) return;
           showDisconnected('Transmissão interrompida.', network);
         };
         item.onPlaybackError = failed;
@@ -1328,11 +1345,17 @@ export function createCamerasView(documentRef) {
         const networkUnavailable = error?.code === 'NETWORK_UNAVAILABLE' || error instanceof TypeError;
         const recoverable = networkUnavailable || [404, 408, 429, 500, 502, 503, 504].includes(status);
         const deviceOffline = networkUnavailable && windowRef.navigator.onLine === false;
-        if (!recordingId && recoverable && retryNetwork({ resumeOfflineAttempt: deviceOffline && item.networkRetries > 0 })) return;
+        const playlistUnavailable = error?.code === 'CAMERA_PLAYLIST_UNAVAILABLE';
+        if (!recordingId && recoverable && retryNetwork({
+          resumeOfflineAttempt: deviceOffline && item.networkRetries > 0, playlistUnavailable,
+          warning: playlistUnavailable ? '' : status === 429 ? 'Serviço ocupado' : 'Falha ao conectar',
+        })) return;
         item.connected = false; item.connectionState = 'error'; item.failureLabel = 'Falha ao conectar';
         const retriesExhausted = recoverable && status !== 429 && item.networkRetries >= LIVE_NETWORK_RETRIES;
-        setStreamUnavailable(item, !recordingId && status !== 401 && status !== 403
-          && (item.streamUnavailable || retriesExhausted));
+        const catalogOffline = !recoverable && channels.find(entry => entry.id === channel.id)?.status === 'offline'
+          && !hasRecentLiveVideo(channel.id);
+        setStreamUnavailable(item, !recordingId && status !== 401 && status !== 403 && status !== 429
+          && (item.streamUnavailable || catalogOffline || retriesExhausted));
         item.liveBadge.hidden = true; item.status.dataset.loading = 'false';
         item.retry.hidden = true; item.updateControls?.(); item.updateHeader?.();
         if (!item.streamUnavailable) item.status.textContent = error?.message || 'Não foi possível abrir esta câmera.';
@@ -1475,10 +1498,9 @@ export function createCamerasView(documentRef) {
           mode: 'live', connected: false, connectionState: 'connecting', failureLabel: '', playAttempted: false,
           preview, channelId: channel.id, cameraGroup: channel.cameraGroup, recordingId: null, searchButton: null, searchResults: null,
           noVideoLabel: channel.cameraGroup ? CHANNEL_NO_SIGNAL : 'Sem vídeo',
-          thumbnailTime: null, played: false, networkRetries: 0, playingSince: null, waitStartedAt: null,
+          thumbnailTime: null, played: false, networkRetries: 0, playlistFailures: 0, playingSince: null, waitStartedAt: null,
           waitingTimer: null, unavailableTimer: null, streamUnavailable: false, cancelRecovery: null, reconnect: null,
           codecs: canPlayHevc(video) ? ['h264', 'hevc'] : ['h264'] };
-        if (channel.status === 'offline' && !hasRecentLiveVideo(channel.id)) setStreamUnavailable(item, true);
         dismiss.addEventListener('click', () => dismissCamera(item, slot));
         video.addEventListener('playing', () => {
           if (item.controller.signal.aborted || item.connectionState === 'error') return;
@@ -1496,12 +1518,12 @@ export function createCamerasView(documentRef) {
           item.updateControls?.(); item.updateHeader?.();
         });
         video.addEventListener('waiting', () => {
-          if (item.controller.signal.aborted || item.connectionState === 'error') return;
+          if (item.controller.signal.aborted || item.connectionState === 'error' || item.cancelRecovery) return;
           if (item.mode !== 'live' || !item.played) {
             showWaiting(item, item.played || (item.mode === 'live' && item.networkRetries > 0));
             return;
           }
-          if (item.waitingTimer !== null || item.cancelRecovery) return;
+          if (item.waitingTimer !== null) return;
           item.waitStartedAt = windowRef.Date.now();
           item.waitingTimer = windowRef.setTimeout(() => {
             showWaiting(item, true);

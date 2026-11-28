@@ -56,7 +56,13 @@ createCamerasView(document).open({
     supportsPtz: index === 0,
     ...(groupedChannels.includes(index) ? { cameraGroup: 'camera-1', cameraLabel: 'Obra Xavante' } : {}),
   })),
-  start: async () => new Promise(() => {}),
+  start: async id => {
+    if ((location.search === '?single' && id === 'camera-1')
+      || (location.search === '?player' && ['camera-1', 'camera-2'].includes(id))) {
+      throw new Error('Não foi possível abrir o canal');
+    }
+    return new Promise(() => {});
+  },
   move: async () => {},
   listRecordings: async () => [],
   playRecording: async () => new Promise(() => {}),
@@ -333,10 +339,6 @@ if (wallMode) {
     }
   } else if (location.search === '?player') {
     const video = player.querySelector('[data-camera-video="camera-1"]');
-    doubleTap(video);
-    layout.focused = measurePlayer();
-    doubleTap(video);
-    layout.restored = measurePlayer();
     const liveVideo = player.querySelector('[data-camera-video="camera-3"]');
     const tile = video.closest('.cameras-player__tile');
     const offlineTile = player.querySelector('[data-camera-video="camera-2"]').closest('.cameras-player__tile');
@@ -345,6 +347,10 @@ if (wallMode) {
       return { tile: rect(tile), ribbon: rect(ribbon), label: ribbon.textContent,
         offline: ribbon.hasAttribute('data-offline'), noSpinner: getComputedStyle(ribbon, '::before').content === 'none' };
     });
+    doubleTap(video);
+    layout.focused = measurePlayer();
+    doubleTap(video);
+    layout.restored = measurePlayer();
     tile.querySelector('[data-camera-dismiss]').click();
     layout.seven = measurePlayer();
     liveVideo.closest('.cameras-player__tile').querySelector('[data-camera-dismiss]').click();

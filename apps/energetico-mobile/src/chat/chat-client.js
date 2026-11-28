@@ -1106,7 +1106,10 @@ export function createChatClient({
         const ready = await cameraReadiness(url, signal, response => {
           if (response.status === 204) return true;
           if (response.status === 202) return false;
-          throw Object.assign(new Error("Não foi possível abrir esta câmera."), { status: response.status });
+          throw Object.assign(new Error("Não foi possível abrir esta câmera."), {
+            status: response.status,
+            ...(response.status === 404 && { code: "CAMERA_PLAYLIST_UNAVAILABLE" }),
+          });
         });
         if (ready) return url;
         // Check promptly while a warm source or the first queued preview can become ready.
@@ -1114,7 +1117,9 @@ export function createChatClient({
         await retryDelay(delay);
         waited += delay;
       }
-      throw Object.assign(new Error("A câmera demorou para responder. Tente novamente."), { status: 504 });
+      throw Object.assign(new Error("A câmera demorou para responder. Tente novamente."), {
+        status: 504, code: "CAMERA_PLAYLIST_UNAVAILABLE",
+      });
     };
   }
 

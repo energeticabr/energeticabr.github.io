@@ -129,6 +129,19 @@ test('a grade abre as prévias com uma única autenticação e aguarda cada víd
   assert.deepEqual(waits, [...Array(8).fill(500), 2000]);
 });
 
+test('distingue playlist que desapareceu de indisponibilidade temporária do serviço', async () => {
+  const paths = Object.fromEntries(['a', 'b'].map(id => [
+    id, `/api/portal-camera-media/${id.repeat(43)}/index.m3u8`,
+  ]));
+  const client = clientWith(async (url, options) => {
+    if (options.method === 'POST') return jsonResponse({ paths });
+    return new Response(null, { status: url.includes(paths.a) ? 404 : 503 });
+  }, { retryDelay: async () => {} });
+  const start = client.prepareCameraGrid(['a', 'b']);
+  await assert.rejects(start('a'), { status: 404, code: 'CAMERA_PLAYLIST_UNAVAILABLE' });
+  await assert.rejects(start('b'), error => error.status === 503 && error.code !== 'CAMERA_PLAYLIST_UNAVAILABLE');
+});
+
 test('a grade repete em lote um erro do proxy durante a abertura', async () => {
   const channelIds = ['a', 'b'];
   const paths = Object.fromEntries(channelIds.map(id => [
