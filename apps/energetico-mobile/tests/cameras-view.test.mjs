@@ -6,7 +6,7 @@ import { createCamerasView } from '../src/ui/cameras-view.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, android = false,
-  cameraList, timerControl, catalog, startError, visualService, tagService, renewLive, playbackIsGone } = {}) {
+  cameraList, timerControl, catalog, startError, waitForStart, visualService, tagService, renewLive, playbackIsGone } = {}) {
   const dom = new JSDOM('<button>Menu</button>', { url: 'https://example.com' });
   t.after(() => dom.window.close());
   const { document, HTMLMediaElement, HTMLDialogElement } = dom.window;
@@ -27,6 +27,7 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, 
     starts.push({ id, signal, codecs });
     const failure = startError?.({ id, attempt: starts.length, codecs, window: dom.window });
     if (failure) throw failure;
+    if (waitForStart) await waitForStart(id);
     return codecs.includes('hevc') ? 'https://video.example/hevc.m3u8' : 'https://video.example/index.m3u8';
   };
   const view = createCamerasView(document);
@@ -372,6 +373,53 @@ test('câmera off-line sem horário conhecido informa que ainda não há histór
   assert.match(document.querySelector('[data-camera-open="cam-1"]').getAttribute('aria-label'), /Sem registro de conexão/i);
 });
 
+test('o visual salvo mantém canais lentos em conexão enquanto espera pela playlist', async t => {
+  let releaseStreams;
+  const pending = new Promise(resolve => { releaseStreams = resolve; });
+  const ids = ['cam-1', 'cam-2', 'cam-3'];
+  const { document, grids, starts } = setup(t, { accountKey: 'conta', useGrid: true,
+    catalog: [
+      { id: 'cam-1', label: 'Portão', cameraGroup: 'cam-1', status: 'offline' },
+      { id: 'cam-2', label: 'Pátio', cameraGroup: 'cam-1', status: 'online' },
+      { id: 'cam-3', label: 'Outra câmera', status: 'unknown' },
+    ],
+    waitForStart: id => id === 'cam-2' ? undefined : pending,
+  });
+  const { defaultView: window } = document;
+  window.localStorage.setItem('energetico:camera-visual:v1:conta',
+    JSON.stringify([{ name: 'Visual 1', cameraIds: ids }]));
+  await flush();
+  const timers = new Map();
+  let nextTimer = 0;
+  window.setTimeout = (callback, delay) => { timers.set(++nextTimer, { callback, delay }); return nextTimer; };
+  window.clearTimeout = id => timers.delete(id);
+  document.querySelector('[data-camera-tab="visuals"]').click();
+  document.querySelector('[data-camera-visual-open]').click();
+  await flush();
+
+  const videos = ids.map(id => document.querySelector(`[data-camera-video="${id}"]`));
+  const notices = videos.map(video => video.parentElement.querySelector('.cameras-player__status'));
+  const header = document.querySelector('.cameras-player__live-state');
+  videos[1].dispatchEvent(new window.Event('playing'));
+  assert.equal(header.textContent, '1/3 ao vivo');
+  for (const [id, { callback, delay }] of timers) {
+    if (delay > 90_000) continue;
+    timers.delete(id);
+    callback();
+  }
+  assert.deepEqual(notices.map(notice => notice.textContent), ['Conectando…', '', 'Conectando…']);
+  assert.deepEqual(notices.map(notice => notice.dataset.loading), ['true', 'false', 'true']);
+
+  releaseStreams();
+  await flush();
+  assert.ok(videos.every(video => video.src));
+  for (const video of [videos[0], videos[2]]) video.dispatchEvent(new window.Event('playing'));
+  assert.equal(header.textContent, 'AO VIVO');
+  assert.ok(notices.every(notice => notice.textContent === ''));
+  assert.equal(grids.length, 1);
+  assert.ok(starts.every(({ signal }) => !signal.aborted));
+});
+
 test('identifica um canal sem sinal quando outro canal da câmera está on-line, mesmo fora do visual', async t => {
   const { document } = setup(t, { accountKey: 'conta',
     catalog: [
@@ -379,7 +427,7 @@ test('identifica um canal sem sinal quando outro canal da câmera está on-line,
       { id: 'cam-2', label: 'Pátio', cameraGroup: 'cam-1', status: 'online' },
       { id: 'cam-3', label: 'Outra câmera', status: 'offline' },
     ],
-    startError: ({ id }) => id === 'cam-1' ? new Error('Não foi possível abrir o canal') : null,
+    startError: ({ id }) => id !== 'cam-2' ? new Error('Não foi possível abrir o canal') : null,
   });
   document.defaultView.localStorage.setItem('energetico:camera-visual:v1:conta',
     JSON.stringify([{ name: 'Visual 1', cameraIds: ['cam-1', 'cam-3'] }]));
@@ -397,6 +445,7 @@ test('identifica um canal sem sinal quando outro canal da câmera está on-line,
 
   document.querySelector('[data-camera-tab="visuals"]').click();
   document.querySelector('[data-camera-visual-open]').click();
+  await flush();
   const statuses = [...document.querySelectorAll('.cameras-player__status')];
   assert.deepEqual(statuses.map(status => status.textContent), ['Canal sem sinal', 'OFF-LINE']);
   assert.deepEqual(statuses.map(status => status.hasAttribute('data-offline')), [false, true]);
@@ -409,7 +458,7 @@ test('o vídeo de um canal atualiza o estado da câmera mesmo durante uma interr
     { id: 'cam-1', label: 'Portão', cameraGroup: 'cam-1', status: 'offline' },
     { id: 'cam-2', label: 'Pátio', cameraGroup: 'cam-1', status: 'offline' },
     { id: 'cam-3', label: 'Outra câmera', status: 'online' },
-  ] });
+  ], startError: ({ id }) => id === 'cam-1' ? new Error('Não foi possível abrir o canal') : null });
   const { defaultView: window } = document;
   window.localStorage.setItem('energetico:camera-visual:v1:conta',
     JSON.stringify([{ name: 'Visual 1', cameraIds: ['cam-1', 'cam-2', 'cam-3'] }]));
@@ -451,6 +500,7 @@ test('o vídeo de um canal atualiza o estado da câmera mesmo durante uma interr
   const controls = document.querySelector('[data-camera-channel-controls]');
   assert.equal(controls.hidden, false);
   controls.click();
+  await flush();
   assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Canal sem sinal');
 });
 
@@ -459,7 +509,7 @@ test('atualiza a lista e o visual quando vence a evidência de um canal fora da 
   const { document } = setup(t, { timerControl, catalog: [
     { id: 'cam-1', label: 'Portão', cameraGroup: 'cam-1', status: 'offline' },
     { id: 'cam-2', label: 'Pátio', cameraGroup: 'cam-1', status: 'offline' },
-  ] });
+  ], startError: ({ id }) => id === 'cam-1' ? new Error('Não foi possível abrir o canal') : null });
   const { defaultView: window } = document;
   Object.defineProperty(document, 'hidden', { value: false });
   let now = 120_000;
@@ -481,6 +531,7 @@ test('atualiza a lista e o visual quando vence a evidência de um canal fora da 
   document.querySelector('[data-camera-select="cam-1"]').click();
   document.querySelector('[data-camera-select="cam-2"]').click();
   document.querySelector('[data-camera-open-grid]').click();
+  await flush();
   const second = document.querySelector('[data-camera-video="cam-2"]');
   second.dispatchEvent(new window.Event('playing'));
   const header = document.querySelector('.cameras-player__live-state');
@@ -542,12 +593,19 @@ test('oculta câmeras off-line e ao vivo sem reabrir os outros vídeos ou editar
   const { defaultView: window } = document;
   window.localStorage.setItem('energetico:camera-visual:v1:conta', JSON.stringify([{ name: 'Visual 1', cameraIds: ids }]));
   await flush();
+  const timers = new Map();
+  let nextTimer = 0;
+  window.setTimeout = (callback, delay) => { timers.set(++nextTimer, { callback, delay }); return nextTimer; };
+  window.clearTimeout = id => timers.delete(id);
   document.querySelector('[data-camera-tab="visuals"]').click();
   document.querySelector('[data-camera-visual-open]').click();
   await flush();
   const [offline, ...remaining] = document.querySelectorAll('[data-camera-video]');
   assert.equal(document.querySelectorAll('[data-camera-dismiss]:not([hidden])').length, 3);
   for (const video of remaining) video.dispatchEvent(new window.Event('playing'));
+  const [id, deadline] = [...timers].find(([, { delay }]) => delay === 45_000);
+  timers.delete(id);
+  deadline.callback();
   const tile = offline.closest('.cameras-player__tile');
   const status = tile.querySelector('.cameras-player__status');
   assert.equal(status.textContent, 'OFF-LINE');
@@ -870,11 +928,18 @@ test('retoma uma câmera individual quando a rede volta e preserva o áudio esco
   video.dispatchEvent(new window.Event('playing'));
   document.querySelector('[data-camera-audio]').click();
   assert.equal(video.muted, false);
+  const timers = new Map();
+  let nextTimer = 0;
+  window.setTimeout = (callback, delay) => { timers.set(++nextTimer, { callback, delay }); return nextTimer; };
+  window.clearTimeout = id => timers.delete(id);
   Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
   Object.defineProperty(video, 'error', { configurable: true, value: { code: 2 } });
   video.dispatchEvent(new window.Event('error'));
   await flush();
   assert.equal(starts.length, 1);
+  for (const { callback, delay } of timers.values()) {
+    if (delay === 45_000) callback();
+  }
   assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Reconectando…');
   Object.defineProperty(window.navigator, 'onLine', { value: true });
   window.dispatchEvent(new window.Event('online'));
@@ -1048,6 +1113,53 @@ test('reabre um canal da grade que perde a playlist antes do primeiro quadro', a
   assert.equal(document.querySelectorAll('.cameras-player__tile-live:not([hidden])').length, 8);
 });
 
+test('a grade distingue falhas do serviço de perdas consecutivas da playlist', async t => {
+  const failures = [
+    ...Array(3).fill({ status: 503 }),
+    ...Array(3).fill({ status: 404, code: 'CAMERA_PLAYLIST_UNAVAILABLE' }),
+  ];
+  const { document, grids } = setup(t, { useGrid: true, catalog: [
+    { id: 'site-1', label: 'Obra 1', status: 'offline' },
+    { id: 'site-2', label: 'Obra 2', status: 'online' },
+  ], startError: ({ id }) => id === 'site-1' && failures.length
+    ? Object.assign(new Error('Falha de teste'), failures.shift()) : null });
+  await flush();
+  const window = document.defaultView;
+  const timers = new Map();
+  let nextTimer = 0;
+  window.setTimeout = (callback, delay) => { timers.set(++nextTimer, { callback, delay }); return nextTimer; };
+  window.clearTimeout = id => timers.delete(id);
+  const retry = async () => {
+    const [id, timer] = [...timers].find(([, { delay }]) => delay < 45_000);
+    timers.delete(id);
+    timer.callback();
+    await flush();
+  };
+  document.querySelector('[data-camera-grid]').click();
+  document.querySelector('[data-camera-select="site-1"]').click();
+  document.querySelector('[data-camera-select="site-2"]').click();
+  document.querySelector('[data-camera-open-grid]').click();
+  await flush();
+  const [slow, healthy] = document.querySelectorAll('[data-camera-video]');
+  healthy.dispatchEvent(new window.Event('playing'));
+  const status = slow.parentElement.querySelector('.cameras-player__status');
+  await retry();
+  assert.equal(status.textContent, 'Falha ao conectar');
+  assert.equal(status.hasAttribute('data-offline'), false);
+  await retry();
+  assert.equal(status.textContent, 'Reconectando…');
+  await retry();
+  assert.equal(status.textContent, 'Reconectando…');
+  await retry();
+  assert.equal(status.textContent, 'OFF-LINE');
+  assert.equal(status.hasAttribute('data-offline'), true);
+  await retry();
+  assert.equal(status.textContent, 'Reconectando…');
+  slow.dispatchEvent(new window.Event('playing'));
+  assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'AO VIVO');
+  assert.ok(grids.slice(1).every(({ ids }) => ids.length === 1 && ids[0] === 'site-1'));
+});
+
 test('recupera a grade de um erro 502 na abertura sem repetir canais saudáveis', async t => {
   const { document, grids, starts } = setup(t, { useGrid: true,
     startError: ({ id, attempt }) => id === 'site-1' && attempt === 1
@@ -1121,16 +1233,15 @@ test('a grade reconecta uma transmissão interrompida sem reabrir os demais cana
   assert.equal(starts.filter(item => item.id === 'site-2').length, 1);
   Object.defineProperty(video, 'error', { value: { code: 2 } });
   video.dispatchEvent(new Event('error'));
-  assert.equal(elapse(delay => delay === 45_000), 45_000);
-  assert.equal(notice.textContent, 'Sem vídeo');
+  assert.equal(notice.textContent, 'Falha ao reproduzir');
   assert.equal(notice.dataset.loading, 'false');
   elapse();
   await flush();
-  assert.equal(notice.textContent, 'Sem vídeo');
+  assert.equal(notice.textContent, 'Reconectando…');
   video.dispatchEvent(new Event('playing'));
   assert.equal(notice.textContent, '');
   video.dispatchEvent(new Event('error'));
-  assert.equal(timers.size, 2);
+  assert.equal(timers.size, 1);
   document.querySelector('[data-camera-player-back]').click();
   assert.equal(timers.size, 0);
 });
@@ -1157,6 +1268,32 @@ test('renova a transmissão em exibição sem reabrir o vídeo e interrompe a re
   assert.equal(renewals.length, 1);
 });
 
+test('renova a playlist quando o vídeo volta antes da retentativa agendada', async t => {
+  const timerControl = { cleared: [] };
+  const renewals = [];
+  const { document, starts } = setup(t, { timerControl, renewLive: async urls => renewals.push(urls) });
+  Object.defineProperty(document, 'hidden', { value: false });
+  await flush();
+  document.querySelector('[data-camera-open]').click();
+  await flush();
+  const { defaultView: window } = document;
+  const video = document.querySelector('[data-camera-video]');
+  Object.defineProperty(video, 'error', { value: { code: 2 } });
+  video.dispatchEvent(new window.Event('error'));
+  await flush();
+  video.dispatchEvent(new window.Event('playing'));
+  let recoveryPending = false;
+  window.setTimeout = (_callback, delay) => { recoveryPending = delay === 4_000; return 41; };
+  window.clearTimeout = () => { recoveryPending = false; };
+  video.dispatchEvent(new window.Event('error'));
+  assert.equal(recoveryPending, true);
+  video.dispatchEvent(new window.Event('playing'));
+  await timerControl.callback();
+  assert.equal(recoveryPending, false);
+  assert.equal(starts.length, 2);
+  assert.deepEqual(renewals, [[video.src]]);
+});
+
 test('reabre apenas a playlist perdida assim que o serviço confirma o 404', async t => {
   const { document, grids, starts } = setup(t, { useGrid: true, playbackIsGone: async () => true });
   await flush();
@@ -1176,7 +1313,7 @@ test('reabre apenas a playlist perdida assim que o serviço confirma o 404', asy
   await flush();
   assert.deepEqual(grids.map(grid => grid.ids), [['site-1', 'site-2'], ['site-1']]);
   assert.equal(starts.find(item => item.id === 'site-2').signal.aborted, false);
-  assert.equal(timeout, null);
+  assert.equal(timeout.delay, 45_000, 'a nova playlist tem seu próprio prazo para exibir vídeo');
 });
 
 test('a troca de codec envia a playlist antiga somente para a câmera afetada', async t => {
