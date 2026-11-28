@@ -64,17 +64,23 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
       assert.equal(layout.selectionHeadings.length, 9);
       assert.ok(layout.listHeadings.every(({ checkbox }) => !checkbox));
       assert.ok(layout.selectionHeadings.every(({ checkbox }) => checkbox));
-      for (const [{ titleText, pencil }] of [layout.listHeadings, layout.selectionHeadings]) {
-        assert.ok(pencil.left - titleText.right >= 0 && pencil.left - titleText.right <= 12,
-          `Pencil must sit directly after a short camera name at ${width}x${height}`);
+      for (const cards of [layout.listHeadings, layout.selectionHeadings]) {
+        assert.deepEqual(cards.map(card => card.channelLabel),
+          ['Canal 1', 'Canal 2', 'Canal 3', ...Array(6).fill('Canal 1')]);
+        for (const { heading, checkbox, hasPencil } of cards) {
+          assert.equal(hasPencil, false);
+          if (checkbox) assert.ok(checkbox.right <= heading.right);
+        }
       }
-      for (const { heading, title, pencil, checkbox } of [...layout.listHeadings, ...layout.selectionHeadings]) {
-        const context = `${width}x${height} ${checkbox ? 'selection' : 'list'}`;
-        assert.ok(pencil.left - title.right >= 0 && pencil.left - title.right <= 12,
-          `Pencil must sit directly after the camera name at ${context}`);
-        assert.ok(pencil.width === 44 && pencil.height === 44 && pencil.right <= heading.right,
-          `Pencil must be fully visible with a 44px circular touch target at ${context}`);
-        if (checkbox) assert.ok(checkbox.left > pencil.right && checkbox.right <= heading.right);
+      for (const headings of [layout.listCameraHeadings, layout.selectionCameraHeadings]) {
+        assert.equal(headings.length, 7);
+        for (const { heading, title, pencil, pencilCount } of headings) {
+          assert.equal(pencilCount, 1);
+          assert.ok(pencil.left - title.right >= 0 && pencil.left - title.right <= 12,
+            `Pencil must sit directly after the camera name at ${width}x${height}`);
+          assert.ok(pencil.width === 44 && pencil.height === 44 && pencil.right <= heading.right,
+            `Pencil must be fully visible with a 44px circular touch target at ${width}x${height}`);
+        }
       }
       assert.equal(layout.groups.length, 1);
       const [{ bounds, children }] = layout.groups;

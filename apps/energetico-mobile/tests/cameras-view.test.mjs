@@ -301,7 +301,7 @@ test('oculta câmeras off-line e ao vivo sem reabrir os outros vídeos ou editar
   offline.click(); offline.click();
   const dismiss = tile.querySelector('[data-camera-dismiss]');
   assert.equal(dismiss.hidden, false);
-  assert.equal(dismiss.getAttribute('aria-label'), 'Ocultar Obra 1 desta visualização');
+  assert.equal(dismiss.getAttribute('aria-label'), 'Ocultar Obra 1 · Canal 1 desta visualização');
   dismiss.click();
   assert.equal(starts[0].signal.aborted, true);
   assert.ok(starts.slice(1).every(({ signal }) => !signal.aborted));
@@ -425,21 +425,26 @@ const mixedCatalog = [
   { id: 'patio-3', label: 'Pátio · canal 3', cameraGroup: 'patio-1', cameraLabel: 'Pátio' },
 ];
 
-test('reúne os canais da mesma câmera recebidos da API, inclusive o primeiro canal renomeado', async t => {
+test('usa o apelido anterior do canal principal no cabeçalho da câmera e numera os cartões', async t => {
   const client = createChatClient({
     apiBaseUrl: 'https://example.com',
     tokenProvider: async () => 'test-session',
-    fetchImpl: async () => Response.json({ channels: mixedCatalog }),
+    fetchImpl: async () => Response.json({ channels: [mixedCatalog[3], mixedCatalog[1], mixedCatalog[2], mixedCatalog[0]] }),
   });
   const { document, grids } = setup(t, { cameraList: client.listCameraChannels, useGrid: true, accountKey: 'conta' });
   document.defaultView.localStorage.setItem('energetico:camera-name:v1:conta:patio-1', 'Portão');
+  document.defaultView.localStorage.setItem('energetico:camera-name:v1:conta:patio-2', 'Apelido antigo do canal');
   await flush();
 
   const group = document.querySelector('.camera-group');
-  assert.equal(group?.querySelector('h2')?.textContent, 'Pátio');
+  assert.equal(group?.querySelector('h2')?.textContent, 'Portão');
+  assert.equal(group.querySelectorAll('[data-camera-rename]').length, 1);
+  assert.ok(group.querySelector('.camera-group__heading [data-camera-rename]'));
+  assert.deepEqual([...group.querySelectorAll('.camera-card__heading strong')].map(title => title.textContent),
+    ['Canal 1', 'Canal 2', 'Canal 3']);
   assert.deepEqual([...group.querySelectorAll('[data-camera-open]')].map(button => button.dataset.cameraOpen),
     ['patio-1', 'patio-2', 'patio-3']);
-  assert.equal(group.querySelector('[data-camera-open="patio-1"]').getAttribute('aria-label'), 'Abrir Portão');
+  assert.equal(group.querySelector('[data-camera-open="patio-2"]').getAttribute('aria-label'), 'Abrir Portão · Canal 2');
   assert.deepEqual([...document.querySelectorAll('[data-camera-open]')].map(button => button.dataset.cameraOpen),
     ['patio-1', 'patio-2', 'patio-3', 'other']);
 
@@ -460,6 +465,60 @@ test('reúne canais da mesma câmera ao abrir um visual salvo com a ordem antiga
   document.querySelector('[data-camera-tab="visuals"]').click();
   document.querySelector('[data-camera-visual-open="0"]').click();
   assert.deepEqual(grids[0].ids, ['patio-2', 'patio-1', 'other']);
+  assert.equal(document.querySelector('[data-camera-video="patio-2"]').getAttribute('aria-label'), 'Pátio · Canal 2');
+});
+
+test('preserva números informados quando o canal principal chega sem sufixo', async t => {
+  const catalog = [{ ...mixedCatalog[0], label: 'Pátio' }, mixedCatalog[2], mixedCatalog[3]];
+  const { document } = setup(t, { catalog: [catalog[1], catalog[2], catalog[0]], accountKey: 'conta' });
+  document.defaultView.localStorage.setItem('energetico:camera-name:v2:conta:patio-1', 'Portão');
+  await flush();
+  assert.equal(document.querySelector('.camera-group__title').textContent, 'Portão');
+  assert.equal(document.querySelector('[data-camera-rename]').dataset.cameraRename, 'patio-1');
+  assert.deepEqual([...document.querySelectorAll('.camera-card')].map(card => [
+    card.querySelector('[data-camera-open]').dataset.cameraOpen, card.querySelector('strong').textContent,
+  ]), [['patio-1', 'Canal 1'], ['patio-2', 'Canal 2'], ['patio-3', 'Canal 3']]);
+});
+
+test('preserva Canal no nome cadastrado de uma câmera de canal único', async t => {
+  const { document } = setup(t, { catalog: [{ id: 'station', label: 'Estação Canal 2' }] });
+  await flush();
+  assert.equal(document.querySelector('.camera-group__title').textContent, 'Estação Canal 2');
+  assert.equal(document.querySelector('.camera-card__heading strong').textContent, 'Canal 1');
+});
+
+test('mantém o nome da câmera quando a ordem muda e o catálogo repete um número', async t => {
+  const timerControl = { cleared: [] };
+  const duplicate = { ...mixedCatalog[2], label: mixedCatalog[0].label };
+  let catalog = [mixedCatalog[0], duplicate];
+  const { document } = setup(t, { cameraList: async () => catalog, accountKey: 'conta', timerControl });
+  Object.defineProperty(document, 'hidden', { value: false });
+  document.defaultView.localStorage.setItem('energetico:camera-name:v2:conta:patio-1', 'Portão');
+  await flush();
+  catalog = [duplicate, mixedCatalog[0]].map(channel => ({ ...channel, cameraGroup: duplicate.id }));
+  timerControl.callback();
+  await flush();
+
+  assert.equal(document.querySelector('.camera-group__title').textContent, 'Portão');
+  assert.equal(document.querySelector('[data-camera-open="patio-2"]').getAttribute('aria-label'), 'Abrir Portão · Canal 2');
+});
+
+test('renomeia a câmera física uma vez e atualiza todos os seus canais sem perder a seleção', async t => {
+  const { document } = setup(t, { catalog: mixedCatalog, accountKey: 'conta' });
+  await flush();
+  document.querySelector('[data-camera-grid]').click();
+  document.querySelector('[data-camera-select="patio-2"]').click();
+  document.querySelector('[data-camera-rename="patio-1"]').click();
+  const editor = document.querySelector('[data-camera-name-editor]');
+  editor.querySelector('input').value = 'Xavantes';
+  editor.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(document.querySelector('.camera-group__title').textContent, 'Xavantes');
+  assert.equal(document.querySelector('[data-camera-select="patio-2"]').checked, true);
+  assert.equal(document.querySelector('[data-camera-open="patio-3"]').getAttribute('aria-label'), 'Abrir Xavantes · Canal 3');
+  assert.equal(document.defaultView.localStorage.getItem('energetico:camera-name:v2:conta:patio-1'), 'Xavantes');
+  document.querySelector('[data-camera-grid]').click();
+  document.querySelector('[data-camera-open="patio-2"]').click();
+  assert.equal(document.querySelector('.cameras-player__title').textContent, 'Xavantes · Canal 2');
 });
 function simulateFrame(document, video, image) {
   Object.defineProperties(video, {
@@ -1164,9 +1223,9 @@ test('edita o nome pelo lápis, persiste por câmera e isola a conta', async t =
   first.document.querySelector('[data-camera-grid]').click();
 
   const pencil = first.document.querySelector('[data-camera-rename="site-2"]');
-  assert.ok(pencil, 'cada cartão deve ter um lápis para editar o nome');
-  const heading = pencil.closest('.camera-card__heading');
-  const title = heading.querySelector('strong');
+  assert.ok(pencil, 'câmeras com um só canal também podem ser renomeadas');
+  const heading = pencil.closest('.camera-group__heading');
+  const title = heading.querySelector('h2');
   assert.equal(title.nextElementSibling, pencil, 'o lápis deve ficar à direita do nome');
   assert.equal(pencil.getAttribute('aria-label'), 'Editar nome da câmera Obra 2');
   pencil.click();
@@ -1183,13 +1242,13 @@ test('edita o nome pelo lápis, persiste por câmera e isola a conta', async t =
   }));
   await flush();
 
-  assert.equal(first.document.querySelector('[data-camera-open="site-2"]')?.getAttribute('aria-label'), 'Abrir Portão principal');
-  assert.equal(storage.getItem('energetico:camera-name:v1:bernardo%40example.com:site-2'), 'Portão principal');
+  assert.equal(first.document.querySelector('[data-camera-open="site-2"]')?.getAttribute('aria-label'), 'Abrir Portão principal · Canal 1');
+  assert.equal(storage.getItem('energetico:camera-name:v2:bernardo%40example.com:site-2'), 'Portão principal');
   assert.equal(first.document.activeElement, first.document.querySelector('[data-camera-rename="site-2"]'));
   assert.equal(first.document.querySelector('[data-camera-count]').textContent, '0 de 16 selecionadas');
   first.document.querySelector('[data-camera-grid]').click();
   first.document.querySelector('[data-camera-open="site-2"]').click(); await flush();
-  assert.equal(first.document.querySelector('.cameras-player__title').textContent, 'Portão principal');
+  assert.equal(first.document.querySelector('.cameras-player__title').textContent, 'Portão principal · Canal 1');
   first.view.close();
 
   const reopened = setup(t, { accountKey, storage });
@@ -1204,7 +1263,7 @@ test('edita o nome pelo lápis, persiste por câmera e isola a conta', async t =
 });
 
 test('recusa nome vazio, cancela e informa erro quando o armazenamento falha', async t => {
-  const key = 'energetico:camera-name:v1:conta:site-1';
+  const key = 'energetico:camera-name:v2:conta:site-1';
   const values = new Map();
   const storage = {
     getItem: name => values.get(name) ?? null,
@@ -1226,7 +1285,7 @@ test('recusa nome vazio, cancela e informa erro quando o armazenamento falha', a
   }));
   assert.equal(editor.open, true);
   assert.match(editor.querySelector('[role="alert"]').textContent, /digite um nome/i);
-  assert.equal(document.querySelector('.camera-card__heading strong').textContent, 'Obra 1');
+  assert.equal(document.querySelector('.camera-group__title').textContent, 'Obra 1');
   assert.equal(storage.getItem(key), null);
 
   editor.querySelector('[data-camera-name-cancel]').click();
@@ -1243,7 +1302,7 @@ test('recusa nome vazio, cancela e informa erro quando o armazenamento falha', a
   }));
   assert.equal(editor.open, true);
   assert.match(editor.querySelector('[role="alert"]').textContent, /não foi possível salvar/i);
-  assert.equal(document.querySelector('.camera-card__heading strong').textContent, 'Obra 1');
+  assert.equal(document.querySelector('.camera-group__title').textContent, 'Obra 1');
   assert.equal(storage.getItem(key), null);
 
   editor.dispatchEvent(new document.defaultView.Event('cancel', { cancelable: true }));

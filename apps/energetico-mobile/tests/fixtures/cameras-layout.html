@@ -13,16 +13,17 @@ localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify
   name: wallMode ? 'Visual 1' : 'Portão e pátio',
   cameraIds: wallMode ? Array.from({ length: wallCount }, (_, index) => 'camera-' + (index + 1)) : ['camera-1', 'camera-2'],
 }, { name: 'NomeLongoSemEspaços'.repeat(5), cameraIds: ['camera-3'] }]));
+const groupedChannels = [0, 2, 6];
 createCamerasView(document).open({
   accountKey,
   list: async () => Array.from({ length: Math.max(wallCount, 9) }, (_, index) => ({
     id: 'camera-' + (index + 1),
-    label: index === 0 ? 'Entrada' : listMode && index === 8
-      ? 'Pátio ' + 'NomeLongoSemEspaços'.repeat(5) : 'Obra Xavante • canal ' + (index + 1),
+    label: groupedChannels.includes(index) ? 'Obra Xavante • canal ' + (groupedChannels.indexOf(index) + 1)
+      : listMode && index === 8 ? 'Pátio ' + 'NomeLongoSemEspaços'.repeat(5) : 'Obra ' + (index + 1),
     status: index === 0 || (location.search === '?player' && index === 1) ? 'offline' : 'online',
     lastOnlineAt: index === 0 ? '2026-11-24T12:00:00Z' : null,
     supportsPtz: index === 0,
-    ...([0, 2, 6].includes(index) ? { cameraGroup: 'camera-1', cameraLabel: 'Obra Xavante' } : {}),
+    ...(groupedChannels.includes(index) ? { cameraGroup: 'camera-1', cameraLabel: 'Obra Xavante' } : {}),
   })),
   start: async () => new Promise(() => {}),
   move: async () => {},
@@ -63,21 +64,29 @@ if (window.innerWidth === 320) {
 const rect=node=>{const r=node.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
 const visible = node => node.getClientRects().length > 0;
 const cardHeadings = () => [...document.querySelectorAll('.camera-card__heading')].map(heading => {
-  const title = heading.querySelector('strong');
-  const text = document.createRange();
-  text.selectNodeContents(title);
   const checkbox = heading.querySelector('[data-camera-select]');
   return {
-    heading: rect(heading), title: rect(title), titleText: rect(text),
-    pencil: rect(heading.querySelector('[data-camera-rename]')),
+    heading: rect(heading), channelLabel: heading.querySelector('strong').textContent,
+    hasPencil: Boolean(heading.querySelector('[data-camera-rename]')),
     checkbox: checkbox && rect(checkbox),
   };
 });
+const cameraHeadings = () => [...document.querySelectorAll('.camera-group__heading')].map(heading => {
+  const title = heading.querySelector('h2');
+  return {
+    heading: rect(heading), title: rect(title),
+    pencil: rect(heading.querySelector('[data-camera-rename]')),
+    pencilCount: heading.parentElement.querySelectorAll('[data-camera-rename]').length,
+  };
+});
 const listHeadings = listMode ? cardHeadings() : [];
+const listCameraHeadings = listMode ? cameraHeadings() : [];
 let selectionHeadings = [];
+let selectionCameraHeadings = [];
 if (listHeadings.length) {
   document.querySelector('[data-camera-grid]').click();
   selectionHeadings = cardHeadings();
+  selectionCameraHeadings = cameraHeadings();
   document.querySelector('[data-camera-grid]').click();
 }
 const visualCards = [...document.querySelectorAll('.camera-visual-card')].map(card => ({
@@ -95,7 +104,7 @@ if (location.search === '?visuals') {
 }
 const layout = {viewport:rect(dialog),
   tabs:document.querySelector('.cameras-header__tabs') && rect(document.querySelector('.cameras-header__tabs')),
-  listHeadings, selectionHeadings,
+  listHeadings, selectionHeadings, listCameraHeadings, selectionCameraHeadings,
   cards:[...document.querySelectorAll('.camera-card')].map(rect),
   noSignalStatus:document.querySelector('[data-camera-status]') && {
     ribbon:rect(document.querySelector('[data-camera-status]')),
@@ -104,7 +113,7 @@ const layout = {viewport:rect(dialog),
     preview:rect(document.querySelector('.camera-card__preview')),
   },
   visualCards, visualEditor,
-  groups:[...document.querySelectorAll('.camera-group')].map(group => ({
+  groups:[...document.querySelectorAll('.camera-group:not(.camera-group--single)')].map(group => ({
     bounds:rect(group), children:[...group.querySelectorAll('.camera-card')].map(rect),
   })),
   player:player && rect(player), portrait:String(window.matchMedia('(orientation: portrait)').matches), tiles:[...document.querySelectorAll('.cameras-player__tile')].map(rect),
