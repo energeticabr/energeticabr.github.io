@@ -11820,6 +11820,7 @@ export function createAppController({
         createVisual: client.createCameraVisual,
         importVisual: client.importCameraVisual,
         renameVisual: client.renameCameraVisual,
+        editVisualCameras: client.editCameraVisualCameras,
         start: client.startCameraPlayback,
         prepareGrid: client.prepareCameraGrid,
         renewLive: client.renewCameraPlayback,

@@ -3,6 +3,7 @@
 import { createCamerasView } from '/src/ui/cameras-view.js';
 const accountKey = 'layout-check';
 const listMode = location.search === '?list';
+const visualsMode = location.search === '?visuals';
 const liveGridMode = location.search === '?live-grid';
 const fullGridMode = location.search === '?full-grid';
 const twelveGridMode = location.search === '?twelve-grid';
@@ -10,10 +11,12 @@ const stackedGridMode = location.search === '?stacked-grid';
 const wallMode = location.search === '?player' || liveGridMode || fullGridMode || twelveGridMode || stackedGridMode;
 const wallCount = fullGridMode ? 16 : twelveGridMode || stackedGridMode ? 12 : liveGridMode ? 5 : 8;
 localStorage.setItem('energetico:camera-preview:v1:' + accountKey + ':camera-1', 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8Af//Z');
-localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify([{
+const savedVisuals = [{
   name: wallMode ? 'Visual 1' : 'Portão e pátio',
-  cameraIds: wallMode ? Array.from({ length: wallCount }, (_, index) => 'camera-' + (index + 1)) : ['camera-1', 'camera-2'],
-}, { name: 'NomeLongoSemEspaços'.repeat(5), cameraIds: ['camera-3'] }]));
+  cameraIds: wallMode ? Array.from({ length: wallCount }, (_, index) => 'camera-' + (index + 1))
+    : visualsMode ? ['camera-1', 'camera-2', 'missing-camera'] : ['camera-1', 'camera-2'],
+}, { name: 'NomeLongoSemEspaços'.repeat(5), cameraIds: ['camera-3'] }];
+if (!visualsMode) localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify(savedVisuals));
 function testCameraFrame(stacked) {
   const frame = document.createElement('canvas');
   frame.width = 640;
@@ -35,6 +38,10 @@ if (stackedGridMode) {
 const groupedChannels = [0, 2, 6];
 createCamerasView(document).open({
   accountKey,
+  ...(visualsMode ? {
+    listVisuals: async () => savedVisuals.map((visual, index) => ({ ...visual, id: String(index + 1).repeat(32) })),
+    editVisualCameras: async () => {},
+  } : {}),
   list: async () => Array.from({ length: Math.max(wallCount, 9) }, (_, index) => ({
     id: 'camera-' + (index + 1),
     label: groupedChannels.includes(index) ? 'Obra Xavante • canal ' + (groupedChannels.indexOf(index) + 1)
@@ -113,13 +120,28 @@ const visualCards = [...document.querySelectorAll('.camera-visual-card')].map(ca
   title: rect(card.querySelector('.camera-visual-card__name')),
   pencil: rect(card.querySelector('[data-camera-visual-rename]')),
   open: rect(card.querySelector('[data-camera-visual-open]')),
+  edit: card.querySelector('[data-camera-visual-edit]') && rect(card.querySelector('[data-camera-visual-edit]')),
 }));
 let visualEditor = null;
-if (location.search === '?visuals') {
+let visualCameraEditor = null;
+if (visualsMode) {
   document.querySelector('[data-camera-visual-rename]').click();
   const editor = document.querySelector('[data-camera-visual-editor]');
   visualEditor = { bounds: rect(editor), inputFocused: document.activeElement === editor.querySelector('input') };
   editor.querySelector('[data-camera-visual-cancel]').click();
+  document.querySelector('[data-camera-visual-edit]').click();
+  const list = document.querySelector('.cameras-list');
+  list.scrollTop = list.scrollHeight;
+  const lastCheckbox = document.querySelector('[data-camera-select="missing-camera"]');
+  const lastBounds = rect(lastCheckbox);
+  visualCameraEditor = {
+    checked: [...document.querySelectorAll('[data-camera-select]:checked')].map(input => input.dataset.cameraSelect),
+    save: rect(document.querySelector('[data-camera-open-grid]')),
+    cancel: rect(document.querySelector('[data-camera-create-cancel]')),
+    lastSelectable: document.elementFromPoint(lastBounds.left + lastBounds.width / 2, lastBounds.top + lastBounds.height / 2)
+      === lastCheckbox,
+  };
+  document.querySelector('[data-camera-create-cancel]').click();
 }
 const layout = {viewport:rect(dialog),
   tabs:document.querySelector('.cameras-header__tabs') && rect(document.querySelector('.cameras-header__tabs')),
@@ -131,7 +153,7 @@ const layout = {viewport:rect(dialog),
     lastOnline:rect(document.querySelector('.camera-card__last-online')),
     preview:rect(document.querySelector('.camera-card__preview')),
   },
-  visualCards, visualEditor,
+  visualCards, visualEditor, visualCameraEditor,
   groups:[...document.querySelectorAll('.camera-group:not(.camera-group--single)')].map(group => ({
     bounds:rect(group), children:[...group.querySelectorAll('.camera-card')].map(rect),
   })),

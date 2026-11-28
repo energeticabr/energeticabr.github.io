@@ -111,17 +111,24 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
     } else if (mode === 'visuals') {
       assert.equal(layout.visualCards.length, 2);
       assert.ok(layout.tabs.left >= 0 && layout.tabs.right <= width);
-      for (const { bounds, title, pencil, open } of layout.visualCards) {
+      for (const { bounds, title, pencil, open, edit } of layout.visualCards) {
         assert.ok(bounds.left >= 0 && bounds.right <= width);
         assert.ok(pencil.left - title.right >= 0 && pencil.left - title.right <= 12,
           `Pencil must sit directly after the visual name at ${width}x${height}`);
         assert.equal(pencil.width, 44);
         assert.equal(pencil.height, 44);
         assert.ok(pencil.right < open.left && open.right < bounds.right);
+        assert.ok(edit.top >= open.bottom && edit.bottom <= bounds.bottom);
+        assert.ok(edit.width === open.width && edit.height >= 44 && edit.right < bounds.right);
       }
       const { bounds, inputFocused } = layout.visualEditor;
       assert.ok(bounds.left >= 0 && bounds.right <= width && bounds.top >= 0 && bounds.bottom <= height);
       assert.ok(inputFocused);
+      const { checked, save, cancel, lastSelectable } = layout.visualCameraEditor;
+      assert.deepEqual(checked, ['camera-1', 'camera-2', 'missing-camera']);
+      assert.ok(lastSelectable, `The last selected camera is covered at ${width}x${height}`);
+      assert.ok(cancel.left >= 0 && cancel.right <= save.left && save.right <= width);
+      assert.ok(save.bottom <= height && cancel.bottom <= height);
     } else {
       assert.equal(layout.portrait,String(height > width));
       if (height < width) assert.equal(layout.liveStateColor, 'rgb(242, 244, 246)');

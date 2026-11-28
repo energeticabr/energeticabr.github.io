@@ -142,7 +142,12 @@
 .camera-visual-card__heading { display: flex; align-items: center; gap: 8px; }
 .camera-visual-card__name { min-width: 0; overflow-wrap: anywhere; font-size: 15px; }
 .camera-visual-card__count { color: #686e74; font-size: 13px; }
-.camera-visual-card__open {
+.camera-visual-card__actions {
+  display: grid;
+  flex: none;
+  gap: 6px;
+}
+.camera-visual-card__open, .camera-visual-card__edit {
   flex: none;
   min-height: 42px;
   padding: 8px 12px;
@@ -155,6 +160,12 @@
   font-weight: 700;
   cursor: pointer;
 }
+.camera-visual-card__edit {
+  min-height: 44px;
+  background: #edf3fc;
+  color: #1b56ad;
+}
+.camera-visual-card__edit:disabled { opacity: .55; }
 .camera-card {
   min-width: 0;
   overflow: hidden;
@@ -299,9 +310,8 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
 .camera-name-editor__actions :is([data-camera-name-cancel], [data-camera-visual-cancel]) { background: #eef0f3; color: #343a40; }
 .camera-name-editor__actions button[type="submit"] { background: #2674e8; color: #fff; }
 .cameras-selection {
-  position: absolute;
+  flex: none;
   z-index: 2;
-  inset: auto 0 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -317,7 +327,6 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
 @media (max-width: 380px) {
   .cameras-selection { display: grid; gap: 8px; padding-right: 14px; padding-left: 14px; }
   .cameras-selection__actions { justify-content: flex-end; }
-  .cameras-list { padding-bottom: max(110px, env(safe-area-inset-bottom)); }
 }
 
 .cameras-player {
