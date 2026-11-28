@@ -41,3 +41,12 @@ Compile `yoosee_live.cpp` com MSVC x64 e `/MD`, usando o cabeçalho e a bibliote
 Instale e habilite a unidade `energetico-yoosee.service`. Forneça o JSON `yoosee.json` contendo `account`, `password` e os IDs numéricos das câmeras em `devices` em `/etc/energetico-cameras`, com acesso restrito a root. O serviço reutiliza a autenticação e mantém o fluxo comprimido de cada câmera em um processo do SDK com um prefixo Wine próprio. O gateway recebe o vídeo pelo socket Unix privado e prepara HLS sob demanda. O socket mantém os assinantes durante uma reconexão do SDK. O systemd fornece a credencial apenas à fonte. Valide o primeiro segmento e o avanço da sequência HLS de cada canal. Para cadastrar mais de uma câmera, valide também a reprodução simultânea.
 
 Execute `python -B -m unittest discover -s automations/cameras -v` para testar a autorização e as rotas.
+
+## V380 Pro
+
+O adaptador `v380_source.py` recebe as credenciais permanentes do dispositivo
+pelo stdin e lê o protocolo nativo V380 por LAN/VPN ou relay. Não depende da
+opção ONVIF no aplicativo. Instale `requirements-v380.txt` antes de executar
+a suíte completa. Veja [V380.md](V380.md) para instalação no gateway existente,
+configuração privada, limites de compatibilidade e o que os testes verificam.
+O QR/PIN temporário de compartilhamento não é uma credencial dessa fonte.
