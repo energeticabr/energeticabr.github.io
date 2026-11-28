@@ -1,5 +1,6 @@
 import { reportOrientation } from '../native/report-orientation.js';
 import { CAMERA_GRID_LIMIT as GRID_LIMIT } from '../chat/camera-grid-limit.js';
+import { bindStackedCameraPreview } from './cameras-stacked-preview.js';
 
 const THUMBNAIL_PREFIX = 'energetico:camera-preview:v1:';
 const CAMERA_NAME_PREFIX = 'energetico:camera-name:v2:';
@@ -341,6 +342,7 @@ export function createCamerasView(documentRef) {
       const image = item.mode === 'live' ? thumbnails.get(item.channelId) : null;
       item.savedFrame.hidden = !image;
       if (image && item.savedFrameImage.getAttribute('src') !== image) item.savedFrameImage.src = image;
+      item.stackedPreview?.refresh();
     }
 
     dialog = documentRef.createElement("dialog");
@@ -817,6 +819,7 @@ export function createCamerasView(documentRef) {
         clearUnavailableDeadline(item);
         item.controller.abort();
         item.searchController?.abort();
+        item.stackedPreview?.destroy();
         detachVideo(item);
       }
       playback = [];
@@ -1255,6 +1258,7 @@ export function createCamerasView(documentRef) {
           const focused = focusedCameraId === String(item.channelId);
           tile.dataset.focused = String(focused);
           tile.toggleAttribute('inert', Boolean(focusedCameraId) && !focused);
+          item.stackedPreview?.setEnabled(!focusedCameraId && tileItems.length > 1);
           if (!focusedCameraId && item.connected && item.video.paused) {
             void item.video.play().catch(() => {});
           }
@@ -1268,6 +1272,7 @@ export function createCamerasView(documentRef) {
         rememberLiveVideo(item);
         clearUnavailableDeadline(item);
         item.controller.abort();
+        item.stackedPreview?.destroy();
         detachVideo(item);
         playback.splice(index, 1);
         playerChannels.splice(index, 1);
@@ -1400,6 +1405,7 @@ export function createCamerasView(documentRef) {
         }
         playback.push(item); tileItems.push({ tile, video, item, channel });
         tile.append(video, savedFrame, dismiss, label, liveBadge, notice, retry, footer);
+        if (preview) item.stackedPreview = bindStackedCameraPreview(tile, video, savedFrame, savedFrameImage);
         slot.append(tile);
         grid.append(slot);
       }

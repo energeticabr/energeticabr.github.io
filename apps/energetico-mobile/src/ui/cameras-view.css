@@ -460,6 +460,15 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   pointer-events: none;
 }
 .cameras-player__saved-image { display: block; width: 100%; height: 100%; object-fit: contain; }
+.cameras-player__stacked-preview:not([hidden]) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #050607;
+  pointer-events: none;
+}
 .cameras-player__tile-footer {
   position: absolute;
   right: 8px;
