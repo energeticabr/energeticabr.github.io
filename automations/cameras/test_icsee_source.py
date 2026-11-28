@@ -47,10 +47,13 @@ class Queue:
         directions.append(direction)
         if len(directions) == 2:
             received.set()
-module("xmplayer.core.ptz").PtzCommandQueue = Queue
+core.ptz = module("xmplayer.core.ptz")
+core.ptz.PtzCommandQueue = Queue
+core.ptz.build_opptz_payload = lambda command, session_id, *, channel=0: channel
 
 def end_source(*args, **kwargs):
     assert received.wait(3)
+    assert core.ptz.build_opptz_payload("DirectionUp", 1) == 2
     print(",".join(directions), file=sys.stderr, flush=True)
     time.sleep(0.1)
 core.service.run_monitor_live_stream = end_source
@@ -58,7 +61,7 @@ core.service.run_monitor_live_stream = end_source
 icsee_source.install_transport = lambda *args: None
 icsee_source.main()
 """
-        settings = {"cloudId": "fixture", "channel": 0, "tlsPins": {}, "username": "", "password": ""}
+        settings = {"cloudId": "fixture", "channel": 2, "tlsPins": {}, "username": "", "password": ""}
         frames = [settings, {"move": "left"}, {"move": "right"}]
         pipe_data = b"".join(json.dumps(frame).encode() + b"\n" for frame in frames)
         child = subprocess.Popen([sys.executable, "-B", "-c", fixture],

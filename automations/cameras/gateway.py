@@ -279,7 +279,8 @@ class Gateway:
         for entry in self.entries.values():
             status = self.status_store.get(entry["id"])
             channels.append({"id": entry["id"], "label": entry["label"],
-                             "status": status["status"], "lastOnlineAt": status["lastOnlineAt"]})
+                             "status": status["status"], "lastOnlineAt": status["lastOnlineAt"],
+                             "supportsPtz": entry.get("supportsPtz") is True})
         by_id = {channel["id"]: channel for channel in channels}
         for camera_id, members in self.camera_groups.items():
             if len(members) > 1:
@@ -498,6 +499,8 @@ class Gateway:
     def move(self, channel, viewer, direction):
         if not isinstance(channel, str) or not isinstance(direction, str) or direction not in {"up", "down", "left", "right"}:
             raise PlaybackError(400)
+        if self.entries.get(channel, {}).get("supportsPtz") is not True:
+            raise PlaybackError(404)
         with self.lock:
             self.expire()
             stream = next((item for direct in (True, False)

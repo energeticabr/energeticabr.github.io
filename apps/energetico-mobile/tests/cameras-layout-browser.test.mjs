@@ -86,7 +86,12 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
     } else {
       assert.equal(layout.portrait,String(height > width));
       if (height < width) assert.equal(layout.liveStateColor, 'rgb(242, 244, 246)');
-      if (mode === 'single') assert.equal(layout.liveStateText, 'Canal sem sinal');
+      if (mode === 'single') {
+        assert.equal(layout.liveStateText, 'Canal sem sinal');
+        assert.deepEqual(layout.movableActions, ['PTZ', 'Áudio', 'Foto', 'Gravações']);
+        assert.deepEqual(layout.fixedActions, ['Áudio', 'Foto', 'Gravações']);
+        assert.equal(layout.fixedHasPtzPanel, false);
+      }
       const expectedTiles = mode === 'single' ? 1 : mode === 'pair' ? 2 : 8;
       assert.equal(layout.tiles.length,expectedTiles);
       assert.equal(layout.savedFrames.length, 1);

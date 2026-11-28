@@ -190,6 +190,7 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertIn(("Cache-Control", "private, no-store"), headers)
         self.assertEqual(json.loads(result), {"channels": [{
             "id": "ch-1", "label": "Câmera de teste", "status": "unknown", "lastOnlineAt": None,
+            "supportsPtz": False,
         }]})
 
     def test_catalog_includes_persisted_status_without_exposing_source_configuration(self):
@@ -294,26 +295,27 @@ class CameraGatewayTest(unittest.TestCase):
         sample_password = secrets.token_urlsafe(16)
         self.start_gateway([
             {"id": channel, "label": label, "format": "hevc", "command": ["/unused"],
-             "input": {"password": sample_password, **settings}}
+             "input": {"password": sample_password, **settings},
+             **({"supportsPtz": True} if channel == "patio-1" else {})}
             for channel, label, settings in sources
         ])
         status, _, response = self.request("POST", CATALOG, "owner", {"action": "list"})
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(response), {"channels": [
             {"id": "patio-1", "label": "Pátio · canal 1", "status": "unknown", "lastOnlineAt": None,
-             "cameraGroup": "patio-1", "cameraLabel": "Pátio"},
-            {"id": "other", "label": "Pátio · canal 1", "status": "unknown", "lastOnlineAt": None},
+             "cameraGroup": "patio-1", "cameraLabel": "Pátio", "supportsPtz": True},
+            {"id": "other", "label": "Pátio · canal 1", "status": "unknown", "lastOnlineAt": None, "supportsPtz": False},
             {"id": "patio-2", "label": "Pátio - canal 2", "status": "unknown", "lastOnlineAt": None,
-             "cameraGroup": "patio-1", "cameraLabel": "Pátio"},
+             "cameraGroup": "patio-1", "cameraLabel": "Pátio", "supportsPtz": False},
             {"id": "yoosee-1", "label": "Entrada (Yoosee)", "status": "unknown", "lastOnlineAt": None,
-             "cameraGroup": "yoosee-1", "cameraLabel": "Entrada (Yoosee)"},
+             "cameraGroup": "yoosee-1", "cameraLabel": "Entrada (Yoosee)", "supportsPtz": False},
             {"id": "yoosee-2", "label": "Entrada (Yoosee)", "status": "unknown", "lastOnlineAt": None,
-             "cameraGroup": "yoosee-1", "cameraLabel": "Entrada (Yoosee)"},
-            {"id": "unidentified", "label": "Pátio · canal 3", "status": "unknown", "lastOnlineAt": None},
+             "cameraGroup": "yoosee-1", "cameraLabel": "Entrada (Yoosee)", "supportsPtz": False},
+            {"id": "unidentified", "label": "Pátio · canal 3", "status": "unknown", "lastOnlineAt": None, "supportsPtz": False},
             {"id": "no-label", "label": None, "status": "unknown", "lastOnlineAt": None,
-             "cameraGroup": "no-label", "cameraLabel": "Jardim"},
+             "cameraGroup": "no-label", "cameraLabel": "Jardim", "supportsPtz": False},
             {"id": "garden", "label": "Jardim · canal 2", "status": "unknown", "lastOnlineAt": None,
-             "cameraGroup": "no-label", "cameraLabel": "Jardim"},
+             "cameraGroup": "no-label", "cameraLabel": "Jardim", "supportsPtz": False},
         ]})
 
     def test_request_cannot_choose_a_source_or_access_files_without_a_capability(self):
@@ -886,7 +888,9 @@ class CameraGatewayTest(unittest.TestCase):
             def alive(self): return True
             def control(self, direction): self.moves.append(direction)
         config = {"origins": [], "viewers": ["owner"], "ffmpeg": "/unused", "channels": [
-            {"id": "ch-1", "label": "Camera", "format": "hevc", "command": ["/unused"]}]}
+            {"id": "ch-1", "label": "Camera", "format": "hevc", "command": ["/unused"], "supportsPtz": True},
+            {"id": "ch-2", "label": "Canal fixo", "format": "hevc", "command": ["/unused"], "supportsPtz": False},
+        ]}
         instance = Gateway(config)
         instance.expire = lambda: None
         stream = FakeStream()
@@ -896,6 +900,12 @@ class CameraGatewayTest(unittest.TestCase):
         for viewer, direction in [("other", "left"), ("owner", "reboot")]:
             with self.assertRaises(gateway.PlaybackError):
                 instance.move("ch-1", viewer, direction)
+        fixed_stream = FakeStream()
+        instance.streams[("owner", "ch-2", False)] = fixed_stream
+        with self.assertRaises(gateway.PlaybackError) as denied:
+            instance.move("ch-2", "owner", "left")
+        self.assertEqual(denied.exception.status, 404)
+        self.assertEqual(fixed_stream.moves, [])
 
     def test_http_motion_checks_identity_and_rejects_untrusted_directions(self):
         self.assertEqual(self.request("POST", CATALOG, body={"action": "move", "channelId": "ch-1", "direction": "up"})[0], 401)

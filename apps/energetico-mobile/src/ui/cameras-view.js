@@ -674,6 +674,7 @@ export function createCamerasView(documentRef) {
         const current = next[index];
         return channel.id === current.id && channel.label === current.label
           && channel.status === current.status && channel.lastOnlineAt === current.lastOnlineAt
+            && channel.supportsPtz === current.supportsPtz
           && channel.cameraGroup === current.cameraGroup && channel.cameraLabel === current.cameraLabel;
       });
     }
@@ -706,6 +707,7 @@ export function createCamerasView(documentRef) {
         if (changed) {
           cameraGroups = nextGroups;
           channels = flatNextChannels;
+          playback[0]?.updatePtz?.();
           playback[0]?.updateHeader?.();
           for (const id of selected) if (!channels.some(channel => channel.id === id)) selected.delete(id);
           loadThumbnails();
@@ -1380,7 +1382,7 @@ export function createCamerasView(documentRef) {
 
       const actions = make('nav', 'cameras-player__actions'); actions.setAttribute('aria-label', 'Controles da câmera');
       const controlStatus = make('p', 'cameras-player__control-status'); controlStatus.setAttribute('role', 'status');
-      let drawer, ptzPanel;
+      let drawer;
       if (chosen.length === 1) {
         const { channel } = tileItems[0]; const item = playback[0];
         const actionButton = (key, glyph, label) => {
@@ -1391,17 +1393,23 @@ export function createCamerasView(documentRef) {
         };
         if (move) {
           const ptzToggle = actionButton('cameraPtz', '⊙', 'PTZ'); ptzToggle.setAttribute('aria-expanded', 'false');
-          ptzPanel = make('aside', 'cameras-player__ptz'); ptzPanel.hidden = true;
+          const ptzPanel = make('aside', 'cameras-player__ptz'); ptzPanel.hidden = true;
           ptzPanel.setAttribute('aria-label', 'Direções da câmera');
           const arrows = make('div', 'cameras-player__arrows'); const buttons = [];
           for (const [direction, label, symbol] of [['up','Mover para cima','↑'],['left','Mover para a esquerda','←'],['down','Mover para baixo','↓'],['right','Mover para a direita','→']]) {
             const button = make('button', 'cameras-player__arrow', symbol); button.type = 'button'; button.dataset.cameraMove = direction;
             button.setAttribute('aria-label', label); button.disabled = true;
             button.addEventListener('click', async () => {
+              if (!ptzToggle.isConnected) return;
               button.disabled = true;
-              try { await move(channel.id, direction, { signal: item.controller.signal }); controlStatus.textContent = 'Comando enviado.'; }
-              catch (error) { if (!item.controller.signal.aborted) controlStatus.textContent = error.message || 'Não foi possível mover a câmera.'; }
-              finally { item.updateControls(); }
+              try {
+                await move(channel.id, direction, { signal: item.controller.signal });
+                if (ptzToggle.isConnected) controlStatus.textContent = 'Comando enviado.';
+              } catch (error) {
+                if (ptzToggle.isConnected && !item.controller.signal.aborted) {
+                  controlStatus.textContent = error.message || 'Não foi possível mover a câmera.';
+                }
+              } finally { item.updateControls(); }
             });
             arrows.append(button); buttons.push(button);
           }
@@ -1410,7 +1418,23 @@ export function createCamerasView(documentRef) {
             const expanded = ptzPanel.hidden; ptzPanel.hidden = !expanded;
             ptzToggle.setAttribute('aria-expanded', String(expanded));
           });
-          ptzPanel.append(arrows); actions.append(ptzToggle);
+          ptzPanel.append(arrows);
+          item.updatePtz = () => {
+            const supported = channels.find(entry => entry.id === channel.id)?.supportsPtz === true;
+            if (supported === ptzToggle.isConnected) return;
+            if (supported) {
+              actions.prepend(ptzToggle);
+              stage.after(ptzPanel);
+              item.updateControls();
+              return;
+            }
+            const focused = documentRef.activeElement;
+            if (focused === ptzToggle || ptzPanel.contains(focused)) back.focus({ preventScroll: true });
+            ptzToggle.remove();
+            ptzPanel.remove();
+            ptzPanel.hidden = true;
+            ptzToggle.setAttribute('aria-expanded', 'false');
+          };
         }
         const audioButton = actionButton('cameraAudio', '◖', 'Áudio'); audioButton.setAttribute('aria-pressed', 'false');
         item.audioButton = audioButton;
@@ -1516,11 +1540,11 @@ export function createCamerasView(documentRef) {
       panel.append(header);
       if (visualNotice) panel.append(visualNotice);
       panel.append(stage);
-      if (ptzPanel) panel.append(ptzPanel);
       if (modeNote) panel.append(modeNote);
       panel.append(actions, controlStatus);
       if (drawer) panel.append(drawer);
       player.append(panel); dialog.append(player);
+      playback[0].updatePtz?.();
       back.focus({ preventScroll: true });
       let startPlayback = start;
       if (preview && prepareGrid) {
