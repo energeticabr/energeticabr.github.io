@@ -178,7 +178,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     if (lastAttemptAt !== undefined && latest.completedAt <= lastAttemptAt) return false;
     const hasNewAttempt = lastAttemptAt !== undefined;
     lastAttemptAt = latest.completedAt;
-    lastUpdate.confirm(latest.lastSuccessfulAt);
+    lastUpdate.update(latest.lastSuccessfulAt);
     refreshStatus.setLatestAttempt(latest);
     return hasNewAttempt;
   }
@@ -187,9 +187,10 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     if (!loadLatestAttempt || root.hidden) return;
     attemptRequest?.abort();
     const active = attemptRequest = new AbortController();
+    const timeout = doc.defaultView.setTimeout(() => active.abort(), 35000);
     try {
       const latest = await loadLatestAttempt({ signal: active.signal });
-      if (!latest || active !== attemptRequest || root.hidden) return;
+      if (!latest || active.signal.aborted || active !== attemptRequest || root.hidden) return;
       const hasNewAttempt = recordAttempt(latest);
       if (reload && hasNewAttempt && rows && !sourceRunning) {
         void balanceMetric.refresh();
@@ -199,6 +200,7 @@ export function createSicoobTransactionReportView({ document: doc = globalThis.d
     } catch {
       // A status read error does not establish the outcome of the bank collection.
     } finally {
+      doc.defaultView.clearTimeout(timeout);
       if (active === attemptRequest) attemptRequest = null;
     }
   }

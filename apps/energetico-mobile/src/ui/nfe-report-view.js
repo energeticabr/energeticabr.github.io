@@ -56,7 +56,7 @@ function classifyFiscalFacts(row, facts) {
   return { regime:facts?.regime || '', retention, cno, cnoDetail };
 }
 
-export function createNfeReportView({ document:doc = globalThis.document, data, openMediaCollection, syncMonitor, proposalAttachments }) {
+export function createNfeReportView({ document:doc = globalThis.document, data, openMediaCollection, syncMonitor, loadLatestUpdate, proposalAttachments }) {
   const make = (tag, className = '', text) => {
     const element = doc.createElement(tag);
     if (className) element.className = className;
@@ -94,7 +94,9 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   body.setAttribute('role', 'region');
   body.setAttribute('aria-label', 'Notas fiscais da empresa');
   const metrics = make('dl', 'nfe-metrics');
-  const lastUpdate = createFinancialReportLastUpdate(doc, { fiscal:true });
+  const lastUpdate = createFinancialReportLastUpdate(doc, { fiscal:true, loadLatestUpdate,
+    onAdvance:() => { if (rows) { fiscalReloadPending = true; reloadFiscalRows(); } },
+  });
   const refreshStatus = createFinancialReportRefreshStatus(doc, { fiscal:true });
   const filters = make('div', 'nfe-filters');
   const search = make('input');
@@ -625,6 +627,7 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
   function close() {
     if (root.hidden) return;
     root.hidden = true;
+    lastUpdate.close();
     proposal?.close();
     provision?.close();
     picker?.close();
@@ -698,7 +701,8 @@ export function createNfeReportView({ document:doc = globalThis.document, data, 
       body.scrollTop = 0;
       body.scrollLeft = 0;
       closeButton.focus();
-      await load(fiscalReloadPending);
+      lastUpdate.open();
+      await load(Boolean(loadLatestUpdate) || fiscalReloadPending);
     },
     close,
     destroy() { unsubscribeFiscal?.(); close(); landscape.destroy(); root.remove(); },

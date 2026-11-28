@@ -2,7 +2,7 @@ const formatter = new Intl.DateTimeFormat('pt-BR', {
   timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short',
 });
 
-export function createFinancialReportLastUpdate(doc, { fiscal = false, labelText = 'Última atualização' } = {}) {
+export function createFinancialReportLastUpdate(doc, { fiscal = false, labelText = 'Última atualização', loadLatestUpdate, onAdvance } = {}) {
   const element = doc.createElement('div');
   element.className = fiscal ? 'nfe-pair' : 'ddr-metric';
   element.dataset.reportLastUpdate = '';
@@ -14,22 +14,56 @@ export function createFinancialReportLastUpdate(doc, { fiscal = false, labelText
   time.textContent = '—';
   value.append(time);
   element.append(label, value);
-  let latest = -Infinity, confirmed = false;
+  let latest = -Infinity, latestFallback = -Infinity, timer, request;
   function display(at) {
-    latest = at;
     const date = new Date(at);
     time.dateTime = date.toISOString();
     time.textContent = formatter.format(date);
   }
+  function update(at) {
+    if (!Number.isFinite(at) || at <= latest || !Number.isFinite(new Date(at).getTime())) return false;
+    latest = at;
+    display(at);
+    return true;
+  }
+
+  async function read() {
+    if (doc.visibilityState === 'hidden' || request) return;
+    const active = request = new AbortController();
+    const timeout = doc.defaultView.setTimeout(() => active.abort(), 35000);
+    try {
+      const at = await loadLatestUpdate({ signal: active.signal });
+      if (request === active && !active.signal.aborted && update(at)) onAdvance?.();
+    } catch {
+      // Keep the last confirmed time if the status read fails.
+    } finally {
+      doc.defaultView.clearTimeout(timeout);
+      if (request === active) request = null;
+    }
+  }
+
   return {
     element,
-    update(at) {
-      if (!confirmed && Number.isFinite(at) && at > latest) display(at);
+    update,
+    fallback(at) {
+      if (latest === -Infinity && Number.isFinite(at) && at > latestFallback) {
+        latestFallback = at;
+        display(at);
+      }
     },
-    confirm(at) {
-      if (!Number.isFinite(at) || (confirmed && at <= latest)) return;
-      confirmed = true;
-      display(at);
+    open() {
+      if (!loadLatestUpdate || timer !== undefined) return;
+      doc.addEventListener('visibilitychange', read);
+      timer = doc.defaultView.setInterval(read, 60000);
+      void read();
+    },
+    close() {
+      if (timer === undefined) return;
+      doc.removeEventListener('visibilitychange', read);
+      doc.defaultView.clearInterval(timer);
+      timer = undefined;
+      request?.abort();
+      request = null;
     },
   };
 }
