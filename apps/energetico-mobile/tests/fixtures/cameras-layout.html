@@ -5,15 +5,17 @@ const accountKey = 'layout-check';
 const listMode = location.search === '?list';
 const liveGridMode = location.search === '?live-grid';
 const fullGridMode = location.search === '?full-grid';
-const wallMode = location.search === '?player' || liveGridMode || fullGridMode;
+const twelveGridMode = location.search === '?twelve-grid';
+const wallMode = location.search === '?player' || liveGridMode || fullGridMode || twelveGridMode;
+const wallCount = fullGridMode ? 16 : twelveGridMode ? 12 : liveGridMode ? 5 : 8;
 localStorage.setItem('energetico:camera-preview:v1:' + accountKey + ':camera-1', 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8Af//Z');
 localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify([{
   name: wallMode ? 'Visual 1' : 'Portão e pátio',
-  cameraIds: wallMode ? Array.from({ length: fullGridMode ? 16 : liveGridMode ? 5 : 8 }, (_, index) => 'camera-' + (index + 1)) : ['camera-1', 'camera-2'],
+  cameraIds: wallMode ? Array.from({ length: wallCount }, (_, index) => 'camera-' + (index + 1)) : ['camera-1', 'camera-2'],
 }, { name: 'NomeLongoSemEspaços'.repeat(5), cameraIds: ['camera-3'] }]));
 createCamerasView(document).open({
   accountKey,
-  list: async () => Array.from({ length: fullGridMode ? 16 : 9 }, (_, index) => ({
+  list: async () => Array.from({ length: Math.max(wallCount, 9) }, (_, index) => ({
     id: 'camera-' + (index + 1),
     label: index === 0 ? 'Entrada' : listMode && index === 8
       ? 'Pátio ' + 'NomeLongoSemEspaços'.repeat(5) : 'Obra Xavante • canal ' + (index + 1),
@@ -59,6 +61,7 @@ if (window.innerWidth === 320) {
   if (savedLabel) savedLabel.style.fontSize = '18px';
 }
 const rect=node=>{const r=node.getBoundingClientRect(); return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:r.width,height:r.height}};
+const visible = node => node.getClientRects().length > 0;
 const cardHeadings = () => [...document.querySelectorAll('.camera-card__heading')].map(heading => {
   const title = heading.querySelector('strong');
   const text = document.createRange();
@@ -107,9 +110,9 @@ const layout = {viewport:rect(dialog),
   player:player && rect(player), portrait:String(window.matchMedia('(orientation: portrait)').matches), tiles:[...document.querySelectorAll('.cameras-player__tile')].map(rect),
   savedFrames:[...document.querySelectorAll('.cameras-player__saved-frame:not([hidden])')].map(frame => {
     const tile = frame.closest('.cameras-player__tile');
-    const focus = tile.querySelector('.cameras-player__focus');
-    return { label:rect(tile.querySelector('.cameras-player__saved-label')), tile:rect(tile),
-      focus:focus ? rect(focus) : null, imageLoaded:frame.querySelector('img').naturalWidth > 0 };
+    const label = tile.querySelector('.cameras-player__saved-label');
+    return { label:label && visible(label) ? rect(label) : null, tile:rect(tile),
+      imageLoaded:frame.querySelector('img').naturalWidth > 0 };
   }),
   controls:document.querySelector('.cameras-player__actions') && rect(document.querySelector('.cameras-player__actions')),
   drawer:document.querySelector('.cameras-player__drawer') && rect(document.querySelector('.cameras-player__drawer')),
@@ -124,6 +127,20 @@ if (location.search === '?single') {
   dialog.querySelector('[data-camera-open="camera-3"]').click();
   layout.fixedActions = actions();
   layout.fixedHasPtzPanel = Boolean(dialog.querySelector('.cameras-player__ptz'));
+}
+if ((wallMode && !liveGridMode) || location.search === '?pair') {
+  player.querySelectorAll('video')[location.search === '?pair' ? 1 : 2].dispatchEvent(new Event('playing'));
+  layout.closeButtons = [...player.querySelectorAll('.cameras-player__tile')].map(tile => {
+    const dismiss = tile.querySelector('[data-camera-dismiss]');
+    const button = rect(dismiss);
+    const overlays = [...tile.querySelectorAll(
+      '.cameras-player__label, .cameras-player__tile-live, .cameras-player__saved-label, .cameras-player__focus',
+    )].filter(visible).map(node => node.textContent);
+    return {
+      tile: rect(tile), button, overlays,
+      clickable: dismiss.contains(document.elementFromPoint(button.left + button.width / 2, button.top + button.height / 2)),
+    };
+  });
 }
 if (wallMode) {
   const measurePlayer = () => ({
@@ -185,24 +202,13 @@ if (wallMode) {
       clearInterval(repaint);
       for (const { stream } of sources) stream.getTracks().forEach(track => track.stop());
     }
-  } else {
+  } else if (location.search === '?player') {
     const video = player.querySelector('[data-camera-video="camera-1"]');
     doubleTap(video);
     layout.focused = measurePlayer();
     doubleTap(video);
     layout.restored = measurePlayer();
     const liveVideo = player.querySelector('[data-camera-video="camera-3"]');
-    liveVideo.dispatchEvent(new Event('playing'));
-    layout.closeButtons = [...player.querySelectorAll('.cameras-player__tile')].map(tile => {
-      const dismiss = tile.querySelector('[data-camera-dismiss]');
-      const badge = tile.querySelector('.cameras-player__tile-live:not([hidden])');
-      const button = rect(dismiss);
-      return {
-        tile: rect(tile), button, label: rect(tile.querySelector('.cameras-player__label')),
-        badge: badge && rect(badge),
-        clickable: dismiss.contains(document.elementFromPoint(button.left + button.width / 2, button.top + button.height / 2)),
-      };
-    });
     const tile = video.closest('.cameras-player__tile');
     const offlineTile = player.querySelector('[data-camera-video="camera-2"]').closest('.cameras-player__tile');
     layout.unavailableChannels = [tile, offlineTile].map(tile => {
@@ -216,7 +222,8 @@ if (wallMode) {
     layout.six = measurePlayer();
     player.querySelector('[data-camera-player-back]').click();
     dialog.querySelector('[data-camera-visual-open]').click();
-    dialog.querySelector('[data-camera-video="camera-1"]').closest('.cameras-player__tile').querySelector('.cameras-player__focus').click();
+    doubleTap(dialog.querySelector('[data-camera-video="camera-1"]'));
+    dialog.querySelector('[data-camera-channel-controls]')?.click();
     layout.individual = measurePlayer();
   }
 }
