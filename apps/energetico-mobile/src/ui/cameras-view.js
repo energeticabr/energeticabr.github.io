@@ -393,8 +393,10 @@ export function createCamerasView(documentRef) {
     const visualsTab = dialog.querySelector('[data-camera-tab="visuals"]');
     const createVisualButton = dialog.querySelector('[data-camera-create-visual]');
     const cameraPanel = dialog.querySelector('#camera-panel');
-    const cameraTags = createCameraTags({ view: dialog, listTags, createTag, assignTag,
-      signal: page.signal, onChange: renderUpdatedChannels });
+    const cameraTags = createCameraTags({ view: dialog, listTags, createTag, assignTag, signal: page.signal,
+      onChange: () => {
+        if (activeTab === 'cameras' && !creatingVisual && !editingVisual) renderUpdatedChannels();
+      } });
     const make = (tag, className, text) => {
       const node = documentRef.createElement(tag);
       node.className = className;
