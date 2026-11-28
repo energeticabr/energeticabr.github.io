@@ -989,14 +989,78 @@ test('restaura o último quadro ao vivo depois de reabrir o app, pela conta e c�
   assert.equal(otherReopened.document.querySelector('[data-camera-open="site-2"] img')?.src, otherImage);
 });
 
+test('oculta o PTZ em canais fixos ou sem capacidade informada, mesmo na mesma câmera', async t => {
+  const { document, moves } = setup(t, { catalog: [
+    { id: 'channel-1', label: 'Canal móvel', cameraGroup: 'channel-1', supportsPtz: true },
+    { id: 'channel-2', label: 'Canal fixo', cameraGroup: 'channel-1', supportsPtz: false },
+    { id: 'channel-3', label: 'Canal legado', cameraGroup: 'channel-1' },
+  ] });
+  await flush();
+  for (const id of ['channel-2', 'channel-3']) {
+    document.querySelector(`[data-camera-open="${id}"]`).click();
+    await flush();
+    assert.equal(document.querySelector('[data-camera-ptz], [data-camera-move], .cameras-player__ptz'), null);
+    for (const control of ['audio', 'snapshot', 'recordings']) {
+      assert.ok(document.querySelector(`[data-camera-${control}]`));
+    }
+    document.querySelector('[data-camera-player-back]').click();
+  }
+  assert.deepEqual(moves, []);
+});
+
+test('atualiza o PTZ com o novo catálogo sem reabrir a transmissão', async t => {
+  const timerControl = { cleared: [] };
+  let supportsPtz = true;
+  const { document, starts, moves } = setup(t, {
+    timerControl,
+    cameraList: async () => [{ id: 'site-1', label: 'Obra 1', supportsPtz }],
+  });
+  Object.defineProperty(document, 'hidden', { value: false });
+  await flush();
+  document.querySelector('[data-camera-open="site-1"]').click();
+  await flush();
+  const video = document.querySelector('video');
+  video.dispatchEvent(new document.defaultView.Event('playing'));
+  document.querySelector('[data-camera-snapshot]').click();
+  const status = document.querySelector('.cameras-player__control-status');
+  assert.equal(status.textContent, 'A imagem ainda está carregando.');
+  document.querySelector('[data-camera-ptz]').click();
+  const arrow = document.querySelector('[data-camera-move="up"]');
+  arrow.focus();
+  assert.equal(document.activeElement, arrow);
+
+  supportsPtz = false;
+  timerControl.callback();
+  await flush();
+  assert.equal(document.querySelector('[data-camera-ptz], .cameras-player__ptz'), null);
+  assert.equal(status.textContent, 'A imagem ainda está carregando.');
+  assert.equal(document.activeElement, document.querySelector('[data-camera-player-back]'));
+  arrow.click();
+  assert.deepEqual(moves, []);
+
+  supportsPtz = true;
+  timerControl.callback();
+  await flush();
+  assert.ok(document.querySelector('[data-camera-ptz]'));
+  assert.equal(document.querySelector('.cameras-player__ptz').hidden, true);
+  assert.equal(document.querySelector('video'), video);
+  assert.equal(starts.length, 1);
+});
+
 test('movimenta a câmera ao vivo e abre gravação da data escolhida', async t => {
-  const { document, moves, searches, archives } = setup(t, { accountKey: 'camera-viewer-a' }); await flush();
+  const { document, moves, searches, archives } = setup(t, {
+    accountKey: 'camera-viewer-a',
+    catalog: [{ id: 'site-1', label: 'Obra 1', supportsPtz: true }],
+  });
+  await flush();
   document.querySelector('[data-camera-open]').click(); await flush();
   const { Event, localStorage } = document.defaultView;
   const video = document.querySelector('video');
   const livePreview = 'data:image/jpeg;base64,AAAA';
   simulateFrame(document, video, livePreview);
   video.dispatchEvent(new Event('playing'));
+  document.querySelector('[data-camera-ptz]').click();
+  assert.equal(document.querySelector('.cameras-player__ptz').hidden, false);
   document.querySelector('[data-camera-move="up"]').click(); await flush();
   assert.deepEqual(moves, [{id:'site-1', direction:'up'}]);
   document.querySelector('[data-camera-recordings]').click();

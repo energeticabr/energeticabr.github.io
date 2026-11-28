@@ -965,6 +965,7 @@ export function createChatClient({
         label: channel.label,
         status: channel.status === "online" || channel.status === "offline" ? channel.status : "unknown",
         lastOnlineAt,
+          supportsPtz: channel.supportsPtz === true,
       };
       if (typeof channel.cameraGroup === "string" && /^[a-z0-9-]{1,48}$/.test(channel.cameraGroup)) {
         camera.cameraGroup = channel.cameraGroup;

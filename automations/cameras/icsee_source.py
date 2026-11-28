@@ -10,6 +10,7 @@ import sys
 import threading
 import urllib.request
 from datetime import datetime, timedelta
+from functools import partial
 from urllib.parse import urlsplit
 
 
@@ -199,8 +200,7 @@ def main():
         return
 
     from xmplayer.config.loader import load_monitor_config
-    from xmplayer.core import service
-    from xmplayer.core.ptz import PtzCommandQueue
+    from xmplayer.core import ptz as ptz_protocol, service
     from xmplayer.media.live_hevc import LiveXStreamHevcAssembler
 
     config = load_monitor_config()
@@ -251,13 +251,15 @@ def main():
         return
     sent_video = False
     stop = threading.Event()
-    ptz = PtzCommandQueue()
+    ptz = ptz_protocol.PtzCommandQueue()
 
     def commands():
         while not stop.is_set() and read_motion_command(control_input, ptz):
             pass
 
     if operation == "live":
+        # The SDK defaults OPPTZControl to channel zero.
+        ptz_protocol.build_opptz_payload = partial(ptz_protocol.build_opptz_payload, channel=int(settings["channel"]))
         threading.Thread(target=commands, daemon=True).start()
 
     def forward_video(assembler, data, key):

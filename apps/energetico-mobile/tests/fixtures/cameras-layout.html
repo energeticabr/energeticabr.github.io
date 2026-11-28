@@ -19,6 +19,7 @@ createCamerasView(document).open({
       ? 'Pátio ' + 'NomeLongoSemEspaços'.repeat(5) : 'Obra Xavante • canal ' + (index + 1),
     status: index === 0 || (location.search === '?player' && index === 1) ? 'offline' : 'online',
     lastOnlineAt: index === 0 ? '2026-11-24T12:00:00Z' : null,
+    supportsPtz: index === 0,
     ...([0, 2, 6].includes(index) ? { cameraGroup: 'camera-1', cameraLabel: 'Obra Xavante' } : {}),
   })),
   start: async () => new Promise(() => {}),
@@ -116,6 +117,14 @@ const layout = {viewport:rect(dialog),
   liveStateText:player?.querySelector('.cameras-player__live-state').textContent,
   recording:document.querySelector('.cameras-player__recording') && rect(document.querySelector('.cameras-player__recording')),
   recordingTime:document.querySelector('.cameras-player__recording-times') && rect(document.querySelector('.cameras-player__recording-times'))};
+if (location.search === '?single') {
+  const actions = () => [...dialog.querySelectorAll('.cameras-player__action-label')].map(label => label.textContent);
+  layout.movableActions = actions();
+  player.querySelector('[data-camera-player-back]').click();
+  dialog.querySelector('[data-camera-open="camera-3"]').click();
+  layout.fixedActions = actions();
+  layout.fixedHasPtzPanel = Boolean(dialog.querySelector('.cameras-player__ptz'));
+}
 if (wallMode) {
   const measurePlayer = () => ({
     stage: rect(dialog.querySelector('.cameras-player__stage')),
