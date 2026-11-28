@@ -38,6 +38,11 @@ export function bindStackedCameraPreview(tile, video, savedFrame, savedImage) {
     pendingFrame = null;
   }
 
+  function contextLost() {
+    cancelFrame();
+    canvas.hidden = true;
+  }
+
   function refresh() {
     cancelFrame();
     const usingSavedImage = !savedFrame.hidden;
@@ -56,9 +61,15 @@ export function bindStackedCameraPreview(tile, video, savedFrame, savedImage) {
       canvas.hidden = true;
       canvas.setAttribute('aria-hidden', 'true');
       context = canvas.getContext('2d', { alpha: false });
+      canvas.addEventListener('contextlost', contextLost);
+      canvas.addEventListener('contextrestored', refresh);
       tile.append(canvas);
     }
     if (!context) return;
+    if (context.isContextLost?.()) {
+      contextLost();
+      return;
+    }
 
     const { cropLeft, cropWidth, lensHeight, outputWidth, outputHeight } = layout;
     if (canvas.width !== outputWidth * 2) canvas.width = outputWidth * 2;
@@ -69,19 +80,22 @@ export function bindStackedCameraPreview(tile, video, savedFrame, savedImage) {
         context.drawImage(source, cropLeft, 0, cropWidth, lensHeight, 0, 0, outputWidth, outputHeight);
         context.drawImage(source, cropLeft, lensHeight, cropWidth, lensHeight, outputWidth, 0, outputWidth, outputHeight);
         canvas.hidden = false;
-        return true;
       } catch {
         canvas.hidden = true;
-        return false;
       }
     }
-    if (!draw() || usingSavedImage || video.paused) return;
+    draw();
+    if (usingSavedImage || video.paused) return;
 
     let previousFrameAt = -Infinity;
     function nextFrame(now) {
       pendingFrame = null;
+      if (context.isContextLost?.()) {
+        contextLost();
+        return;
+      }
       if (now - previousFrameAt >= FRAME_INTERVAL) {
-        if (!draw()) return;
+        draw();
         previousFrameAt = now;
       }
       pendingFrame = video.requestVideoFrameCallback(nextFrame);
@@ -106,6 +120,8 @@ export function bindStackedCameraPreview(tile, video, savedFrame, savedImage) {
       observer.disconnect();
       for (const event of mediaEvents) video.removeEventListener(event, refresh);
       savedImage.removeEventListener('load', refresh);
+      canvas?.removeEventListener('contextlost', contextLost);
+      canvas?.removeEventListener('contextrestored', refresh);
       canvas?.remove();
     },
   };

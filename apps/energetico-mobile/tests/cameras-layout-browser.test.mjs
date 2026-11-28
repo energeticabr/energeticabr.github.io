@@ -37,13 +37,16 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
       }
     }
     if (mode === 'stacked-grid') {
-      const { saved, live, advanced, regularSplit, expanded, restored, visibleWidth, originalWidth, tileWidth } = layout.stacked;
+      const { saved, live, advanced, regularSplit, expanded, restored, contextFallback, contextRestored,
+        visibleWidth, originalWidth, tileWidth } = layout.stacked;
       assert.equal(regularSplit, false);
       assert.equal(expanded, false);
+      assert.equal(contextFallback, true);
       if (width > height) {
         assert.deepEqual(saved, ['red', 'green']);
         assert.deepEqual(live, ['red', 'green']);
         assert.deepEqual(advanced, ['blue', 'green']);
+        assert.equal(contextRestored, true);
         assert.equal(restored, true);
         assert.ok(visibleWidth >= tileWidth - 2 && visibleWidth > originalWidth * 1.5);
       } else {
