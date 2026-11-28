@@ -18,7 +18,9 @@ from urllib.error import HTTPError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from camera_status import CameraStatusMonitor, CameraStatusStore, is_icsee_entry, utc_text
+from camera_status import (
+    MAX_CAMERA_REVISION, CameraStatusMonitor, CameraStatusStore, VisualRevisionConflict, is_icsee_entry, utc_text,
+)
 
 
 CATALOG = "/api/portal-cameras"
@@ -27,7 +29,7 @@ MEDIA_FILE = re.compile(r"(?:index|h264|hevc)\.m3u8|init\.mp4|segment-[0-9]+\.(?
 MEDIA_ROUTE = re.compile(rf"{MEDIA}/([A-Za-z0-9_-]{{43}})/({MEDIA_FILE.pattern})")
 CHANNEL_ID = re.compile(r"[a-z0-9-]{1,48}")
 VISUAL_ID = re.compile(r"(?:[a-f0-9]{32}|[a-f0-9]{64})")
-VISUAL_ACTIONS = {"list-visuals", "create-visual", "import-visual", "rename-visual"}
+VISUAL_ACTIONS = {"list-visuals", "create-visual", "import-visual", "rename-visual", "edit-visual-cameras"}
 LARGE_REQUEST_ACTIONS = VISUAL_ACTIONS | {"renew-live"}
 # Match the whitespace accepted by the app's String.trim(), including for legacy names.
 VISUAL_BLANK = re.compile(r"[\t-\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*")
@@ -57,6 +59,14 @@ class PlaybackError(Exception):
 def visual_name(value):
     if not isinstance(value, str) or VISUAL_BLANK.fullmatch(value) or len(value.encode("utf-16-le")) > 240:
         raise ValueError("invalid visual name")
+    return value
+
+
+def visual_camera_ids(value):
+    if (not isinstance(value, list) or not 1 <= len(value) <= MAX_STREAMS
+            or any(not isinstance(item, str) or not CHANNEL_ID.fullmatch(item) for item in value)
+            or len(value) != len(set(value))):
+        raise ValueError("invalid visual camera ids")
     return value
 
 
@@ -297,8 +307,28 @@ class Gateway:
             visuals = self.status_store.list_visuals(viewer)
             return {"visuals": [visual for visual in visuals if len(visual["cameraIds"]) <= max_camera_ids]}
 
-        name = visual_name(data.get("name"))
         visual_id = data.get("id")
+        if action == "edit-visual-cameras":
+            if not isinstance(visual_id, str) or not VISUAL_ID.fullmatch(visual_id):
+                raise ValueError("invalid visual id")
+            camera_revision = data.get("cameraRevision")
+            if type(camera_revision) is not int or not 0 <= camera_revision <= MAX_CAMERA_REVISION:
+                raise ValueError("invalid visual camera revision")
+            camera_ids = visual_camera_ids(data.get("cameraIds"))
+            previous_camera_ids = visual_camera_ids(data.get("previousCameraIds"))
+            added_camera_ids = set(camera_ids).difference(previous_camera_ids)
+            try:
+                visual = self.status_store.edit_visual_cameras(
+                    viewer, visual_id, camera_ids, previous_camera_ids, camera_revision,
+                    additions_available=added_camera_ids.issubset(self.entries),
+                )
+            except VisualRevisionConflict:
+                raise PlaybackError(409) from None
+            if visual is None:
+                raise PlaybackError(404)
+            return {"visual": visual}
+
+        name = visual_name(data.get("name"))
         if action == "rename-visual":
             if not isinstance(visual_id, str) or not VISUAL_ID.fullmatch(visual_id):
                 raise ValueError("invalid visual id")
@@ -310,11 +340,7 @@ class Gateway:
                 raise PlaybackError(409)
             return {"visual": visual}
 
-        camera_ids = data.get("cameraIds")
-        if (not isinstance(camera_ids, list) or not 1 <= len(camera_ids) <= MAX_STREAMS
-                or any(not isinstance(item, str) or not CHANNEL_ID.fullmatch(item) for item in camera_ids)
-                or len(camera_ids) != len(set(camera_ids))):
-            raise ValueError("invalid visual camera ids")
+        camera_ids = visual_camera_ids(data.get("cameraIds"))
 
         if action == "import-visual":
             occurrence = data.get("occurrence")

@@ -20,6 +20,11 @@ YOOSEE_STATUS_POLL_SECONDS = 30
 ICSEE_STATUS_TIMEOUT_SECONDS = 30
 ICSEE_CHANNEL_MISSES_FOR_OFFLINE = 2
 VALID_STATES = {"online", "offline", "unknown"}
+MAX_CAMERA_REVISION = 9_007_199_254_740_991
+
+
+class VisualRevisionConflict(Exception):
+    pass
 
 
 def utc_now():
@@ -158,6 +163,7 @@ class CameraStatusStore:
                 ALTER TABLE camera_status_checks ADD COLUMN consecutive_misses INTEGER NOT NULL DEFAULT 0
                 CHECK (consecutive_misses >= 0)
             """)
+        # This write holds SQLite's writer lock through the visual schema check and migration.
         self._connection.execute(
             "INSERT OR IGNORE INTO camera_status_meta(key, value) VALUES ('event_generation', ?)",
             (uuid.uuid4().hex,),
@@ -168,19 +174,25 @@ class CameraStatusStore:
                 id TEXT NOT NULL,
                 name TEXT NOT NULL,
                 camera_ids TEXT NOT NULL,
+                camera_revision INTEGER NOT NULL DEFAULT 0,
                 UNIQUE (viewer, id)
             )
         """)
+        visual_columns = {row[1] for row in self._connection.execute("PRAGMA table_info(camera_visuals)")}
+        if "camera_revision" not in visual_columns:
+            self._connection.execute("""
+                ALTER TABLE camera_visuals ADD COLUMN camera_revision INTEGER NOT NULL DEFAULT 0
+            """)
         self._connection.commit()
 
     @staticmethod
     def _visual(row):
-        return {"id": row[0], "name": row[1], "cameraIds": json.loads(row[2])}
+        return {"id": row[0], "name": row[1], "cameraIds": json.loads(row[2]), "cameraRevision": row[3]}
 
     def list_visuals(self, viewer):
         with self._lock:
             rows = self._connection.execute(
-                "SELECT id, name, camera_ids FROM camera_visuals WHERE viewer = ? ORDER BY rowid",
+                "SELECT id, name, camera_ids, camera_revision FROM camera_visuals WHERE viewer = ? ORDER BY rowid",
                 (viewer,),
             ).fetchall()
         return [self._visual(row) for row in rows]
@@ -192,7 +204,7 @@ class CameraStatusStore:
                 ON CONFLICT(viewer, id) DO NOTHING
             """, (viewer, visual_id, name, json.dumps(camera_ids)))
             row = self._connection.execute(
-                "SELECT id, name, camera_ids FROM camera_visuals WHERE viewer = ? AND id = ?",
+                "SELECT id, name, camera_ids, camera_revision FROM camera_visuals WHERE viewer = ? AND id = ?",
                 (viewer, visual_id),
             ).fetchone()
         return self._visual(row)
@@ -203,10 +215,43 @@ class CameraStatusStore:
                 UPDATE camera_visuals SET name = ? WHERE viewer = ? AND id = ? AND name = ?
             """, (name, viewer, visual_id, previous_name))
             row = self._connection.execute(
-                "SELECT id, name, camera_ids FROM camera_visuals WHERE viewer = ? AND id = ?",
+                "SELECT id, name, camera_ids, camera_revision FROM camera_visuals WHERE viewer = ? AND id = ?",
                 (viewer, visual_id),
             ).fetchone()
         return self._visual(row) if row else None
+
+    def edit_visual_cameras(self, viewer, visual_id, camera_ids, previous_camera_ids, camera_revision, *,
+                            additions_available):
+        with self._lock, self._connection:
+            # Lock writers before comparing decoded lists so JSON formatting and other connections are safe.
+            self._connection.execute("BEGIN IMMEDIATE")
+            row = self._connection.execute(
+                "SELECT id, name, camera_ids, camera_revision FROM camera_visuals WHERE viewer = ? AND id = ?",
+                (viewer, visual_id),
+            ).fetchone()
+            if row is None:
+                return None
+            visual = self._visual(row)
+            current_revision = visual["cameraRevision"]
+            current_camera_ids = visual["cameraIds"]
+            if current_revision == camera_revision + 1 and current_camera_ids == camera_ids:
+                return visual
+            if current_revision != camera_revision or current_camera_ids != previous_camera_ids:
+                raise VisualRevisionConflict
+            if current_camera_ids == camera_ids:
+                return visual
+            if not additions_available:
+                raise ValueError("invalid new visual camera ids")
+            if current_revision == MAX_CAMERA_REVISION:
+                raise VisualRevisionConflict
+            self._connection.execute(
+                "UPDATE camera_visuals SET camera_ids = ?, camera_revision = camera_revision + 1 "
+                "WHERE viewer = ? AND id = ?",
+                (json.dumps(camera_ids), viewer, visual_id),
+            )
+            visual["cameraIds"] = camera_ids
+            visual["cameraRevision"] = current_revision + 1
+            return visual
 
     def get(self, channel_id):
         with self._lock:

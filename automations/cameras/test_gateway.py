@@ -152,14 +152,15 @@ class CameraGatewayTest(unittest.TestCase):
             "command": ["/unused"], "input": {"password": secrets.token_urlsafe(16)},
         }])
 
-    def start_gateway(self, channels):
+    def start_gateway(self, channels, *, status_store=None):
         config = {
             "origins": ["https://www.energeticabr.com"],
             "viewers": ["owner"],
             "ffmpeg": "unused",
             "channels": channels,
         }
-        gateway = Gateway(config, identity=lambda token: {"id": token, "userType": "Member"})
+        gateway = Gateway(config, identity=lambda token: {"id": token, "userType": "Member"},
+                          status_store=status_store)
         self.gateway = gateway
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(gateway))
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -216,12 +217,13 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(self.request("POST", CATALOG, "owner", create)[0], 200)
         self.assertEqual(self.request("POST", CATALOG, "other-owner", rename)[0], 404)
         self.assertEqual(json.loads(self.request("POST", CATALOG, "other-owner", listing)[2]), {"visuals": []})
-        self.assertEqual(json.loads(self.request("POST", CATALOG, "OWNER", listing)[2]), {"visuals": [visual]})
+        saved_visual = {**visual, "cameraRevision": 0}
+        self.assertEqual(json.loads(self.request("POST", CATALOG, "OWNER", listing)[2]), {"visuals": [saved_visual]})
         self.assertEqual(self.request("POST", CATALOG, "owner", rename)[0], 200)
         self.assertEqual(self.request("POST", CATALOG, "owner", rename)[0], 200)
         self.assertEqual(self.request("POST", CATALOG, "owner", {**rename, "name": "Antigo"})[0], 409)
         self.assertEqual(json.loads(self.request("POST", CATALOG, "owner", listing)[2]),
-                         {"visuals": [{**visual, "name": "Obra"}]})
+                         {"visuals": [{**saved_visual, "name": "Obra"}]})
 
     def test_saved_visual_accepts_sixteen_cameras_in_order(self):
         channels = [f"ch-{index}" for index in range(17, 0, -1)]
@@ -239,7 +241,7 @@ class CameraGatewayTest(unittest.TestCase):
 
         legacy = {"action": "list-visuals"}
         self.assertEqual(json.loads(self.request("POST", CATALOG, "owner", legacy)[2]),
-                         {"visuals": [short_visual]})
+                         {"visuals": [{**short_visual, "cameraRevision": 0}]})
         modern = {**legacy, "maxCameraIds": 16}
         visuals = json.loads(self.request("POST", CATALOG, "owner", modern)[2])["visuals"]
         self.assertEqual({visual["id"]: visual["cameraIds"] for visual in visuals},
@@ -251,6 +253,7 @@ class CameraGatewayTest(unittest.TestCase):
         status, _, payload = self.request("POST", CATALOG, "owner", legacy)
         self.assertEqual(status, 200)
         visual = json.loads(payload)["visual"]
+        self.assertEqual(visual["cameraRevision"], 0)
         rename = {"action": "rename-visual", "id": visual["id"], "name": "Novo nome", "previousName": legacy["name"]}
         self.assertEqual(self.request("POST", CATALOG, "owner", rename)[0], 200)
         self.assertEqual(json.loads(self.request("POST", CATALOG, "owner", legacy)[2]),
@@ -268,7 +271,7 @@ class CameraGatewayTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "camera-status.sqlite3"
             store = CameraStatusStore(path)
-            visual = {"id": "a" * 32, "name": "Visão geral", "cameraIds": ["ch-2", "ch-1"]}
+            visual = {"id": "a" * 32, "name": "Visão geral", "cameraIds": ["ch-2", "ch-1"], "cameraRevision": 0}
             try:
                 store.update("ch-1", "online")
                 self.assertEqual(store.create_visual("owner", visual["id"], visual["name"], visual["cameraIds"]), visual)
@@ -280,6 +283,144 @@ class CameraGatewayTest(unittest.TestCase):
                 self.assertEqual(store.get("ch-1")["status"], "online")
             finally:
                 store.close()
+
+    def test_edit_of_a_visual_from_the_previous_schema_persists_and_preserves_renames(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        path = Path(directory.name) / "camera-status.sqlite3"
+        channels = [{**self.gateway.entries["ch-1"], "id": f"ch-{index}"} for index in range(1, 4)]
+        visual_id = "a" * 32
+        other = {"id": "b" * 32, "name": "Entrada", "cameraIds": ["ch-1"]}
+        with closing(sqlite3.connect(path)) as connection, connection:
+            connection.execute("""
+                CREATE TABLE camera_visuals (
+                    viewer TEXT NOT NULL, id TEXT NOT NULL, name TEXT NOT NULL,
+                    camera_ids TEXT NOT NULL, UNIQUE (viewer, id)
+                )
+            """)
+            connection.execute("INSERT INTO camera_visuals(viewer, id, name, camera_ids) VALUES (?, ?, ?, ?)",
+                               ("owner", visual_id, "Portão", '[ "ch-1","ch-2" ]'))
+        store = CameraStatusStore(path)
+        self.start_gateway(channels, status_store=store)
+        status, _, payload = self.request("POST", CATALOG, "owner", {"action": "list-visuals"})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload), {"visuals": [{"id": visual_id, "name": "Portão",
+                                                           "cameraIds": ["ch-1", "ch-2"], "cameraRevision": 0}]})
+        self.assertEqual(self.request("POST", CATALOG, "owner", {"action": "create-visual", **other})[0], 200)
+        store.update("ch-1", "online")
+
+        edit = {"action": "edit-visual-cameras", "id": visual_id, "cameraRevision": 0,
+                "previousCameraIds": ["ch-1", "ch-2"], "cameraIds": ["ch-3", "ch-1"]}
+        rename = {"action": "rename-visual", "id": visual_id, "name": "Obra", "previousName": "Portão"}
+        self.assertEqual(self.request("POST", CATALOG, "owner", rename)[0], 200)
+        status, _, payload = self.request("POST", CATALOG, "owner", edit)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload), {"visual": {"id": visual_id, "name": "Obra",
+                                                          "cameraIds": ["ch-3", "ch-1"], "cameraRevision": 1}})
+        self.assertEqual(self.request("POST", CATALOG, "owner", {**rename, "name": "Acesso", "previousName": "Obra"})[0], 200)
+        store.close()
+        reopened = CameraStatusStore(path)
+        self.start_gateway(channels[:2], status_store=reopened)
+
+        status, _, payload = self.request("POST", CATALOG, "OWNER", edit)
+        self.assertEqual(status, 200)
+        expected = {"id": visual_id, "name": "Acesso", "cameraIds": ["ch-3", "ch-1"], "cameraRevision": 1}
+        self.assertEqual(json.loads(payload), {"visual": expected})
+        status, _, payload = self.request("POST", CATALOG, "owner", {"action": "list-visuals"})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload), {"visuals": [expected, {**other, "cameraRevision": 0}]})
+        self.assertEqual(reopened.get("ch-1")["status"], "online")
+
+    def test_edit_compares_the_ordered_previous_selection_and_only_updates_the_owner(self):
+        self.gateway.users.add("other-owner")
+        for channel in ["ch-2", "ch-3"]:
+            self.gateway.entries[channel] = {**self.gateway.entries["ch-1"], "id": channel}
+        visual = {"id": "a" * 32, "name": "Portão", "cameraIds": ["ch-1", "ch-2"]}
+        self.assertEqual(self.request("POST", CATALOG, "owner", {"action": "create-visual", **visual})[0], 200)
+        reorder = {"action": "edit-visual-cameras", "id": visual["id"], "cameraRevision": 0,
+                   "previousCameraIds": ["ch-1", "ch-2"], "cameraIds": ["ch-2", "ch-1"]}
+        self.assertEqual(self.request("POST", CATALOG, body=reorder)[0], 401)
+        self.assertEqual(self.request("POST", CATALOG, "other-owner", {**reorder, "viewer": "owner"})[0], 404)
+        self.assertEqual(self.request("POST", CATALOG, "owner", {**reorder, "id": "b" * 32})[0], 404)
+        self.assertEqual(self.request("POST", CATALOG, "owner", reorder)[0], 200)
+        conflict = {**reorder, "cameraIds": ["ch-1", "ch-3"]}
+        self.assertEqual(self.request("POST", CATALOG, "OWNER", conflict)[0], 409)
+        listing = self.request("POST", CATALOG, "owner", {"action": "list-visuals"})[2]
+        self.assertEqual(json.loads(listing), {"visuals": [{**visual, "cameraIds": ["ch-2", "ch-1"],
+                                                           "cameraRevision": 1}]})
+
+    def test_edit_allows_retaining_and_removing_a_missing_legacy_channel(self):
+        imported = {"action": "import-visual", "name": "Visão antiga", "occurrence": 0,
+                    "cameraIds": ["old-channel", "ch-1"]}
+        status, _, payload = self.request("POST", CATALOG, "owner", imported)
+        self.assertEqual(status, 200)
+        visual = json.loads(payload)["visual"]
+        self.assertEqual(len(visual["id"]), 64)
+        edit = {"action": "edit-visual-cameras", "id": visual["id"], "cameraRevision": 0,
+                "previousCameraIds": ["old-channel", "ch-1"], "cameraIds": ["ch-1", "old-channel"]}
+        status, _, payload = self.request("POST", CATALOG, "owner", edit)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload), {"visual": {**visual, "cameraIds": ["ch-1", "old-channel"],
+                                                          "cameraRevision": 1}})
+        remove = {**edit, "cameraRevision": 1, "previousCameraIds": ["ch-1", "old-channel"], "cameraIds": ["ch-1"]}
+        self.assertEqual(self.request("POST", CATALOG, "owner", remove)[0], 200)
+        self.assertEqual(self.request("POST", CATALOG, "owner", edit)[0], 409)
+        self.assertEqual(self.request("POST", CATALOG, "owner",
+                                      {**edit, "cameraRevision": 2, "previousCameraIds": ["ch-1"]})[0], 400)
+        listing = self.request("POST", CATALOG, "owner", {"action": "list-visuals"})[2]
+        self.assertEqual(json.loads(listing), {"visuals": [{**visual, "cameraIds": ["ch-1"], "cameraRevision": 2}]})
+
+    def test_edit_validates_both_selections_and_accepts_the_maximum_ordered_payload(self):
+        channels = [f"{'a' * 46}{index:02}" for index in range(16)]
+        for channel in channels:
+            self.gateway.entries[channel] = {**self.gateway.entries["ch-1"], "id": channel}
+        visual = {"id": "a" * 32, "name": "Visão geral", "cameraIds": channels}
+        self.assertEqual(self.request("POST", CATALOG, "owner", {"action": "create-visual", **visual})[0], 200)
+        edit = {"action": "edit-visual-cameras", "id": visual["id"], "cameraRevision": 0,
+                "previousCameraIds": channels, "cameraIds": channels[::-1]}
+        for field in ["cameraIds", "previousCameraIds"]:
+            for invalid in [None, "ch-1", [], ["ch-1"] * 2, ["CH-1"], ["a" * 49], [{}], ["ch-1", *channels]]:
+                with self.subTest(field=field, invalid=invalid):
+                    self.assertEqual(self.request("POST", CATALOG, "owner", {**edit, field: invalid})[0], 400)
+        for invalid in [None, "g" * 32, "a" * 31, "a" * 63]:
+            with self.subTest(id=invalid):
+                self.assertEqual(self.request("POST", CATALOG, "owner", {**edit, "id": invalid})[0], 400)
+        for invalid in [None, True, -1, 0.0, "0", 9_007_199_254_740_992]:
+            with self.subTest(revision=invalid):
+                self.assertEqual(self.request("POST", CATALOG, "owner", {**edit, "cameraRevision": invalid})[0], 400)
+        without_revision = {key: value for key, value in edit.items() if key != "cameraRevision"}
+        self.assertEqual(self.request("POST", CATALOG, "owner", without_revision)[0], 400)
+
+        status, _, payload = self.request("POST", CATALOG, "owner", edit)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload), {"visual": {**visual, "cameraIds": channels[::-1], "cameraRevision": 1}})
+
+    def test_edit_retry_does_not_overwrite_an_intervening_edit_that_restores_the_original_selection(self):
+        self.gateway.entries["ch-2"] = {**self.gateway.entries["ch-1"], "id": "ch-2"}
+        visual = {"id": "a" * 32, "name": "Entrada", "cameraIds": ["ch-1"]}
+        self.assertEqual(self.request("POST", CATALOG, "owner", {"action": "create-visual", **visual})[0], 200)
+        first_edit = {"action": "edit-visual-cameras", "id": visual["id"], "cameraRevision": 0,
+                      "previousCameraIds": ["ch-1"], "cameraIds": ["ch-2"]}
+        second_edit = {**first_edit, "cameraRevision": 1, "previousCameraIds": ["ch-2"], "cameraIds": ["ch-1"]}
+        self.assertEqual(self.request("POST", CATALOG, "owner", first_edit)[0], 200)
+        self.assertEqual(self.request("POST", CATALOG, "owner", second_edit)[0], 200)
+        self.assertEqual(self.request("POST", CATALOG, "owner", first_edit)[0], 409)
+        listing = self.request("POST", CATALOG, "owner", {"action": "list-visuals"})[2]
+        self.assertEqual(json.loads(listing), {"visuals": [{**visual, "cameraRevision": 2}]})
+        self.assertEqual(self.request("POST", CATALOG, "owner", {**first_edit, "cameraRevision": 2})[0], 200)
+        self.assertEqual(self.request("POST", CATALOG, "owner", first_edit)[0], 409)
+
+    def test_edit_noop_requires_the_current_revision_and_previous_selection(self):
+        visual = {"id": "a" * 32, "name": "Entrada", "cameraIds": ["ch-1"]}
+        status, _, payload = self.request("POST", CATALOG, "owner", {"action": "create-visual", **visual})
+        self.assertEqual(status, 200)
+        noop = {"action": "edit-visual-cameras", "id": visual["id"], "cameraRevision": 0,
+                "previousCameraIds": ["ch-1"], "cameraIds": ["ch-1"]}
+        status, _, payload = self.request("POST", CATALOG, "owner", noop)
+        self.assertEqual(status, 200)
+        self.assertEqual(self.request("POST", CATALOG, "owner", {**noop, "cameraRevision": 1})[0], 409)
+        self.assertEqual(self.request("POST", CATALOG, "owner", {**noop, "previousCameraIds": ["ch-2"]})[0], 409)
+        self.assertEqual(json.loads(payload), {"visual": {**visual, "cameraRevision": 0}})
 
     def test_catalog_identifies_channels_from_the_same_physical_camera(self):
         sources = [

@@ -45,6 +45,118 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, 
   return { document, starts, grids, moves, searches, archives, view };
 }
 
+test('seleciona as câmeras do visual, mantém a ordem e sincroniza a edição no mesmo registro', async t => {
+  const original = { id: 'a'.repeat(32), name: 'Portão', cameraRevision: 2, cameraIds: ['site-4', 'site-2', 'site-1'] };
+  let saved = original;
+  const writes = [];
+  const service = {
+    listVisuals: async () => [saved],
+    editVisualCameras: async (edit, { signal }) => {
+      assert.ok(signal);
+      writes.push(edit);
+      saved = { ...saved, name: 'Portão principal', cameraRevision: 3, cameraIds: edit.cameraIds };
+      return saved;
+    },
+  };
+  const first = setup(t, { accountKey: 'conta', visualService: service });
+  await flush();
+  first.document.querySelector('[data-camera-tab="visuals"]').click();
+  await flush();
+  const openEdit = () => first.document.querySelector('[data-camera-visual-edit="0"]').click();
+  const toggle = id => first.document.querySelector(`[data-camera-select="${id}"]`).click();
+  const checked = () => [...first.document.querySelectorAll('[data-camera-select]:checked')].map(input => input.dataset.cameraSelect);
+  openEdit();
+  assert.deepEqual(checked(), ['site-1', 'site-2', 'site-4']);
+  const preview = first.document.querySelector('[data-camera-open="site-2"]');
+  assert.match(preview.getAttribute('aria-label'), /^Desmarcar/);
+  preview.focus();
+  preview.click();
+  assert.equal(first.document.activeElement.dataset.cameraOpen, 'site-2');
+  assert.equal(first.document.activeElement.getAttribute('aria-pressed'), 'false');
+  first.document.querySelector('[data-camera-create-cancel]').click();
+  assert.deepEqual(writes, []);
+  assert.equal(first.document.activeElement.dataset.cameraVisualEdit, '0');
+  openEdit();
+  assert.deepEqual(checked(), ['site-1', 'site-2', 'site-4']);
+  toggle('site-2');
+  toggle('site-8');
+  first.document.querySelector('[data-camera-open-grid]').click();
+  await flush();
+  assert.deepEqual(writes, [{
+    id: original.id, cameraRevision: 2, cameraIds: ['site-4', 'site-1', 'site-8'], previousCameraIds: original.cameraIds,
+  }]);
+  assert.equal(first.document.querySelector('.camera-visual-card__name').textContent, 'Portão principal');
+  assert.equal(first.document.querySelector('.camera-visual-card__count').textContent, '3 câmeras');
+  const second = setup(t, { accountKey: 'conta', visualService: service, useGrid: true });
+  await flush();
+  second.document.querySelector('[data-camera-tab="visuals"]').click();
+  await flush();
+  second.document.querySelector('[data-camera-visual-open="0"]').click();
+  assert.deepEqual(second.grids[0].ids, ['site-4', 'site-1', 'site-8']);
+});
+
+test('mostra câmera indisponível na edição e mantém seleção e comparação ao tentar salvar novamente', async t => {
+  const visual = { id: 'b'.repeat(32), name: 'Visual', cameraIds: ['missing-camera', 'site-1'] };
+  const writes = [];
+  const { document } = setup(t, { accountKey: 'conta', visualService: {
+    listVisuals: async () => [visual],
+    editVisualCameras: async edit => {
+      writes.push(edit);
+      if (writes.length === 1) throw new Error('Sem conexão');
+      throw Object.assign(new Error('conflito'), { status: 409 });
+    },
+  } });
+  await flush();
+  document.querySelector('[data-camera-tab="visuals"]').click();
+  await flush();
+  document.querySelector('[data-camera-visual-edit]').click();
+  const input = () => document.querySelector('[data-camera-select="missing-camera"]');
+  assert.equal(input().checked, true);
+  assert.match(input().getAttribute('aria-label'), /Indisponível 1/i);
+  input().click();
+  document.querySelector('[data-camera-select="site-1"]').click();
+  assert.equal(document.querySelector('[data-camera-open-grid]').disabled, true);
+  document.querySelector('[data-camera-select="site-3"]').click();
+  document.querySelector('[data-camera-open-grid]').click();
+  await flush();
+  assert.match(document.querySelector('.cameras-list > [role="status"]').textContent, /Tente novamente/);
+  assert.equal(document.querySelector('[data-camera-select="site-3"]').checked, true);
+  document.querySelector('[data-camera-open-grid]').click();
+  await flush();
+  assert.deepEqual(writes[0], { id: visual.id, cameraRevision: 0, previousCameraIds: visual.cameraIds, cameraIds: ['site-3'] });
+  assert.deepEqual(writes[1], writes[0]);
+  assert.match(document.querySelector('.cameras-list > [role="status"]').textContent, /outro aparelho/);
+  assert.equal(input().checked, false);
+});
+
+test('mantém no rascunho uma câmera nova que some do catálogo antes de salvar', async t => {
+  const visual = { id: 'a'.repeat(32), name: 'Visual', cameraRevision: 0, cameraIds: ['site-1'] };
+  const first = { id: 'site-1', label: 'Obra 1' };
+  const second = { id: 'site-2', label: 'Obra 2' };
+  let catalog = [first, second];
+  const timerControl = { cleared: [] };
+  const writes = [];
+  const { document } = setup(t, { accountKey: 'conta', cameraList: async () => catalog, timerControl, visualService: {
+    listVisuals: async () => [visual],
+    editVisualCameras: async edit => { writes.push(edit); return visual; },
+  } });
+  Object.defineProperty(document, 'hidden', { value: false });
+  await flush();
+  document.querySelector('[data-camera-tab="visuals"]').click();
+  await flush();
+  document.querySelector('[data-camera-visual-edit]').click();
+  const input = () => document.querySelector('[data-camera-select="site-2"]');
+  input().click();
+  catalog = [first];
+  timerControl.callback();
+  await flush();
+  assert.equal(input().checked, true);
+  assert.equal(document.querySelector('[data-camera-open-grid]').disabled, true);
+  assert.equal(writes.length, 0);
+  input().click();
+  assert.equal(document.querySelector('[data-camera-open-grid]').disabled, false);
+});
+
 test('importa o visual do aparelho de origem e o exibe em outro sem armazenamento compartilhado', async t => {
   const key = 'energetico:camera-visual:v1:conta';
   const localVisual = { name: 'Portão e pátio', cameraIds: ['site-4', 'site-2'] };
@@ -514,7 +626,7 @@ test('renomeia a câmera física uma vez e atualiza todos os seus canais sem per
   editor.querySelector('form').dispatchEvent(new document.defaultView.Event('submit', { bubbles: true, cancelable: true }));
   assert.equal(document.querySelector('.camera-group__title').textContent, 'Xavantes');
   assert.equal(document.querySelector('[data-camera-select="patio-2"]').checked, true);
-  assert.equal(document.querySelector('[data-camera-open="patio-3"]').getAttribute('aria-label'), 'Abrir Xavantes · Canal 3');
+  assert.equal(document.querySelector('[data-camera-open="patio-3"]').getAttribute('aria-label'), 'Selecionar Xavantes · Canal 3');
   assert.equal(document.defaultView.localStorage.getItem('energetico:camera-name:v2:conta:patio-1'), 'Xavantes');
   document.querySelector('[data-camera-grid]').click();
   document.querySelector('[data-camera-open="patio-2"]').click();
@@ -1242,7 +1354,7 @@ test('edita o nome pelo lápis, persiste por câmera e isola a conta', async t =
   }));
   await flush();
 
-  assert.equal(first.document.querySelector('[data-camera-open="site-2"]')?.getAttribute('aria-label'), 'Abrir Portão principal · Canal 1');
+  assert.equal(first.document.querySelector('[data-camera-open="site-2"]')?.getAttribute('aria-label'), 'Selecionar Portão principal · Canal 1');
   assert.equal(storage.getItem('energetico:camera-name:v2:bernardo%40example.com:site-2'), 'Portão principal');
   assert.equal(first.document.activeElement, first.document.querySelector('[data-camera-rename="site-2"]'));
   assert.equal(first.document.querySelector('[data-camera-count]').textContent, '0 de 16 selecionadas');
