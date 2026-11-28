@@ -6,13 +6,32 @@ const listMode = location.search === '?list';
 const liveGridMode = location.search === '?live-grid';
 const fullGridMode = location.search === '?full-grid';
 const twelveGridMode = location.search === '?twelve-grid';
-const wallMode = location.search === '?player' || liveGridMode || fullGridMode || twelveGridMode;
-const wallCount = fullGridMode ? 16 : twelveGridMode ? 12 : liveGridMode ? 5 : 8;
+const stackedGridMode = location.search === '?stacked-grid';
+const wallMode = location.search === '?player' || liveGridMode || fullGridMode || twelveGridMode || stackedGridMode;
+const wallCount = fullGridMode ? 16 : twelveGridMode || stackedGridMode ? 12 : liveGridMode ? 5 : 8;
 localStorage.setItem('energetico:camera-preview:v1:' + accountKey + ':camera-1', 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8Af//Z');
 localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify([{
   name: wallMode ? 'Visual 1' : 'Portão e pátio',
   cameraIds: wallMode ? Array.from({ length: wallCount }, (_, index) => 'camera-' + (index + 1)) : ['camera-1', 'camera-2'],
 }, { name: 'NomeLongoSemEspaços'.repeat(5), cameraIds: ['camera-3'] }]));
+function testCameraFrame(stacked) {
+  const frame = document.createElement('canvas');
+  frame.width = 640;
+  frame.height = stacked ? 720 : 360;
+  const context = frame.getContext('2d');
+  const draw = (top = '#e13735') => {
+    context.fillStyle = top;
+    context.fillRect(0, 0, 640, 360);
+    context.fillStyle = '#22bd55';
+    if (stacked) context.fillRect(0, 360, 640, 360);
+  };
+  draw();
+  return { frame, draw };
+}
+if (stackedGridMode) {
+  const image = testCameraFrame(true).frame.toDataURL('image/jpeg');
+  localStorage.setItem('energetico:camera-preview:v1:' + accountKey + ':camera-1', image);
+}
 const groupedChannels = [0, 2, 6];
 createCamerasView(document).open({
   accountKey,
@@ -137,7 +156,7 @@ if (location.search === '?single') {
   layout.fixedActions = actions();
   layout.fixedHasPtzPanel = Boolean(dialog.querySelector('.cameras-player__ptz'));
 }
-if ((wallMode && !liveGridMode) || location.search === '?pair') {
+if ((wallMode && !liveGridMode && !stackedGridMode) || location.search === '?pair') {
   player.querySelectorAll('video')[location.search === '?pair' ? 1 : 2].dispatchEvent(new Event('playing'));
   layout.closeButtons = [...player.querySelectorAll('.cameras-player__tile')].map(tile => {
     const dismiss = tile.querySelector('[data-camera-dismiss]');
@@ -157,7 +176,61 @@ if (wallMode) {
     videos: [...dialog.querySelectorAll('.cameras-player__tile:not([inert]):not([hidden]) video')].map(rect),
   });
   const doubleTap = video => { video.click(); video.click(); };
-  if (liveGridMode) {
+  if (stackedGridMode) {
+    const [stacked, regular] = player.querySelectorAll('video');
+    const tile = stacked.closest('.cameras-player__tile');
+    const split = video => video.parentElement.querySelector('.cameras-player__stacked-preview:not([hidden])');
+    const pixels = canvas => {
+      if (!canvas) return null;
+      const context = canvas.getContext('2d');
+      return [0.25, 0.75].map(x => {
+        const [r, g, b] = context.getImageData(Math.floor(canvas.width * x), Math.floor(canvas.height / 2), 1, 1).data;
+        return r > 150 && g < 100 ? 'red' : g > 130 && r < 100 ? 'green' : b > 140 && r < 100 ? 'blue' : 'other';
+      });
+    };
+    const saved = pixels(split(stacked));
+    const [tall, wide] = [testCameraFrame(true), testCameraFrame(false)];
+    const streams = [tall, wide].map(({ frame }) => frame.captureStream(15));
+    stacked.srcObject = streams[0];
+    regular.srcObject = streams[1];
+    let top = '#e13735';
+    const repaint = setInterval(() => { tall.draw(top); wide.draw(); }, 65);
+    try {
+      await Promise.all([stacked.play(), regular.play()]);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const canvas = split(stacked);
+      const live = pixels(canvas);
+      const visibleWidth = canvas ? Math.min(rect(tile).width, rect(tile).height * canvas.width / canvas.height) : 0;
+      const originalWidth = rect(tile).height * stacked.videoWidth / stacked.videoHeight;
+      if (canvas) {
+        const context = canvas.getContext('2d');
+        const originalDraw = context.drawImage;
+        context.drawImage = () => {
+          context.drawImage = originalDraw;
+          throw new DOMException('Quadro temporariamente indisponível', 'InvalidStateError');
+        };
+      }
+      top = '#224ee8';
+      await new Promise(resolve => setTimeout(resolve, 350));
+      const advanced = pixels(split(stacked));
+      canvas?.dispatchEvent(new Event('contextlost'));
+      const contextFallback = !split(stacked);
+      canvas?.dispatchEvent(new Event('contextrestored'));
+      const contextRestored = Boolean(split(stacked));
+      const regularSplit = Boolean(split(regular));
+      doubleTap(stacked);
+      const expanded = Boolean(split(stacked));
+      doubleTap(stacked);
+      await new Promise(resolve => setTimeout(resolve, 250));
+      layout.stacked = {
+        saved, live, advanced, regularSplit, expanded, restored: Boolean(split(stacked)),
+        contextFallback, contextRestored, visibleWidth, originalWidth, tileWidth: rect(tile).width,
+      };
+    } finally {
+      clearInterval(repaint);
+      for (const stream of streams) stream.getTracks().forEach(track => track.stop());
+    }
+  } else if (liveGridMode) {
     const videos = [...player.querySelectorAll('video')];
     const sources = videos.map((video, index) => {
       const canvas = document.createElement('canvas');

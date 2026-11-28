@@ -16,7 +16,8 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
   await server.listen(); t.after(async () => { await server.close(); await rm(cacheDir, { recursive:true,force:true }); });
   const viewports = [{width:320,height:844},{width:390,height:844},{width:844,height:320},{width:844,height:390},{width:1365,height:768}];
   for (const {width,height} of viewports) for (const mode of ['list', 'visuals', 'player', 'pair', 'single', 'full-grid',
-    ...(height < width ? ['twelve-grid'] : []), ...(width === 844 && height === 390 ? ['live-grid'] : [])]) {
+    ...(height < width ? ['twelve-grid'] : []), ...([390, 844].includes(width) && [390, 844].includes(height) ? ['stacked-grid'] : []),
+    ...(width === 844 && height === 390 ? ['live-grid'] : [])]) {
     const { stdout, screenshot } = await runBrowserLayout(browser, { width,height,mobile:width < 700 || height < 500,
       captureScreenshot: width === 390 && mode === 'single' && Boolean(process.env.CAMERA_CONTROLS_SCREENSHOT),
       url:`http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/cameras-layout.html?${mode}` });
@@ -35,7 +36,24 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
         assert.ok(button.left >= tile.left && button.bottom <= tile.bottom);
       }
     }
-    if (mode === 'live-grid') {
+    if (mode === 'stacked-grid') {
+      const { saved, live, advanced, regularSplit, expanded, restored, contextFallback, contextRestored,
+        visibleWidth, originalWidth, tileWidth } = layout.stacked;
+      assert.equal(regularSplit, false);
+      assert.equal(expanded, false);
+      assert.equal(contextFallback, true);
+      if (width > height) {
+        assert.deepEqual(saved, ['red', 'green']);
+        assert.deepEqual(live, ['red', 'green']);
+        assert.deepEqual(advanced, ['blue', 'green']);
+        assert.equal(contextRestored, true);
+        assert.equal(restored, true);
+        assert.ok(visibleWidth >= tileWidth - 2 && visibleWidth > originalWidth * 1.5);
+      } else {
+        assert.deepEqual([saved, live, advanced], [null, null, null]);
+        assert.equal(restored, false);
+      }
+    } else if (mode === 'live-grid') {
       assert.equal(layout.playbackError, undefined);
       assert.deepEqual(layout.cycles, Array.from({ length: 3 }, () => ({
         zoomedVideoIsOnTop: true, renderableVideos: 5, restored: Array(5).fill(true),
