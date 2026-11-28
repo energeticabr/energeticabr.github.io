@@ -935,7 +935,7 @@ export function createChatClient({
   async function cameraRequest(payload, signal) {
     if (apiPrefix !== "/api") return payload.action === "status-events"
       ? { events: [], cursor: 0, generation: "00000000000000000000000000000000" }
-      : { channels: [], visuals: [] };
+      : { channels: [], visuals: [], tags: [] };
     const token = await cancellableToken(tokenProvider, signal);
     return request(new URL("/api/portal-cameras", baseUrl).href, {
       method: "POST",
@@ -1021,6 +1021,16 @@ export function createChatClient({
   async function writeCameraVisual(action, visual, { signal } = {}) {
     const result = await cameraRequest({ action, ...visual }, signal);
     return readCameraVisual(result?.visual);
+  }
+
+  async function cameraTags(payload, { signal } = {}) {
+    const { tags } = await cameraRequest(payload, signal);
+    if (!Array.isArray(tags) || tags.some(tag => !Number.isSafeInteger(tag?.id) || tag.id < 1
+        || typeof tag.name !== "string" || !tag.name.trim() || tag.name.length > 60
+        || !Array.isArray(tag.cameraIds) || tag.cameraIds.some(id => typeof id !== "string" || !/^[a-z0-9-]{1,48}$/.test(id)))) {
+      throw new Error("O serviço retornou tarjas de câmera inválidas.");
+    }
+    return tags;
   }
 
   function cameraPlaylistUrl(path) {
@@ -1171,6 +1181,9 @@ export function createChatClient({
     importCameraVisual: writeCameraVisual.bind(null, "import-visual"),
     renameCameraVisual: writeCameraVisual.bind(null, "rename-visual"),
     editCameraVisualCameras: writeCameraVisual.bind(null, "edit-visual-cameras"),
+    listCameraTags: options => cameraTags({ action: "list-tags" }, options),
+    createCameraTag: (name, options) => cameraTags({ action: "create-tag", name }, options),
+    assignCameraTag: ({ tagId, cameraId, assigned }, options) => cameraTags({ action: "assign-tag", tagId, cameraId, assigned }, options),
     listCameraChannels, listCameraStatusEvents, startCameraPlayback, prepareCameraGrid, renewCameraPlayback, cameraPlaybackIsGone, moveCamera, listCameraRecordings, playCameraRecording, swileRequest, trancidRechargeRequest, getSicoobBalance, getSicoobLatestAttempt, refreshSicoob, getSicoobRefreshStatus, getSicoobRefreshPending, acknowledgeSicoobRefresh, waitForDiaryEvidence, refreshSefaz, getSefazRefreshStatus, getSefazRefreshPending, acknowledgeSefazRefresh, sendText, sendFile, replaceAttachment, transcribeAudio, fetchMedia, getAttachments, launchGalleryRequest, uploadLaunchGalleryFile, getPendingProvisionSnapshot, getPendingNotesSnapshot, getRhidAttendanceReport, startRhidPendingValidation, startRhidDayValidation, getRhidAttendanceMonth, saveRhidAttendanceAdjustment, deleteRhidAttendanceAdjustment, refreshRhidAttendance, getRhidRefreshStatus, refreshRecurringProvisions, getRecurringProvisionRefreshStatus, refreshDda, getDdaRefreshStatus, getDdaRefreshPending, acknowledgeDdaRefresh, confirmDdaPayment, scheduleDdaPayment, deleteAttachment, deleteAllAttachments, compressAttachment, chooseAttachmentCompression, getCompletionMenu, prepareSignatureEvidence, confirmSignatureEvidence, verifySignatureEvidence, captureSignatureEvidence,
   });
 }

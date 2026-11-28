@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import unicodedata
 import urllib.request
 from urllib.error import HTTPError
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,6 +31,7 @@ MEDIA_ROUTE = re.compile(rf"{MEDIA}/([A-Za-z0-9_-]{{43}})/({MEDIA_FILE.pattern})
 CHANNEL_ID = re.compile(r"[a-z0-9-]{1,48}")
 VISUAL_ID = re.compile(r"(?:[a-f0-9]{32}|[a-f0-9]{64})")
 VISUAL_ACTIONS = {"list-visuals", "create-visual", "import-visual", "rename-visual", "edit-visual-cameras"}
+TAG_ACTIONS = {"list-tags", "create-tag", "assign-tag"}
 LARGE_REQUEST_ACTIONS = VISUAL_ACTIONS | {"renew-live"}
 # Match the whitespace accepted by the app's String.trim(), including for legacy names.
 VISUAL_BLANK = re.compile(r"[\t-\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*")
@@ -68,6 +70,16 @@ def visual_camera_ids(value):
             or len(value) != len(set(value))):
         raise ValueError("invalid visual camera ids")
     return value
+
+
+def camera_device_key(channel_id, entry):
+    settings = entry.get("input")
+    if isinstance(settings, dict):
+        for field in ("cloudId", "deviceId"):
+            value = settings.get(field)
+            if type(value) in (str, int) and (device := str(value).strip()):
+                return (field, device)
+    return ("channel", channel_id)
 
 
 def graph_identity(token):
@@ -257,6 +269,11 @@ class Gateway:
                                      for channel_id in channels}
         self.camera_labels = {camera_id: self._camera_label(channels)
                               for camera_id, channels in self.camera_groups.items()}
+        self.tag_key_by_camera = {
+            camera_id: hashlib.sha256(json.dumps(camera_device_key(camera_id, self.entries[camera_id])).encode()).hexdigest()
+            for camera_id in self.camera_groups
+        }
+        self.camera_by_tag_key = {key: camera_id for camera_id, key in self.tag_key_by_camera.items()}
         self.status_store.configure_camera_groups({
             camera_id: channels for camera_id, channels in self.camera_groups.items() if len(channels) > 1
         })
@@ -297,6 +314,33 @@ class Gateway:
                 for channel_id in members:
                     by_id[channel_id].update(cameraGroup=camera_id, cameraLabel=self.camera_labels[camera_id])
         return channels
+
+    def camera_tags(self, viewer, action, data):
+        if action == "create-tag":
+            value = data.get("name")
+            if not isinstance(value, str):
+                raise ValueError("invalid tag name")
+            name = unicodedata.normalize("NFC", value.strip())
+            if VISUAL_BLANK.fullmatch(name) or len(name.encode("utf-16-le")) > 120:
+                raise ValueError("invalid tag name")
+            self.status_store.create_tag(viewer, name, name.casefold())
+        elif action == "assign-tag":
+            tag_id, channel_id, assigned = data.get("tagId"), data.get("cameraId"), data.get("assigned")
+            if (type(tag_id) is not int or not 0 < tag_id <= 9_007_199_254_740_991
+                    or not isinstance(channel_id, str) or not CHANNEL_ID.fullmatch(channel_id)
+                    or type(assigned) is not bool):
+                raise ValueError("invalid tag assignment")
+            camera_id = self.camera_id_by_channel.get(channel_id)
+            if camera_id is None or not self.status_store.assign_tag(
+                viewer, tag_id, self.tag_key_by_camera[camera_id], assigned,
+            ):
+                raise PlaybackError(404)
+        return {"tags": [
+            {"id": tag["id"], "name": tag["name"], "cameraIds": [
+                self.camera_by_tag_key[key] for key in tag["cameraKeys"] if key in self.camera_by_tag_key
+            ]}
+            for tag in self.status_store.list_tags(viewer)
+        ]}
 
     def camera_visuals(self, viewer, action, data):
         if action == "list-visuals":
@@ -367,15 +411,7 @@ class Gateway:
     def _camera_channel_groups(self):
         by_device = {}
         for channel_id, entry in self.entries.items():
-            settings = entry.get("input")
-            device_key = ("channel", channel_id)
-            if isinstance(settings, dict):
-                for field in ("cloudId", "deviceId"):
-                    value = settings.get(field)
-                    if type(value) in (str, int) and (device := str(value).strip()):
-                        device_key = (field, device)
-                        break
-            by_device.setdefault(device_key, []).append(channel_id)
+            by_device.setdefault(camera_device_key(channel_id, entry), []).append(channel_id)
         # Only the first public channel ID leaves the gateway.
         return {channels[0]: tuple(channels) for channels in by_device.values()}
 
@@ -825,6 +861,8 @@ def handler_for(gateway):
                     result = {"channels": gateway.catalog()}
                 elif action in VISUAL_ACTIONS:
                     result = gateway.camera_visuals(viewer, action, data)
+                elif action in TAG_ACTIONS:
+                    result = gateway.camera_tags(viewer, action, data)
                 elif data.get("action") == "status-events":
                     after = data.get("after")
                     if after is not None and (type(after) is not int or after < 0 or after > 9_007_199_254_740_991):

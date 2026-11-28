@@ -69,6 +69,19 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
     } else if (mode === 'list') {
       assert.equal(layout.cards.length,9);
       assert.ok(layout.cards.every(card => card.left >= 0 && card.right <= width));
+      const { create, filter, createEditor, nameFocused, clear, filteredCount, assignment, checkbox, checked } = layout.tagsLayout;
+      for (const bounds of [create, filter, createEditor, clear, assignment]) {
+        assert.ok(bounds.left >= 0 && bounds.right <= width && bounds.top >= 0 && bounds.bottom <= height);
+      }
+      assert.ok(create.right > width / 2 && create.bottom <= layout.tabs.top);
+      assert.ok(filter.height >= 44 && clear.width >= 44 && clear.height >= 44);
+      assert.ok(checkbox.width > 0 && checkbox.width <= 24 && checkbox.height <= 24);
+      assert.equal(nameFocused, true);
+      assert.equal(filteredCount, 3);
+      assert.equal(checked, true);
+      for (const { plus, pencil, heading } of layout.listCameraHeadings) {
+        assert.ok(plus.left >= pencil.right && plus.right <= heading.right && plus.width === 44 && plus.height === 44);
+      }
       assert.ok(layout.noSignalStatus, `Channel status ribbon missing at ${width}x${height}`);
       const { ribbon, label, lastOnline, preview } = layout.noSignalStatus;
       assert.equal(label, 'Canal sem sinal');
