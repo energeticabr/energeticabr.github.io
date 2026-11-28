@@ -76,18 +76,30 @@ class ServiceTests(unittest.TestCase):
         self.service.confirm('user-a', preview['id'])
         payload = next(data for path, data, _ in self.gateway.calls if path == 'order/create')
         credit = datetime.fromisoformat(payload['creditDate']).replace(tzinfo=timezone.utc)
-        self.assertGreaterEqual(credit.timestamp() - self.now, 24 * 3600 + 300)
+        self.assertEqual(24 * 3600 + 30 * 60, credit.timestamp() - self.now)
         self.assertEqual('2026-11-19', credit.astimezone(SP).date().isoformat())
         self.assertNotIn('dueDate', payload)
 
-    def test_pix_later_credit_date_keeps_midnight_and_boleto_dates_are_unchanged(self):
-        for payment, expected_due in [('PIX', None), ('BANK_SLIP', '2026-11-29T03:00:00')]:
+    def test_credit_uses_confirmation_time_plus_30_minutes_for_pix_and_boleto(self):
+        for payment, credit_day, expected_due in (
+            ('PIX', '2026-11-30', None),
+            ('BANK_SLIP', '2026-12-01', '2026-11-29T03:00:00'),
+        ):
             with self.subTest(payment=payment):
-                preview = self.service.preview('user-a', {**self.data, 'paymentMethod': payment})
+                self.now = datetime(2026, 11, 28, 11, 52, tzinfo=timezone.utc).timestamp()
+                preview = self.service.preview('user-a', {**self.data, 'paymentMethod': payment, 'creditDate': credit_day})
+                self.now = datetime(2026, 11, 28, 11, 53, tzinfo=timezone.utc).timestamp()
                 self.service.confirm('user-a', preview['id'])
                 payload = [data for path, data, _ in self.gateway.calls if path == 'order/create'][-1]
-                self.assertEqual('2026-12-01T03:00:00', payload['creditDate'])
+                self.assertEqual(f'{credit_day}T12:23:00', payload['creditDate'])
                 self.assertEqual(expected_due, payload.get('dueDate'))
+
+    def test_credit_preserves_selected_brasilia_date_when_offset_crosses_midnight(self):
+        self.now = datetime(2026, 11, 27, 23, 45, tzinfo=SP).timestamp()
+        preview = self.service.preview('user-a', {**self.data, 'creditDate': '2026-11-30'})
+        self.service.confirm('user-a', preview['id'])
+        payload = next(data for path, data, _ in self.gateway.calls if path == 'order/create')
+        self.assertEqual('2026-11-30T03:15:00', payload['creditDate'])
 
     def test_directory_paginates_and_returns_only_eligible_public_fields(self):
         records = self.service.directory(public=True)

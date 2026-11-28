@@ -222,17 +222,14 @@ def provider_payment(payment):
 
 def provider_dates(payment, now):
     result = provider_payment(payment)
-    for key in ('creditDate', 'dueDate'):
-        if key in result:
-            result[key] += 'T03:00:00'
-    if payment['paymentMethod'] == 'PIX':
-        # Swile also enforces 24 elapsed hours, even when tomorrow is a business day.
-        midnight = datetime.fromisoformat(result['creditDate']).replace(tzinfo=timezone.utc)
-        minimum = datetime.fromtimestamp(now, timezone.utc) + timedelta(hours=24, minutes=5)
-        credit = max(midnight, minimum)
-        if credit.astimezone(SP).date().isoformat() != payment['creditDate']:
-            raise SwileError('Escolha uma data de crédito que permita pelo menos 24 horas para o Pix.')
-        result['creditDate'] = credit.strftime('%Y-%m-%dT%H:%M:%S')
+    current = datetime.fromtimestamp(now, SP)
+    credit_time = (current + timedelta(minutes=30)).timetz()
+    credit = datetime.combine(date_field(payment['creditDate']), credit_time)
+    if payment['paymentMethod'] == 'PIX' and credit < current + timedelta(hours=24):
+        raise SwileError('Escolha uma data de crédito que permita pelo menos 24 horas para o Pix.')
+    result['creditDate'] = credit.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
+    if 'dueDate' in result:
+        result['dueDate'] += 'T03:00:00'
     return result
 
 
@@ -415,8 +412,9 @@ class Service:
             saved = json.loads(row['payload'])
             if 'amounts' not in saved:
                 raise SwileError('Gere um novo resumo para conferir o vencimento antes de enviar o pedido.')
-            payment = request_dates(saved, self.clock())
-            dates = provider_dates(payment, self.clock())
+            now = self.clock()
+            payment = request_dates(saved, now)
+            dates = provider_dates(payment, now)
             if saved.get('dueDate') != payment['dueDate']:
                 raise SwileError('Gere um novo resumo para conferir o vencimento antes de enviar o pedido.')
             fingerprints = order_fingerprints({int(key): val for key, val in saved['amounts'].items()}, payment)
