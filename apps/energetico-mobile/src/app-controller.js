@@ -1,3 +1,4 @@
+import { confirmedFinancialTimestamp } from './chat/financial-update-time.js';
 import { createSefazSyncSession } from './ui/sefaz-sync-session.js';
 import { createRegistrationGalleryMenu, REGISTRATION_GALLERY_CHOICES } from './ui/registration-gallery-menu.js';
 import { resumeConversation } from './chat/resume-conversation.js';
@@ -10505,6 +10506,17 @@ export function createAppController({
               },
             } : {}),
             ...(sourceKind === 'financial_movement' ? { syncMonitor: ensureFinancialSync('sicoob') } : {}),
+            ...((isDdaReport || isNfeReport) && typeof client[isDdaReport ? 'getDdaRefreshPending' : 'getSefazRefreshPending'] === 'function' ? {
+              loadLatestUpdate: async options => {
+                assertSession();
+                const pending = await (isDdaReport ? client.getDdaRefreshPending(options) : client.getSefazRefreshPending(options));
+                assertSession();
+                return Math.max(
+                  confirmedFinancialTimestamp(pending.lastReportUpdateUtc) ?? -Infinity,
+                  confirmedFinancialTimestamp(pending.lastSuccessfulUtc) ?? -Infinity,
+                );
+              },
+            } : {}),
             ...(isSicoobTransactionReport && typeof client.getSicoobLatestAttempt === 'function' ? {
               loadLatestAttempt: async options => {
                 assertSession();

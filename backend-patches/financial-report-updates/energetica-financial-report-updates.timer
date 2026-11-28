@@ -1,0 +1,9 @@
+[Unit]
+Description=Publish confirmed Energética financial report times
+
+[Timer]
+OnCalendar=minutely
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

@@ -1,5 +1,6 @@
 import { validateSefazReceipt, isSefazRequestId } from './sefaz-sync-receipt.js';
 import { validateDdaPaymentReceipt } from './dda-payment-confirmation.js';
+import { confirmedFinancialTimestamp } from './financial-update-time.js';
 import { validateAttachment } from "./file-policy.js";
 import { audioTranscriptionText } from "./audio-transcription.js";
 import { startDiaryProgress } from "./diary-attachment-progress.js";
@@ -666,6 +667,7 @@ export function createChatClient({
         if (!Array.isArray(ids) || ids.some(id=>!Number.isSafeInteger(id)||id<=0)) throw Error('Não foi possível recuperar as consultas fiscais.');
         pending.lastSuccessfulCreatedItemIds=[...new Set(ids)];
       }
+      if (confirmedFinancialTimestamp(receipt.lastReportUpdateUtc) !== null) pending.lastReportUpdateUtc = receipt.lastReportUpdateUtc;
       return pending;
     }
     if (extra.acknowledge) {

@@ -233,7 +233,7 @@ function Invoke-AuxiliaryFiscalSource {
                 try{$receipt=& $SendBatch $outbox}catch{throw 'AUX_DELIVERY_FAILED'}
                 Confirm-AuxBatch $DataPath $outbox $receipt
                 $stats.delivered+=$outbox.Count
-                Write-AuxLog $DataPath $Source 'DELIVERY_CONFIRMED' $Now $outbox.Count
+                Write-AuxLog $DataPath $Source 'DELIVERY_CONFIRMED' ([DateTimeOffset](& $Clock)) $outbox.Count
                 $outbox=@(Get-AuxOutboxBatch $DataPath)
             }
             $currentNow=[DateTimeOffset](& $Clock)
