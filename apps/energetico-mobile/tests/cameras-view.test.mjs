@@ -190,8 +190,8 @@ test('o vídeo de um canal atualiza o estado da câmera mesmo durante uma interr
   assert.equal(firstStatus.textContent, 'Canal sem sinal');
 
   assert.equal(document.querySelector('[data-camera-channel-controls]').hidden, true);
-  first.click();
-  first.click();
+  assert.equal(first.getAttribute('aria-keyshortcuts'), 'Enter');
+  first.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter' }));
   const controls = document.querySelector('[data-camera-channel-controls]');
   assert.equal(controls.hidden, false);
   controls.click();

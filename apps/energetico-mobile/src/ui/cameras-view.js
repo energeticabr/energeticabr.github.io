@@ -1237,6 +1237,7 @@ export function createCamerasView(documentRef) {
           video.classList.remove('cameras-player__video--focusable');
           video.removeAttribute('title');
           video.removeAttribute('tabindex');
+          video.removeAttribute('aria-keyshortcuts');
         }
         pendingCameraTap = null;
         if (count === 1 || focusedCameraId === String(item.channelId)) setCameraFocus(null);
@@ -1254,6 +1255,7 @@ export function createCamerasView(documentRef) {
         if (preview) {
           video.classList.add('cameras-player__video--focusable');
           video.title = 'Toque duas vezes para ampliar; toque duas vezes novamente para ver todas as câmeras.';
+          video.setAttribute('aria-keyshortcuts', 'Enter');
           video.tabIndex = 0;
         }
         const label = make('span', 'cameras-player__label', channel.label);
@@ -1347,7 +1349,7 @@ export function createCamerasView(documentRef) {
           video.addEventListener('keydown', event => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault(); resume();
-              if (event.key === 'Enter') toggleFocus();
+              if (event.key === 'Enter' && !event.repeat) toggleFocus();
             }
           });
         }
