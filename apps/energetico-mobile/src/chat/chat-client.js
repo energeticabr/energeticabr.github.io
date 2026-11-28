@@ -7,6 +7,7 @@ import { startDiaryProgress } from "./diary-attachment-progress.js";
 import { uploadWithProgress } from "./upload-transport.js";
 import { readDownloadBlob } from "../../../../portal/data/download-progress.js";
 import { beginLoadingTask } from "../ui/loading-task.js";
+import { CAMERA_GRID_LIMIT } from "./camera-grid-limit.js";
 
 const TOKEN_SCOPES = Object.freeze(["User.Read"]);
 const EMPTY_EPI_REPLY_IDS = new Set([
@@ -1000,7 +1001,7 @@ export function createChatClient({
   function readCameraVisual(visual) {
     if (typeof visual?.id !== "string" || !/^(?:[a-f0-9]{32}|[a-f0-9]{64})$/.test(visual.id)
         || typeof visual.name !== "string" || !visual.name.trim() || visual.name.length > 120
-        || !Array.isArray(visual.cameraIds) || visual.cameraIds.length < 1 || visual.cameraIds.length > 8
+        || !Array.isArray(visual.cameraIds) || visual.cameraIds.length < 1 || visual.cameraIds.length > CAMERA_GRID_LIMIT
         || visual.cameraIds.some(id => typeof id !== "string" || !/^[a-z0-9-]{1,48}$/.test(id))
         || new Set(visual.cameraIds).size !== visual.cameraIds.length) {
       throw new Error("O serviço retornou um visual inválido.");
@@ -1009,7 +1010,7 @@ export function createChatClient({
   }
 
   async function listCameraVisuals({ signal } = {}) {
-    const result = await cameraRequest({ action: "list-visuals" }, signal);
+    const result = await cameraRequest({ action: "list-visuals", maxCameraIds: CAMERA_GRID_LIMIT }, signal);
     if (!Array.isArray(result?.visuals)) throw new Error("Não foi possível carregar os visuais.");
     return result.visuals.map(readCameraVisual);
   }

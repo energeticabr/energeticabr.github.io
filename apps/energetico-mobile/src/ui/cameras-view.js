@@ -1,6 +1,6 @@
 import { reportOrientation } from '../native/report-orientation.js';
+import { CAMERA_GRID_LIMIT as GRID_LIMIT } from '../chat/camera-grid-limit.js';
 
-const GRID_LIMIT = 8;
 const THUMBNAIL_PREFIX = 'energetico:camera-preview:v1:';
 const CAMERA_NAME_PREFIX = 'energetico:camera-name:v1:';
 const CAMERA_VISUAL_PREFIX = 'energetico:camera-visual:v1:';
@@ -713,7 +713,7 @@ export function createCamerasView(documentRef) {
             createVisualButton.disabled = channels.length === 0;
             return;
           }
-          status.textContent = creatingVisual ? 'Selecione até 8 câmeras para este visual.'
+          status.textContent = creatingVisual ? `Selecione até ${GRID_LIMIT} câmeras para este visual.`
             : activeTab === 'visuals' ? savedVisualStatus()
               : channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.';
           renderUpdatedChannels();
@@ -1560,7 +1560,7 @@ export function createCamerasView(documentRef) {
     createVisualButton.addEventListener('click', () => {
       if (!channels.length) return;
       activeTab = 'cameras'; creatingVisual = true; choosing = true; selected.clear();
-      status.textContent = 'Selecione até 8 câmeras para este visual.';
+      status.textContent = `Selecione até ${GRID_LIMIT} câmeras para este visual.`;
       render();
       dialog.querySelector('[data-camera-select]')?.focus({ preventScroll: true });
     });

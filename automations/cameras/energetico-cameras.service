@@ -23,9 +23,9 @@ ProtectHome=yes
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
-MemoryMax=384M
-CPUQuota=65%
-TasksMax=128
+MemoryMax=1024M
+CPUQuota=250%
+TasksMax=256
 Nice=5
 
 [Install]

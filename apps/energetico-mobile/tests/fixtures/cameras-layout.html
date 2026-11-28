@@ -4,15 +4,16 @@ import { createCamerasView } from '/src/ui/cameras-view.js';
 const accountKey = 'layout-check';
 const listMode = location.search === '?list';
 const liveGridMode = location.search === '?live-grid';
-const wallMode = location.search === '?player' || liveGridMode;
+const fullGridMode = location.search === '?full-grid';
+const wallMode = location.search === '?player' || liveGridMode || fullGridMode;
 localStorage.setItem('energetico:camera-preview:v1:' + accountKey + ':camera-1', 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8Af//Z');
 localStorage.setItem('energetico:camera-visual:v1:' + accountKey, JSON.stringify([{
   name: wallMode ? 'Visual 1' : 'Portão e pátio',
-  cameraIds: wallMode ? Array.from({ length: liveGridMode ? 5 : 8 }, (_, index) => 'camera-' + (index + 1)) : ['camera-1', 'camera-2'],
+  cameraIds: wallMode ? Array.from({ length: fullGridMode ? 16 : liveGridMode ? 5 : 8 }, (_, index) => 'camera-' + (index + 1)) : ['camera-1', 'camera-2'],
 }, { name: 'NomeLongoSemEspaços'.repeat(5), cameraIds: ['camera-3'] }]));
 createCamerasView(document).open({
   accountKey,
-  list: async () => Array.from({ length: 9 }, (_, index) => ({
+  list: async () => Array.from({ length: fullGridMode ? 16 : 9 }, (_, index) => ({
     id: 'camera-' + (index + 1),
     label: index === 0 ? 'Entrada' : listMode && index === 8
       ? 'Pátio ' + 'NomeLongoSemEspaços'.repeat(5) : 'Obra Xavante • canal ' + (index + 1),
