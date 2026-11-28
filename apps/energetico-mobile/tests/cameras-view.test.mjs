@@ -189,7 +189,12 @@ test('o vídeo de um canal atualiza o estado da câmera mesmo durante uma interr
   second.dispatchEvent(new window.Event('playing'));
   assert.equal(firstStatus.textContent, 'Canal sem sinal');
 
-  first.closest('.cameras-player__tile').querySelector('.cameras-player__focus').click();
+  assert.equal(document.querySelector('[data-camera-channel-controls]').hidden, true);
+  first.click();
+  first.click();
+  const controls = document.querySelector('[data-camera-channel-controls]');
+  assert.equal(controls.hidden, false);
+  controls.click();
   assert.equal(document.querySelector('.cameras-player__live-state').textContent, 'Canal sem sinal');
 });
 
@@ -324,6 +329,11 @@ test('oculta câmeras off-line e ao vivo sem reabrir os outros vídeos ou editar
   window.dispatchEvent(new window.Event('pagehide'));
   view.resume();
   assert.deepEqual(starts.slice(3).map(({ id }) => id), ['site-3']);
+  const controls = document.querySelector('[data-camera-channel-controls]');
+  assert.equal(controls.hidden, false);
+  controls.click();
+  assert.equal(document.querySelector('[data-camera-video]').dataset.cameraVideo, 'site-3');
+  assert.ok(document.querySelector('[data-camera-recordings]'));
   document.querySelector('[data-camera-player-back]').click();
   document.querySelector('[data-camera-visual-open]').click();
   assert.deepEqual([...document.querySelectorAll('[data-camera-video]')].map(video => video.dataset.cameraVideo), ids);

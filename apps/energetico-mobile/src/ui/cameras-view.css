@@ -357,6 +357,17 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   cursor: pointer;
 }
 .cameras-player__back { font-size: 34px; }
+.cameras-player__channel-controls {
+  flex: none;
+  min-height: 44px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: 650 12px system-ui, sans-serif;
+  cursor: pointer;
+}
 .cameras-player__title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
 .cameras-player__visual-notice {
   z-index: 2;
@@ -467,12 +478,7 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
 .cameras-player__saved-frame[hidden] ~ .cameras-player__tile-footer .cameras-player__saved-label {
   display: none;
 }
-.cameras-player__tile--focusable .cameras-player__saved-label {
-  max-width: calc(100% - 88px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.cameras-player[data-camera-grid-view] :is(.cameras-player__label, .cameras-player__tile-live, .cameras-player__tile-footer) { display: none; }
 .cameras-player__tile[data-focused="true"] { position: absolute; inset: 0; z-index: 1; }
 .cameras-player__video--focusable { touch-action: manipulation; cursor: zoom-in; }
 .cameras-player__stage[data-focused="true"] .cameras-player__video--focusable { cursor: zoom-out; }
@@ -501,24 +507,29 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
 .cameras-player__dismiss {
   position: absolute;
   z-index: 3;
-  top: 2px;
-  right: 2px;
+  top: 0;
+  right: 0;
   display: grid;
-  place-items: center;
+  place-items: start end;
+  box-sizing: border-box;
   width: 44px;
   height: 44px;
   min-height: 44px;
-  padding: 0;
+  padding: 3px 7px 0 0;
   border: 0;
   background: transparent;
   color: #fff;
-  font: 700 24px/1 system-ui, sans-serif;
+  font: 700 20px/22px system-ui, sans-serif;
   cursor: pointer;
 }
 .cameras-player__dismiss::before {
   position: absolute;
   z-index: -1;
-  inset: 6px;
+  top: 1px;
+  right: 1px;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
   border: 1px solid #ffffff70;
   border-radius: 50%;
   background: #111e;
@@ -578,20 +589,6 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   font-size: 13px;
 }
 .cameras-player__retry[hidden] { display: none !important; }
-.cameras-player__focus {
-  position: relative;
-  z-index: 2;
-  flex: none;
-  margin-left: auto;
-  padding: 6px 9px;
-  border: 1px solid #ffffff70;
-  border-radius: 20px;
-  background: #000b;
-  color: #fff;
-  font: inherit;
-  font-size: 12px;
-  pointer-events: auto;
-}
 .cameras-player__actions {
   z-index: 3;
   display: flex;
@@ -672,7 +669,6 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   text-align: center;
 }
 .cameras-player__control-status:empty { display: none; }
-.cameras-player__multi-note { flex: none; margin: 0; padding: 3px 12px; background: #fff; color: #666; font-size: 11px; text-align: center; }
 .cameras-player__drawer {
   z-index: 4;
   display: flex;
@@ -746,11 +742,9 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
 .cameras-player__recording-times strong { font-size: 13px; }
 .cameras-player__recording-times small { color: #d4d8dc; font-size: 10px; }
 .cameras-player--wall .cameras-player__actions,
-.cameras-player--wall .cameras-player__drawer,
-.cameras-player--wall .cameras-player__multi-note { display: none; }
+.cameras-player--wall .cameras-player__drawer { display: none; }
 .cameras-player[data-expanded="true"] .cameras-player__actions,
-.cameras-player[data-expanded="true"] .cameras-player__drawer,
-.cameras-player[data-expanded="true"] .cameras-player__multi-note { display: none; }
+.cameras-player[data-expanded="true"] .cameras-player__drawer { display: none; }
 .cameras-player[data-expanded="true"] .cameras-player__stage { min-height: 0; }
 
 @media (orientation: landscape) {
@@ -800,7 +794,7 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   .cameras-player__actions { justify-content: center; min-height: 62px; background: #050505; color: #fff; }
   .cameras-player__action { color: #fff; }
   .cameras-player__action[aria-pressed="true"] { color: #fff; background: #ffffff20; }
-  .cameras-player__control-status, .cameras-player__multi-note { background: #050505; color: #cbd0d5; }
+  .cameras-player__control-status { background: #050505; color: #cbd0d5; }
   .cameras-player__drawer { height: 0; border-radius: 0; box-shadow: none; }
   .cameras-player__drawer[data-open="true"] {
     position: absolute;

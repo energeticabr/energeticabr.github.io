@@ -1159,6 +1159,7 @@ export function createCamerasView(documentRef) {
       for (const node of background) node.inert = true;
       player = make('div', 'cameras-player');
       player.dataset.count = String(chosen.length);
+      player.toggleAttribute('data-camera-grid-view', preview);
       if (chosen.length > 4) player.classList.add('cameras-player--wall');
       player.setAttribute('role', 'group'); player.setAttribute('aria-label', 'Visualizador de câmeras');
       const panel = make('section', 'cameras-player__panel');
@@ -1187,9 +1188,24 @@ export function createCamerasView(documentRef) {
       const tileItems = [];
       let focusedCameraId = null;
       let pendingCameraTap = null;
+      const channelControls = preview && (move || listRecordings)
+        ? make('button', 'cameras-player__channel-controls', 'Controles') : null;
+      if (channelControls) {
+        channelControls.type = 'button';
+        channelControls.dataset.cameraChannelControls = '';
+        channelControls.hidden = true;
+        channelControls.setAttribute('aria-label', 'Abrir controles da câmera ampliada');
+        channelControls.addEventListener('click', () => {
+          const focused = tileItems.length === 1
+            ? tileItems[0] : tileItems.find(({ item }) => String(item.channelId) === focusedCameraId);
+          if (focused) openPlayer([focused.channel], channelControls);
+        });
+        header.insertBefore(channelControls, expand);
+      }
       function setCameraFocus(channelId) {
         focusedCameraId = channelId;
         stage.dataset.focused = String(Boolean(focusedCameraId));
+        if (channelControls) channelControls.hidden = !focusedCameraId && tileItems.length > 1;
         // Keep all media elements rendered when another camera covers the grid.
         for (const { tile, item } of tileItems) {
           const focused = focusedCameraId === String(item.channelId);
@@ -1220,9 +1236,10 @@ export function createCamerasView(documentRef) {
           const { video } = tileItems[0];
           video.classList.remove('cameras-player__video--focusable');
           video.removeAttribute('title');
+          video.removeAttribute('tabindex');
         }
         pendingCameraTap = null;
-        if (focusedCameraId === String(item.channelId)) setCameraFocus(null);
+        if (count === 1 || focusedCameraId === String(item.channelId)) setCameraFocus(null);
         updateHeader();
         back.focus({ preventScroll: true });
       }
@@ -1310,6 +1327,11 @@ export function createCamerasView(documentRef) {
             if (item.reconnect) { item.reconnect(); return; }
             if (item.connected && video.paused) void video.play().catch(() => {});
           };
+          const toggleFocus = () => {
+            if (playerChannels.length < 2) return;
+            const id = String(channel.id);
+            setCameraFocus(focusedCameraId === id ? null : id);
+          };
           video.addEventListener('click', event => {
             resume();
             if (playerChannels.length < 2) return;
@@ -1319,25 +1341,18 @@ export function createCamerasView(documentRef) {
               && Math.hypot(event.clientX - pendingCameraTap.x, event.clientY - pendingCameraTap.y) <= 32;
             if (isDoubleTap) {
               pendingCameraTap = null;
-              const id = String(channel.id);
-              setCameraFocus(focusedCameraId === id ? null : id);
+              toggleFocus();
             } else pendingCameraTap = { channelId: channel.id, time: now, x: event.clientX, y: event.clientY };
           });
           video.addEventListener('keydown', event => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault(); resume();
+              if (event.key === 'Enter') toggleFocus();
             }
           });
         }
         playback.push(item); tileItems.push({ tile, video, item, channel });
         tile.append(video, savedFrame, dismiss, label, liveBadge, notice, retry, footer);
-        if (chosen.length > 1 && (move || listRecordings)) {
-          tile.classList.add('cameras-player__tile--focusable');
-          const focus = make('button', 'cameras-player__focus', '1 tela');
-          focus.type = 'button'; focus.setAttribute('aria-label', `Abrir ${channel.label} em tela individual`);
-          focus.addEventListener('click', () => openPlayer([channel], focus));
-          footer.append(focus);
-        }
         slot.append(tile);
         grid.append(slot);
       }
@@ -1536,11 +1551,9 @@ export function createCamerasView(documentRef) {
         });
         actions.append(audioButton);
       }
-      const modeNote = chosen.length > 1 ? make('p', 'cameras-player__multi-note', 'Toque em “1 tela” para controlar essa câmera.') : null;
       panel.append(header);
       if (visualNotice) panel.append(visualNotice);
       panel.append(stage);
-      if (modeNote) panel.append(modeNote);
       panel.append(actions, controlStatus);
       if (drawer) panel.append(drawer);
       player.append(panel); dialog.append(player);
