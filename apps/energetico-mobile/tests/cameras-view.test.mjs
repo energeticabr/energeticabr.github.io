@@ -6,7 +6,7 @@ import { createCamerasView } from '../src/ui/cameras-view.js';
 
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, android = false,
-  cameraList, timerControl, catalog, startError, visualService, renewLive, playbackIsGone } = {}) {
+  cameraList, timerControl, catalog, startError, visualService, tagService, renewLive, playbackIsGone } = {}) {
   const dom = new JSDOM('<button>Menu</button>', { url: 'https://example.com' });
   t.after(() => dom.window.close());
   const { document, HTMLMediaElement, HTMLDialogElement } = dom.window;
@@ -33,7 +33,7 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, 
   view.open({ accountKey, list: cameraList ?? (async () => catalog ?? Array.from({ length: 10 }, (_, index) => ({
     id: `site-${index + 1}`, label: `Obra ${index + 1}`,
   }))),
-    ...visualService,
+    ...visualService, ...tagService,
     start, renewLive, playbackIsGone,
     prepareGrid: useGrid ? (ids, { signal, previousUrl, codecs }) => {
       grids.push({ ids, signal, previousUrl, codecs });
@@ -44,6 +44,128 @@ function setup(t, { useGrid = false, accountKey, storage, supportsHevc = false, 
     playRecording: async (id, record, {signal}) => { archives.push({id,record,signal}); return 'https://video.example/archive.m3u8'; } });
   return { document, starts, grids, moves, searches, archives, view };
 }
+
+test('cria, aplica, filtra e retira a tarja de uma câmera física com vários canais', async t => {
+  const catalog = [
+    { id: 'obra-1', label: 'Obra · canal 1', cameraGroup: 'obra-1' },
+    { id: 'obra-2', label: 'Obra · canal 2', cameraGroup: 'obra-1' },
+    { id: 'entrada', label: 'Entrada' },
+  ];
+  let tags = [];
+  let connected = true;
+  const client = createChatClient({
+    apiBaseUrl: 'https://example.com',
+    tokenProvider: async () => 'test-session',
+    fetchImpl: async (url, request) => {
+      assert.equal(new URL(url).pathname, '/api/portal-cameras');
+      const payload = JSON.parse(request.body);
+      if (payload.action === 'create-tag') tags = [{ id: 1, name: payload.name, cameraIds: [] }];
+      else if (payload.action === 'assign-tag') {
+        assert.equal(payload.tagId, 1);
+        assert.equal(payload.cameraId, 'obra-1');
+        if (!connected) return new Response(null, { status: 503 });
+        tags = tags.map(tag => ({ ...tag, cameraIds: payload.assigned ? [payload.cameraId] : [] }));
+      } else assert.equal(payload.action, 'list-tags');
+      return Response.json({ tags });
+    },
+  });
+  const tagService = {
+    listTags: client.listCameraTags,
+    createTag: client.createCameraTag,
+    assignTag: client.assignCameraTag,
+  };
+  const { document } = setup(t, { catalog, tagService });
+  const select = () => document.querySelector('[data-camera-tag-filter]');
+  const visible = () => [...document.querySelectorAll('[data-camera-open]')].map(node => node.dataset.cameraOpen);
+  await flush();
+  assert.deepEqual(visible(), ['obra-1', 'obra-2', 'entrada']);
+  document.querySelector('[data-camera-create-tag]').click();
+  const create = document.querySelector('[data-camera-tag-editor] form');
+  create.querySelector('input').value = '  Obras ativas  ';
+  create.querySelector('button[type="submit"]').click();
+  await flush();
+  assert.equal(document.querySelector('[data-camera-tag-editor]'), null);
+  assert.equal(select().options[1].textContent, 'Obras ativas');
+  const pencil = document.querySelector('[data-camera-rename="obra-1"]');
+  assert.equal(pencil.nextElementSibling.dataset.cameraTags, 'obra-1');
+  pencil.nextElementSibling.click();
+  const checkbox = document.querySelector('[data-camera-tag-editor] input[type="checkbox"]');
+  checkbox.click();
+  await flush();
+  assert.equal(checkbox.checked, true);
+  document.querySelector('[data-camera-tag-close]').click();
+  assert.equal(document.querySelector('.camera-group [data-camera-tag-chip]').textContent, 'Obras ativas');
+  select().value = '1';
+  select().dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+  assert.deepEqual(visible(), ['obra-1', 'obra-2']);
+  document.querySelector('[data-camera-grid]').click();
+  assert.deepEqual(visible(), ['obra-1', 'obra-2']);
+  document.querySelector('[data-camera-tag-clear]').click();
+  document.querySelector('[data-camera-select="entrada"]').click();
+  select().value = '1';
+  select().dispatchEvent(new document.defaultView.Event('change', { bubbles: true }));
+  assert.equal(document.querySelector('[data-camera-open-grid]').disabled, true, 'retira a seleção oculta da grade');
+  document.querySelector('[data-camera-grid]').click();
+  assert.deepEqual(visible(), ['obra-1', 'obra-2']);
+  document.querySelector('[data-camera-tags="obra-1"]').click();
+  const remove = document.querySelector('[data-camera-tag-editor] input[type="checkbox"]');
+  connected = false;
+  remove.click();
+  await flush();
+  assert.equal(remove.checked, true, 'restaura a escolha se a remoção falhar');
+  assert.ok(document.querySelector('[data-camera-tag-editor] [role="alert"]').textContent);
+  connected = true;
+  remove.click();
+  await flush();
+  document.querySelector('[data-camera-tag-close]').click();
+  assert.deepEqual(visible(), []);
+  assert.match(document.querySelector('[data-camera-tag-empty]').textContent, /Nenhuma câmera/);
+  document.querySelector('[data-camera-tag-clear]').click();
+  assert.deepEqual(visible(), ['obra-1', 'obra-2', 'entrada']);
+});
+
+test('mantém a tarja recém-criada quando uma atualização antiga chega depois da criação', async t => {
+  let finishRefresh;
+  let refreshing = false;
+  const tagService = {
+    listTags: async () => refreshing ? new Promise(resolve => { finishRefresh = resolve; }) : [],
+    createTag: async name => [{ id: 1, name, cameraIds: [] }],
+    assignTag: async () => {},
+  };
+  const { document } = setup(t, { tagService });
+  await flush();
+  refreshing = true;
+  document.querySelector('[data-camera-tab="cameras"]').click();
+  document.querySelector('[data-camera-create-tag]').click();
+  const modal = document.querySelector('[data-camera-tag-editor]');
+  modal.querySelector('input').value = 'Portão';
+  modal.querySelector('[type="submit"]').click();
+  await flush();
+  finishRefresh([]);
+  await flush();
+  assert.equal(document.querySelector('[data-camera-tag-filter] option[value="1"]').textContent, 'Portão');
+});
+
+test('atualiza as opções quando a mesma conta cria uma tarja em outro dispositivo com o editor aberto', async t => {
+  let tags = [];
+  const timerControl = { cleared: [] };
+  const tagService = {
+    listTags: async () => tags,
+    createTag: async () => {},
+    assignTag: async () => {},
+  };
+  const { document } = setup(t, { tagService, timerControl });
+  Object.defineProperty(document, 'hidden', { value: false });
+  await flush();
+  document.querySelector('[data-camera-tags="site-1"]').click();
+  const modal = document.querySelector('[data-camera-tag-editor]');
+  assert.equal(modal.querySelector('input'), null);
+  tags = [{ id: 2, name: 'Entrada', cameraIds: ['site-1'] }];
+  timerControl.callback();
+  await flush();
+  assert.equal(modal.querySelector('label').textContent, 'Entrada');
+  assert.equal(modal.querySelector('input').checked, true);
+});
 
 test('seleciona as câmeras do visual, mantém a ordem e sincroniza a edição no mesmo registro', async t => {
   const original = { id: 'a'.repeat(32), name: 'Portão', cameraRevision: 2, cameraIds: ['site-4', 'site-2', 'site-1'] };

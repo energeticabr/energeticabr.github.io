@@ -46,6 +46,16 @@
   cursor: pointer;
 }
 .cameras-header button[aria-pressed="true"] { color: #2474e8; background: #eaf2ff; }
+.cameras-header .cameras-header__create-tag {
+  flex: none;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #eaf2ff;
+  color: #1659af;
+  font-size: 14px;
+  font-weight: 700;
+}
+.cameras-header__create-tag:disabled { opacity: .55; cursor: default; }
 .cameras-header__tabs {
   display: flex;
   gap: 4px;
@@ -77,6 +87,47 @@
 }
 .cameras-list > p { max-width: 1120px; margin: 8px auto 14px; color: #686e74; }
 .cameras-list > p:empty { display: none; }
+.camera-tag-toolbar {
+  display: grid;
+  gap: 5px;
+  max-width: 1120px;
+  margin: 0 auto 14px;
+  color: #34445a;
+  font-size: 13px;
+}
+.camera-tag-toolbar[hidden] { display: none; }
+.camera-tag-toolbar label { font-weight: 700; }
+.camera-tag-toolbar__control { display: flex; gap: 4px; align-items: center; }
+.camera-tag-toolbar select {
+  width: min(100%, 350px);
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid #aebed2;
+  border-radius: 9px;
+  background: #fff;
+  color: #243b56;
+  font: inherit;
+  font-size: 16px;
+}
+.camera-tag-toolbar select[data-filtered] { background: #e8f2ff; color: #1659af; font-weight: 650; }
+.camera-tag-toolbar button {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: #e8f2ff;
+  color: #1659af;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.camera-tag-toolbar [data-camera-tag-clear] { font-size: 23px; }
+.camera-tag-toolbar [data-camera-tag-retry] { justify-self: start; }
+.camera-tag-toolbar [data-camera-tag-status]:empty { display: none; }
+.camera-tag-empty { grid-column: 1 / -1; margin: 4px 0; color: #525b66; }
 .cameras-list [data-camera-cards], .camera-group__cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 265px), 1fr));
@@ -106,6 +157,24 @@
   margin: 0;
   color: #243b56;
   font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.camera-group__tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+.camera-group__tag-list li {
+  max-width: 100%;
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: #dceafe;
+  color: #174d91;
+  font-size: 13px;
+  font-weight: 650;
   overflow-wrap: anywhere;
 }
 .camera-visuals__create {
@@ -194,7 +263,7 @@
 .camera-card__wifi--online { color: #31b8a5; }
 .camera-card__wifi--offline { color: #c33232; }
 .camera-card__wifi--unknown { color: #9299a1; }
-:is(.camera-group__rename, .camera-visual-card__rename) {
+:is(.camera-group__rename, .camera-visual-card__rename, .camera-group__tags) {
   display: grid;
   flex: none;
   place-items: center;
@@ -209,8 +278,13 @@
   cursor: pointer;
 }
 :is(.camera-group__rename, .camera-visual-card__rename) svg { width: 18px; height: 18px; fill: currentColor; }
-:is(.camera-group__rename, .camera-visual-card__rename):hover { background: #dceafe; }
-:is(.camera-group__rename, .camera-visual-card__rename):focus-visible { outline: 2px solid #2674e8; outline-offset: 2px; }
+.camera-group__tags { font: 600 23px/1 system-ui, sans-serif; }
+.camera-group__tags:disabled { opacity: .55; cursor: default; }
+:is(.camera-group__rename, .camera-visual-card__rename, .camera-group__tags):hover { background: #dceafe; }
+:is(.camera-group__rename, .camera-visual-card__rename, .camera-group__tags):focus-visible {
+  outline: 2px solid #2674e8;
+  outline-offset: 2px;
+}
 .camera-card__preview {
   position: relative;
   display: grid;
@@ -307,8 +381,30 @@ dialog.camera-visual-editor::backdrop { background: #101113a8; }
   font-weight: 650;
   cursor: pointer;
 }
-.camera-name-editor__actions :is([data-camera-name-cancel], [data-camera-visual-cancel]) { background: #eef0f3; color: #343a40; }
+.camera-name-editor__actions :is([data-camera-name-cancel], [data-camera-visual-cancel], [data-camera-tag-close]) { background: #eef0f3; color: #343a40; }
 .camera-name-editor__actions button[type="submit"] { background: #2674e8; color: #fff; }
+.camera-tag-editor h2 { overflow-wrap: anywhere; }
+.camera-tag-editor__choices { display: grid; gap: 4px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.camera-tag-editor__choices label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: #f0f5fc;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.camera-tag-editor__choices input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: #226edb;
+}
 .cameras-selection {
   flex: none;
   z-index: 2;

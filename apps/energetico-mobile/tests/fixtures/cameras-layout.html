@@ -42,6 +42,11 @@ createCamerasView(document).open({
     listVisuals: async () => savedVisuals.map((visual, index) => ({ ...visual, id: String(index + 1).repeat(32) })),
     editVisualCameras: async () => {},
   } : {}),
+  ...(listMode ? {
+    listTags: async () => [{ id: 1, name: 'Obras ativas', cameraIds: ['camera-1'] }],
+    createTag: async () => {},
+    assignTag: async () => {},
+  } : {}),
   list: async () => Array.from({ length: Math.max(wallCount, 9) }, (_, index) => ({
     id: 'camera-' + (index + 1),
     label: groupedChannels.includes(index) ? 'Obra Xavante • canal ' + (groupedChannels.indexOf(index) + 1)
@@ -103,17 +108,37 @@ const cameraHeadings = () => [...document.querySelectorAll('.camera-group__headi
     heading: rect(heading), title: rect(title),
     pencil: rect(heading.querySelector('[data-camera-rename]')),
     pencilCount: heading.parentElement.querySelectorAll('[data-camera-rename]').length,
+    plus: heading.querySelector('[data-camera-tags]') && rect(heading.querySelector('[data-camera-tags]')),
   };
 });
 const listHeadings = listMode ? cardHeadings() : [];
 const listCameraHeadings = listMode ? cameraHeadings() : [];
 let selectionHeadings = [];
 let selectionCameraHeadings = [];
+let tagsLayout = null;
 if (listHeadings.length) {
   document.querySelector('[data-camera-grid]').click();
   selectionHeadings = cardHeadings();
   selectionCameraHeadings = cameraHeadings();
   document.querySelector('[data-camera-grid]').click();
+  const createTag = document.querySelector('[data-camera-create-tag]');
+  const filter = document.querySelector('[data-camera-tag-filter]');
+  createTag.click();
+  const createEditor = document.querySelector('[data-camera-tag-editor]');
+  tagsLayout = { create: rect(createTag), filter: rect(filter), createEditor: rect(createEditor),
+    nameFocused: document.activeElement === createEditor.querySelector('input') };
+  createEditor.querySelector('[data-camera-tag-close]').click();
+  filter.value = '1';
+  filter.dispatchEvent(new Event('change', { bubbles: true }));
+  tagsLayout.clear = rect(document.querySelector('[data-camera-tag-clear]'));
+  tagsLayout.filteredCount = document.querySelectorAll('[data-camera-open]').length;
+  document.querySelector('[data-camera-tags="camera-1"]').click();
+  const assignment = document.querySelector('[data-camera-tag-editor]');
+  tagsLayout.assignment = rect(assignment);
+  tagsLayout.checkbox = rect(assignment.querySelector('input'));
+  tagsLayout.checked = assignment.querySelector('input').checked;
+  assignment.querySelector('[data-camera-tag-close]').click();
+  document.querySelector('[data-camera-tag-clear]').click();
 }
 const visualCards = [...document.querySelectorAll('.camera-visual-card')].map(card => ({
   bounds: rect(card),
@@ -145,7 +170,7 @@ if (visualsMode) {
 }
 const layout = {viewport:rect(dialog),
   tabs:document.querySelector('.cameras-header__tabs') && rect(document.querySelector('.cameras-header__tabs')),
-  listHeadings, selectionHeadings, listCameraHeadings, selectionCameraHeadings,
+  listHeadings, selectionHeadings, listCameraHeadings, selectionCameraHeadings, tagsLayout,
   cards:[...document.querySelectorAll('.camera-card')].map(rect),
   noSignalStatus:document.querySelector('[data-camera-status]') && {
     ribbon:rect(document.querySelector('[data-camera-status]')),

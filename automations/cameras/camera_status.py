@@ -183,7 +183,63 @@ class CameraStatusStore:
             self._connection.execute("""
                 ALTER TABLE camera_visuals ADD COLUMN camera_revision INTEGER NOT NULL DEFAULT 0
             """)
+        self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS camera_tags (
+                id INTEGER PRIMARY KEY,
+                viewer TEXT NOT NULL,
+                name TEXT NOT NULL,
+                name_key TEXT NOT NULL,
+                UNIQUE (viewer, name_key)
+            )
+        """)
+        self._connection.execute("""
+            CREATE TABLE IF NOT EXISTS camera_tag_assignments (
+                tag_id INTEGER NOT NULL REFERENCES camera_tags(id),
+                camera_key TEXT NOT NULL,
+                PRIMARY KEY (tag_id, camera_key)
+            )
+        """)
         self._connection.commit()
+
+    def list_tags(self, viewer):
+        with self._lock:
+            rows = self._connection.execute("""
+                SELECT tags.id, tags.name, assignments.camera_key
+                FROM camera_tags AS tags
+                LEFT JOIN camera_tag_assignments AS assignments ON assignments.tag_id = tags.id
+                WHERE tags.viewer = ?
+                ORDER BY tags.id, assignments.camera_key
+            """, (viewer,)).fetchall()
+        tags = {}
+        for tag_id, name, camera_key in rows:
+            tag = tags.setdefault(tag_id, {"id": tag_id, "name": name, "cameraKeys": []})
+            if camera_key is not None:
+                tag["cameraKeys"].append(camera_key)
+        return list(tags.values())
+
+    def create_tag(self, viewer, name, name_key):
+        with self._lock, self._connection:
+            self._connection.execute("""
+                INSERT INTO camera_tags(viewer, name, name_key) VALUES (?, ?, ?)
+                ON CONFLICT(viewer, name_key) DO NOTHING
+            """, (viewer, name, name_key))
+
+    def assign_tag(self, viewer, tag_id, camera_key, assigned):
+        with self._lock, self._connection:
+            if not self._connection.execute(
+                "SELECT 1 FROM camera_tags WHERE viewer = ? AND id = ?", (viewer, tag_id),
+            ).fetchone():
+                return False
+            if assigned:
+                self._connection.execute("""
+                    INSERT INTO camera_tag_assignments(tag_id, camera_key) VALUES (?, ?)
+                    ON CONFLICT(tag_id, camera_key) DO NOTHING
+                """, (tag_id, camera_key))
+            else:
+                self._connection.execute(
+                    "DELETE FROM camera_tag_assignments WHERE tag_id = ? AND camera_key = ?", (tag_id, camera_key),
+                )
+            return True
 
     @staticmethod
     def _visual(row):

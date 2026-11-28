@@ -1,6 +1,7 @@
 import { reportOrientation } from '../native/report-orientation.js';
 import { CAMERA_GRID_LIMIT as GRID_LIMIT } from '../chat/camera-grid-limit.js';
 import { bindStackedCameraPreview } from './cameras-stacked-preview.js';
+import { createCameraTags } from './cameras-tags.js';
 
 const THUMBNAIL_PREFIX = 'energetico:camera-preview:v1:';
 const CAMERA_NAME_PREFIX = 'energetico:camera-name:v2:';
@@ -112,7 +113,7 @@ export function createCamerasView(documentRef) {
   }
 
   function open({ accountKey, list, listVisuals, createVisual, importVisual, renameVisual, editVisualCameras,
-    start, prepareGrid, renewLive, playbackIsGone, move, listRecordings, playRecording }) {
+    listTags, createTag, assignTag, start, prepareGrid, renewLive, playbackIsGone, move, listRecordings, playRecording }) {
     if (dialog) return true;
     const previousFocus = documentRef.activeElement;
     const page = new AbortController();
@@ -353,7 +354,8 @@ export function createCamerasView(documentRef) {
     dialog.innerHTML = `
       <header class="cameras-header">
         <div class="cameras-header__bar"><button type="button" data-camera-back aria-label="Voltar">‹</button>
-        <h1 id="camera-heading" data-camera-heading>Câmeras</h1><button type="button" data-camera-grid aria-label="Selecionar várias câmeras" title="Selecionar várias câmeras">▦</button></div>
+        <h1 id="camera-heading" data-camera-heading>Câmeras</h1><button type="button" data-camera-grid aria-label="Selecionar várias câmeras" title="Selecionar várias câmeras">▦</button>
+        <button class="cameras-header__create-tag" type="button" data-camera-create-tag hidden disabled>Criar tarja</button></div>
         <nav class="cameras-header__tabs" data-camera-tabs role="tablist" aria-label="Câmeras e visuais">
           <button type="button" id="camera-tab-cameras" role="tab" aria-selected="true" data-camera-tab="cameras">Câmeras</button>
           <button type="button" id="camera-tab-visuals" role="tab" aria-selected="false" data-camera-tab="visuals">Visuais</button>
@@ -361,6 +363,15 @@ export function createCamerasView(documentRef) {
       </header>
       <main class="cameras-list" id="camera-panel" role="tabpanel" aria-labelledby="camera-tab-cameras">
         <p role="status" aria-live="polite"></p>
+        <div class="camera-tag-toolbar" data-camera-tag-toolbar hidden>
+          <label for="camera-tag-filter">Filtrar por tarja</label>
+          <div class="camera-tag-toolbar__control">
+            <select id="camera-tag-filter" data-camera-tag-filter disabled><option value="">Todas as câmeras</option></select>
+            <button type="button" data-camera-tag-clear aria-label="Limpar filtro de tarja" hidden>×</button>
+          </div>
+          <span data-camera-tag-status aria-live="polite"></span>
+          <button type="button" data-camera-tag-retry hidden>Tentar novamente</button>
+        </div>
         <button class="camera-visuals__create" type="button" data-camera-create-visual hidden>＋ Criar visual</button>
         <div data-camera-cards></div>
       </main>
@@ -382,6 +393,8 @@ export function createCamerasView(documentRef) {
     const visualsTab = dialog.querySelector('[data-camera-tab="visuals"]');
     const createVisualButton = dialog.querySelector('[data-camera-create-visual]');
     const cameraPanel = dialog.querySelector('#camera-panel');
+    const cameraTags = createCameraTags({ view: dialog, listTags, createTag, assignTag,
+      signal: page.signal, onChange: renderUpdatedChannels });
     const make = (tag, className, text) => {
       const node = documentRef.createElement(tag);
       node.className = className;
@@ -661,6 +674,13 @@ export function createCamerasView(documentRef) {
     function render() {
       cards.replaceChildren();
       const selectingVisual = creatingVisual || Boolean(editingVisual);
+      const showTags = activeTab === 'cameras' && !selectingVisual;
+      const filtering = showTags && cameraTags?.filtering;
+      const visibleGroups = filtering ? cameraGroups.filter(group => cameraTags.matches(group[0])) : cameraGroups;
+      if (filtering && choosing) {
+        const visibleIds = new Set(visibleGroups.flatMap(group => group.map(channel => channel.id)));
+        for (const id of selected) if (!visibleIds.has(id)) selected.delete(id);
+      }
       const savedCameraIds = editingVisual?.cameraIds ?? [];
       const unavailable = editingVisual
         ? [...new Set([...savedCameraIds, ...selected])].map((id, index) => ({ id, position: index + 1 }))
@@ -676,6 +696,7 @@ export function createCamerasView(documentRef) {
       createVisualButton.hidden = activeTab !== 'visuals' || selectingVisual;
       createVisualButton.disabled = channels.length === 0;
       gridButton.hidden = selectingVisual || activeTab !== 'cameras';
+      cameraTags?.render(showTags);
       selection.hidden = !choosing;
       gridCancel.hidden = !selectingVisual;
       gridCancel.disabled = Boolean(editingVisual && savingVisual);
@@ -723,7 +744,13 @@ export function createCamerasView(documentRef) {
         return;
       }
 
-      for (const group of cameraGroups) {
+      if (filtering && camerasLoaded && cameraGroups.length && !visibleGroups.length) {
+        const empty = make('p', 'camera-tag-empty', 'Nenhuma câmera tem esta tarja.');
+        empty.dataset.cameraTagEmpty = '';
+        empty.setAttribute('role', 'status');
+        cards.append(empty);
+      }
+      for (const group of visibleGroups) {
         const camera = group[0];
         const cluster = make('section', group.length === 1 ? 'camera-group camera-group--single' : 'camera-group');
         const heading = make('div', 'camera-group__heading');
@@ -738,10 +765,12 @@ export function createCamerasView(documentRef) {
         rename.addEventListener('click', () => editCameraName(camera, rename));
         heading.append(title, rename);
         cluster.setAttribute('aria-labelledby', title.id);
+        cluster.append(heading);
+        if (showTags) cameraTags?.appendControls(heading, cluster, camera);
         const groupCards = make('div', 'camera-group__cards');
         const cameraOffline = group.every(channel => channel.status === 'offline' && !hasRecentLiveVideo(channel.id));
         groupCards.append(...group.map(channel => createCameraCard(channel, cameraOffline)));
-        cluster.append(heading, groupCards);
+        cluster.append(groupCards);
         cards.append(cluster);
       }
       unavailable.forEach(({ id, position }) => {
@@ -835,6 +864,7 @@ export function createCamerasView(documentRef) {
       const focusedOpenId = focused?.dataset?.cameraOpen;
       const focusedSelectId = focused?.dataset?.cameraSelect;
       const focusedCameraId = focused?.dataset?.cameraRename;
+      const focusedTagCameraId = focused?.dataset?.cameraTags;
       render();
       if (focused === gridButton && !gridButton.hidden) gridButton.focus({ preventScroll: true });
       else if (focusedOpenId && activeTab === 'cameras') Array.from(dialog.querySelectorAll('[data-camera-open]'))
@@ -842,6 +872,7 @@ export function createCamerasView(documentRef) {
       else if (focusedSelectId && activeTab === 'cameras' && choosing) Array.from(dialog.querySelectorAll('[data-camera-select]'))
         .find(input => input.dataset.cameraSelect === focusedSelectId)?.focus({ preventScroll: true });
       else if (focusedCameraId) dialog.querySelector(`[data-camera-rename="${focusedCameraId}"]`)?.focus({ preventScroll: true });
+      else if (focusedTagCameraId) dialog.querySelector(`[data-camera-tags="${focusedTagCameraId}"]`)?.focus({ preventScroll: true });
     }
 
     async function refreshChannels({ initial = false } = {}) {
@@ -1043,6 +1074,7 @@ export function createCamerasView(documentRef) {
       refreshTimer = null;
       closeNameEditor({ restoreFocus: false });
       closeVisualNameEditor({ restoreFocus: false });
+      cameraTags?.close();
       stopPlayer({ restoreFocus: false });
       cameraOrientationBinding?.destroy(); cameraOrientationBinding = null;
       documentRef.removeEventListener('visibilitychange', visibilityChanged);
@@ -1061,6 +1093,7 @@ export function createCamerasView(documentRef) {
       expireLiveVideoEvidence();
       resumePlayer();
       if ((activeTab === 'visuals' || pendingLegacyVisuals) && !documentRef.hidden) void refreshVisuals();
+      if (activeTab === 'cameras' && !player && !documentRef.hidden) void cameraTags?.refresh();
     }
     function clearWaiting(item) {
       if (item.waitingTimer === null) return;
@@ -1741,6 +1774,7 @@ export function createCamerasView(documentRef) {
       event.preventDefault();
       if (nameEditor) closeNameEditor();
       else if (visualNameEditor) closeVisualNameEditor();
+      else if (cameraTags?.open) cameraTags.cancel();
       else if (player) stopPlayer();
       else if (editingVisual) closeVisualCameraSelection();
       else close();
@@ -1751,6 +1785,7 @@ export function createCamerasView(documentRef) {
       status.textContent = camerasLoaded ? channels.length ? '' : 'Nenhuma câmera está disponível para sua conta.'
         : cameraLoadError || 'Carregando câmeras…';
       render();
+      void cameraTags?.refresh();
     });
     visualsTab.addEventListener('click', () => {
       activeTab = 'visuals'; creatingVisual = false; choosing = false; selected.clear();
@@ -1777,6 +1812,7 @@ export function createCamerasView(documentRef) {
       visuals = loadVisuals();
       pendingLegacyVisuals = Boolean(importVisual && visuals.length);
       void refreshChannels({ initial: true });
+      void cameraTags?.refresh();
       if (pendingLegacyVisuals || activeTab === 'visuals') void refreshVisuals();
     });
     if (windowRef?.setInterval) refreshTimer = windowRef.setInterval(() => {
@@ -1784,6 +1820,7 @@ export function createCamerasView(documentRef) {
       void refreshChannels();
       void renewPlayingCameras();
       if ((activeTab === 'visuals' || pendingLegacyVisuals) && !documentRef.hidden) void refreshVisuals();
+      if (activeTab === 'cameras' && !player && !documentRef.hidden) void cameraTags?.refresh();
     }, CAMERA_STATUS_REFRESH_MS);
     return true;
   }

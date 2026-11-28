@@ -29,6 +29,21 @@ class PhysicalCameraStatusTest(unittest.TestCase):
         return Gateway({"origins": [], "viewers": [], "ffmpeg": "unused", "channels": channels},
                        status_store=store)
 
+    def test_camera_tag_follows_the_physical_device_after_catalog_reordering_and_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "camera-status.sqlite3"
+            with CameraStatusStore(path) as store:
+                gateway = self.gateway(store)
+                create = {"name": "Pátio"}
+                tag = gateway.camera_tags("owner", "create-tag", create)["tags"][0]
+                assignment = {"tagId": tag["id"], "cameraId": "patio-2", "assigned": True}
+                result = gateway.camera_tags("owner", "assign-tag", assignment)
+                self.assertEqual(result, {"tags": [{**tag, "cameraIds": ["patio-1"]}]})
+            with CameraStatusStore(path) as store:
+                gateway = self.gateway(store, first_channel="patio-3")
+                self.assertEqual(gateway.camera_tags("owner", "list-tags", {}),
+                                 {"tags": [{**tag, "cameraIds": ["patio-3"]}]})
+
     def test_reports_one_camera_transition_when_three_channels_fall_and_recover_at_different_times(self):
         with CameraStatusStore(":memory:") as store:
             gateway = self.gateway(store)
@@ -224,6 +239,29 @@ class CameraGatewayTest(unittest.TestCase):
         self.assertEqual(self.request("POST", CATALOG, "owner", {**rename, "name": "Antigo"})[0], 409)
         self.assertEqual(json.loads(self.request("POST", CATALOG, "owner", listing)[2]),
                          {"visuals": [{**saved_visual, "name": "Obra"}]})
+
+    def test_camera_tags_are_account_scoped_and_creation_and_assignment_can_be_retried(self):
+        self.gateway.users.add("other-owner")
+        create = {"action": "create-tag", "name": "  Obra externa  "}
+        listing = {"action": "list-tags"}
+        self.assertEqual(self.request("POST", CATALOG, body=listing)[0], 401)
+        self.assertEqual(self.request("POST", CATALOG, "unknown-owner", listing)[0], 403)
+        status, _, body = self.request("POST", CATALOG, "owner", create)
+        self.assertEqual(status, 200)
+        tag = json.loads(body)["tags"][0]
+        self.assertEqual(tag["name"], "Obra externa")
+        self.assertEqual(self.request("POST", CATALOG, "owner", {**create, "name": "OBRA EXTERNA"})[2], body)
+        write = {"action": "assign-tag", "tagId": tag["id"], "cameraId": "ch-1", "assigned": True}
+        self.assertEqual(self.request("POST", CATALOG, "other-owner", write)[0], 404)
+        self.assertEqual(self.request("POST", CATALOG, "owner", {**write, "cameraId": "missing"})[0], 404)
+        self.assertEqual(self.request("POST", CATALOG, "owner", {**write, "assigned": 1})[0], 400)
+        saved = {"tags": [{**tag, "cameraIds": ["ch-1"]}]}
+        for _ in range(2):
+            self.assertEqual(json.loads(self.request("POST", CATALOG, "owner", write)[2]), saved)
+        self.assertEqual(json.loads(self.request("POST", CATALOG, "OWNER", listing)[2]), saved)
+        self.assertEqual(json.loads(self.request("POST", CATALOG, "other-owner", listing)[2]), {"tags": []})
+        for _ in range(2):
+            self.assertEqual(self.request("POST", CATALOG, "owner", {**write, "assigned": False})[2], body)
 
     def test_saved_visual_accepts_sixteen_cameras_in_order(self):
         channels = [f"ch-{index}" for index in range(17, 0, -1)]
