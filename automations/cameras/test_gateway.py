@@ -381,6 +381,7 @@ class CameraGatewayTest(unittest.TestCase):
                     self.assertEqual(command[command.index("-hls_time") + 1], duration)
                     self.assertNotIn("-hls_init_time", command)
                     if preview:
+                        self.assertEqual(command[command.index("-vf") + 1], "fps=6,scale=384:-2")
                         self.assertEqual(command[command.index("-hls_list_size") + 1], "24")
                         self.assertEqual(command[command.index("-hls_delete_threshold") + 1], "32")
                     interval = command[command.index("-g") + 1] if "-g" in command else None

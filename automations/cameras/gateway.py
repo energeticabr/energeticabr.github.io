@@ -118,7 +118,8 @@ class Stream:
             video = ["-map", "0:v:0", "-c:v", "copy", "-bsf:v",
                      r"setts=pts=if(eq(PTS\,NOPTS)\,N*DURATION\,PTS):dts=if(eq(DTS\,NOPTS)\,N*DURATION\,DTS)"]
         else:
-            video = ["-vf", f"scale={width}:-2,fps={fps}", "-c:v", "libx264",
+            # Discard unused frames before resizing them.
+            video = ["-vf", f"fps={fps},scale={width}:-2", "-c:v", "libx264",
                      "-preset", "ultrafast", "-threads", "1", "-pix_fmt", "yuv420p",
                      *bitrate, "-g", str(fps * segment_seconds), "-sc_threshold", "0"]
         fmp4 = self.direct and entry["format"] == "hevc"
