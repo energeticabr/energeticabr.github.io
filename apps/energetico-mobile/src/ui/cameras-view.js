@@ -2,8 +2,10 @@ import { reportOrientation } from '../native/report-orientation.js';
 import { CAMERA_GRID_LIMIT as GRID_LIMIT } from '../chat/camera-grid-limit.js';
 
 const THUMBNAIL_PREFIX = 'energetico:camera-preview:v1:';
-const CAMERA_NAME_PREFIX = 'energetico:camera-name:v1:';
+const CAMERA_NAME_PREFIX = 'energetico:camera-name:v2:';
+const LEGACY_CAMERA_NAME_PREFIX = 'energetico:camera-name:v1:';
 const CAMERA_VISUAL_PREFIX = 'energetico:camera-visual:v1:';
+const CAMERA_CHANNEL_SUFFIX = /(?:^\s*|\s*[-·•–—]\s*)canal\s+(\d+)\s*$/i;
 const PENCIL_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 16.5V20h3.5L18.7 8.8l-3.5-3.5L4 16.5Zm17-10.1a1 1 0 0 0 0-1.4l-2-2a1 1 0 0 0-1.4 0l-1.7 1.7 3.5 3.5L21 6.4Z"/></svg>';
 const HLS_MIME = 'application/vnd.apple.mpegurl';
 const HEVC_MIME = 'video/mp4; codecs="hvc1.1.6.L120.B0"';
@@ -24,8 +26,8 @@ function thumbnailStoragePrefix(accountKey) {
   return accountKey ? `${THUMBNAIL_PREFIX}${encodeURIComponent(accountKey)}:` : '';
 }
 
-function cameraNameStoragePrefix(accountKey) {
-  return accountKey ? `${CAMERA_NAME_PREFIX}${encodeURIComponent(accountKey)}:` : '';
+function cameraNameStoragePrefix(accountKey, prefix = CAMERA_NAME_PREFIX) {
+  return accountKey ? `${prefix}${encodeURIComponent(accountKey)}:` : '';
 }
 
 function cameraVisualStorageKey(accountKey) {
@@ -62,6 +64,32 @@ function groupCameraChannels(channels) {
   return [...groups.values()];
 }
 
+function numberCameraChannels(group) {
+  const reserved = new Set();
+  const numbered = group.map(channel => {
+    const number = Number(channel.label.match(CAMERA_CHANNEL_SUFFIX)?.[1]);
+    if (!Number.isSafeInteger(number) || number < 1 || reserved.has(number)) return { channel, number: 0 };
+    reserved.add(number);
+    return { channel, number };
+  });
+  const representative = numbered.find(({ channel }) => channel.id === channel.cameraGroup);
+  if (representative?.number === 0 && !reserved.has(1)) {
+    representative.number = 1;
+    reserved.add(1);
+  }
+  let next = 1;
+  for (const entry of numbered) {
+    if (entry.number) continue;
+    while (reserved.has(next)) next++;
+    entry.number = next++;
+  }
+  return numbered.sort((first, second) => first.number - second.number);
+}
+
+function channelDisplayName(channel) {
+  return `${channel.cameraName} · ${channel.channelLabel}`;
+}
+
 function formatCameraLastOnline(value) {
   if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) return null;
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
@@ -96,7 +124,7 @@ export function createCamerasView(documentRef) {
     let pendingLegacyVisuals = false;
     let cameraLoadError = '';
     let cameraOrientationBinding = null;
-    let nameEditor = null, nameEditorReturnFocus = null, nameEditorChannelId = null;
+    let nameEditor = null, nameEditorReturnFocus = null, nameEditorCameraId = null;
     let visualNameEditor = null, visualNameEditorReturnFocus = null;
     let playerReturnFocus = null, playerReturnChannelId = null;
     let playerSuspended = false;
@@ -135,18 +163,29 @@ export function createCamerasView(documentRef) {
     const android = /\bAndroid\b/i.test(windowRef.navigator.userAgent);
     const storagePrefix = thumbnailStoragePrefix(accountKey);
     const nameStoragePrefix = cameraNameStoragePrefix(accountKey);
+    const legacyNameStoragePrefix = cameraNameStoragePrefix(accountKey, LEGACY_CAMERA_NAME_PREFIX);
     const visualStorageKey = cameraVisualStorageKey(accountKey);
 
-    function loadCameraNames(source = channels) {
-      if (!nameStoragePrefix) return source;
+    function readCameraName(prefix, cameraId) {
+      if (!prefix) return '';
       try {
-        const storage = windowRef?.localStorage;
-        return source.map(channel => {
-          const saved = storage?.getItem(nameStoragePrefix + channel.id);
-          return typeof saved === 'string' && saved.trim() && saved.trim().length <= 120
-            ? { ...channel, label: saved.trim() } : channel;
-        });
-      } catch { return source; /* Camera names remain usable when storage is unavailable. */ }
+        const name = windowRef?.localStorage?.getItem(prefix + cameraId)?.trim();
+        return name && name.length <= 120 ? name : '';
+      } catch { return ''; /* Camera names remain usable when storage is unavailable. */ }
+    }
+
+    function loadCameraGroups(source) {
+      return groupCameraChannels(source).map(group => {
+        const numbered = numberCameraChannels(group);
+        const primary = numbered[0].channel;
+        const cameraNameId = primary.id;
+        const cameraName = readCameraName(nameStoragePrefix, cameraNameId)
+          || readCameraName(legacyNameStoragePrefix, cameraNameId)
+          || primary.cameraLabel || primary.label.replace(CAMERA_CHANNEL_SUFFIX, '').trim() || 'Câmera';
+        return numbered.map(({ channel, number }) => ({
+          ...channel, cameraNameId, cameraName, channelLabel: `Canal ${number}`,
+        }));
+      });
     }
 
     function parseVisuals(value) {
@@ -346,20 +385,20 @@ export function createCamerasView(documentRef) {
     function closeNameEditor({ restoreFocus = true } = {}) {
       if (!nameEditor) return;
       const editor = nameEditor;
-      const channelId = nameEditorChannelId;
+      const cameraId = nameEditorCameraId;
       nameEditor = null;
-      nameEditorChannelId = null;
+      nameEditorCameraId = null;
       if (editor.open && typeof editor.close === 'function') editor.close();
       editor.remove();
       if (restoreFocus) {
         const target = nameEditorReturnFocus?.isConnected ? nameEditorReturnFocus
-          : dialog.querySelector(`[data-camera-rename="${channelId}"]`);
+          : dialog.querySelector(`[data-camera-rename="${cameraId}"]`);
         target?.focus?.({ preventScroll: true });
       }
       nameEditorReturnFocus = null;
     }
 
-    function editCameraName(channel, trigger) {
+    function editCameraName({ cameraNameId, cameraName }, trigger) {
       if (nameEditor) return;
       const editor = documentRef.createElement('dialog');
       editor.className = 'camera-name-editor';
@@ -379,10 +418,10 @@ export function createCamerasView(documentRef) {
       const form = editor.querySelector('[data-camera-name-form]');
       const input = editor.querySelector('[data-camera-name-input]');
       const error = editor.querySelector('[role="alert"]');
-      input.value = channel.label;
+      input.value = cameraName;
       nameEditor = editor;
       nameEditorReturnFocus = trigger;
-      nameEditorChannelId = channel.id;
+      nameEditorCameraId = cameraNameId;
       editor.addEventListener('cancel', event => {
         event.preventDefault();
         closeNameEditor();
@@ -399,13 +438,14 @@ export function createCamerasView(documentRef) {
         }
         try {
           if (!nameStoragePrefix || !windowRef?.localStorage) throw new Error('Camera name storage is unavailable.');
-          windowRef.localStorage.setItem(nameStoragePrefix + channel.id, label);
+          windowRef.localStorage.setItem(nameStoragePrefix + cameraNameId, label);
         } catch {
           error.textContent = 'Não foi possível salvar o nome da câmera neste dispositivo.';
           input.focus();
           return;
         }
-        channel.label = label;
+        const current = cameraGroups.find(group => group[0].cameraNameId === cameraNameId);
+        for (const channel of current ?? []) channel.cameraName = label;
         render();
         closeNameEditor();
       });
@@ -590,23 +630,28 @@ export function createCamerasView(documentRef) {
       }
 
       for (const group of cameraGroups) {
-        if (group.length === 1) {
-          cards.append(createCameraCard(group[0]));
-          continue;
-        }
-        const cluster = make('section', 'camera-group');
-        const title = make('h2', 'camera-group__title', group[0].cameraLabel || 'Câmera');
-        title.id = `camera-group-${group[0].id}`;
+        const camera = group[0];
+        const cluster = make('section', group.length === 1 ? 'camera-group camera-group--single' : 'camera-group');
+        const heading = make('div', 'camera-group__heading');
+        const title = make('h2', 'camera-group__title', camera.cameraName);
+        title.id = `camera-group-${camera.cameraNameId}`;
+        const rename = make('button', 'camera-group__rename');
+        rename.type = 'button'; rename.dataset.cameraRename = camera.cameraNameId;
+        rename.setAttribute('aria-label', `Editar nome da câmera ${camera.cameraName}`);
+        rename.title = 'Editar nome da câmera';
+        rename.innerHTML = PENCIL_ICON;
+        rename.addEventListener('click', () => editCameraName(camera, rename));
+        heading.append(title, rename);
         cluster.setAttribute('aria-labelledby', title.id);
         const groupCards = make('div', 'camera-group__cards');
         const cameraOffline = group.every(channel => channel.status === 'offline' && !hasRecentLiveVideo(channel.id));
         groupCards.append(...group.map(channel => createCameraCard(channel, cameraOffline)));
-        cluster.append(title, groupCards);
+        cluster.append(heading, groupCards);
         cards.append(cluster);
       }
     }
 
-    function createCameraCard(channel, cameraOffline = true) {
+    function createCameraCard(channel, cameraOffline) {
       const card = make('article', 'camera-card');
       const heading = make('div', 'camera-card__heading');
       const channelStatus = hasRecentLiveVideo(channel.id) ? 'online' : channel.status;
@@ -616,18 +661,13 @@ export function createCamerasView(documentRef) {
       const symbol = make('span', `camera-card__wifi camera-card__wifi--${cameraStatus}`, '◉');
       symbol.setAttribute('aria-label', cameraStatus === 'online' ? 'On-line'
         : noSignal ? CHANNEL_NO_SIGNAL : cameraStatus === 'offline' ? 'Off-line' : 'Status desconhecido');
-      const title = make('strong', '', channel.label);
-      const rename = make('button', 'camera-card__rename');
-      rename.type = 'button'; rename.dataset.cameraRename = channel.id;
-      rename.setAttribute('aria-label', `Editar nome da câmera ${channel.label}`);
-      rename.title = 'Editar nome da câmera';
-      rename.innerHTML = PENCIL_ICON;
-      rename.addEventListener('click', () => editCameraName(channel, rename));
-      heading.append(symbol, title, rename);
+      const title = make('strong', '', channel.channelLabel);
+      const displayName = channelDisplayName(channel);
+      heading.append(symbol, title);
       if (choosing) {
         const checkbox = documentRef.createElement('input');
         checkbox.type = 'checkbox'; checkbox.dataset.cameraSelect = channel.id;
-        checkbox.setAttribute('aria-label', `Selecionar ${channel.label}`);
+        checkbox.setAttribute('aria-label', `Selecionar ${displayName}`);
         checkbox.checked = selected.has(channel.id);
         checkbox.disabled = !checkbox.checked && selected.size >= GRID_LIMIT;
         checkbox.addEventListener('change', () => {
@@ -641,7 +681,7 @@ export function createCamerasView(documentRef) {
       const unavailable = channelStatus === 'offline';
       const lastOnline = unavailable ? formatCameraLastOnline(channel.lastOnlineAt) : null;
       const lastOnlineLabel = lastOnline ? `Última vez on-line: ${lastOnline}` : 'Sem registro de conexão';
-      openButton.setAttribute('aria-label', `Abrir ${channel.label}${unavailable
+      openButton.setAttribute('aria-label', `Abrir ${displayName}${unavailable
         ? `, ${noSignal ? 'canal sem sinal' : 'câmera off-line'}. ${lastOnlineLabel}` : ''}`);
       if (thumbnails.has(channel.id)) {
         const image = documentRef.createElement('img');
@@ -674,8 +714,9 @@ export function createCamerasView(documentRef) {
         const current = next[index];
         return channel.id === current.id && channel.label === current.label
           && channel.status === current.status && channel.lastOnlineAt === current.lastOnlineAt
-            && channel.supportsPtz === current.supportsPtz
-          && channel.cameraGroup === current.cameraGroup && channel.cameraLabel === current.cameraLabel;
+          && channel.supportsPtz === current.supportsPtz && channel.cameraGroup === current.cameraGroup
+          && channel.cameraName === current.cameraName && channel.channelLabel === current.channelLabel
+          && channel.cameraNameId === current.cameraNameId;
       });
     }
 
@@ -683,12 +724,14 @@ export function createCamerasView(documentRef) {
       const focused = documentRef.activeElement;
       const focusedOpenId = focused?.dataset?.cameraOpen;
       const focusedSelectId = focused?.dataset?.cameraSelect;
+      const focusedCameraId = focused?.dataset?.cameraRename;
       render();
       if (focused === gridButton && !gridButton.hidden) gridButton.focus({ preventScroll: true });
       else if (focusedOpenId && activeTab === 'cameras' && !creatingVisual) Array.from(dialog.querySelectorAll('[data-camera-open]'))
         .find(button => button.dataset.cameraOpen === focusedOpenId)?.focus({ preventScroll: true });
       else if (focusedSelectId && activeTab === 'cameras' && choosing) Array.from(dialog.querySelectorAll('[data-camera-select]'))
         .find(input => input.dataset.cameraSelect === focusedSelectId)?.focus({ preventScroll: true });
+      else if (focusedCameraId) dialog.querySelector(`[data-camera-rename="${focusedCameraId}"]`)?.focus({ preventScroll: true });
     }
 
     async function refreshChannels({ initial = false } = {}) {
@@ -697,8 +740,7 @@ export function createCamerasView(documentRef) {
       try {
         const result = await list({ signal: page.signal });
         if (page.signal.aborted) return;
-        const nextChannels = loadCameraNames(result.map(channel => ({ ...channel })));
-        const nextGroups = groupCameraChannels(nextChannels);
+        const nextGroups = loadCameraGroups(result);
         const flatNextChannels = nextGroups.flat();
         const initial = !camerasLoaded;
         const changed = initial || !sameChannels(flatNextChannels);
@@ -1167,7 +1209,7 @@ export function createCamerasView(documentRef) {
       const back = make('button', 'cameras-player__back', '‹'); back.type = 'button'; back.dataset.cameraPlayerBack = '';
       back.setAttribute('aria-label', 'Voltar para a lista de câmeras');
       back.addEventListener('click', stopPlayer);
-      const title = make('strong', 'cameras-player__title', visualName || (chosen.length === 1 ? chosen[0].label : `${chosen.length} câmeras`));
+      const title = make('strong', 'cameras-player__title', visualName || (chosen.length === 1 ? channelDisplayName(chosen[0]) : `${chosen.length} câmeras`));
       const liveState = make('span', 'cameras-player__live-state', 'Conectando…');
       liveState.setAttribute('role', 'status');
       const expand = make('button', 'cameras-player__expand', '⛶'); expand.type = 'button';
@@ -1231,7 +1273,7 @@ export function createCamerasView(documentRef) {
         slot.remove();
         const count = playerChannels.length;
         player.dataset.count = grid.dataset.count = String(count);
-        if (!visualName) title.textContent = count === 1 ? playerChannels[0].label : `${count} câmeras`;
+        if (!visualName) title.textContent = count === 1 ? channelDisplayName(playerChannels[0]) : `${count} câmeras`;
         if (count === 1) {
           const { video } = tileItems[0];
           video.classList.remove('cameras-player__video--focusable');
@@ -1245,12 +1287,13 @@ export function createCamerasView(documentRef) {
         back.focus({ preventScroll: true });
       }
       for (const channel of chosen) {
+        const displayName = channelDisplayName(channel);
         const tile = make('div', 'cameras-player__tile');
         const video = documentRef.createElement('video');
         video.autoplay = true; video.muted = true; video.defaultMuted = true; video.controls = false;
         video.playsInline = true; video.preload = 'auto';
         video.setAttribute('autoplay', ''); video.setAttribute('muted', ''); video.setAttribute('playsinline', '');
-        video.crossOrigin = 'anonymous'; video.setAttribute('aria-label', channel.label);
+        video.crossOrigin = 'anonymous'; video.setAttribute('aria-label', displayName);
         video.dataset.cameraVideo = channel.id;
         if (preview) {
           video.classList.add('cameras-player__video--focusable');
@@ -1258,7 +1301,7 @@ export function createCamerasView(documentRef) {
           video.setAttribute('aria-keyshortcuts', 'Enter');
           video.tabIndex = 0;
         }
-        const label = make('span', 'cameras-player__label', channel.label);
+        const label = make('span', 'cameras-player__label', displayName);
         const savedFrame = make('div', 'cameras-player__saved-frame');
         savedFrame.hidden = true;
         const savedFrameImage = make('img', 'cameras-player__saved-image');
@@ -1273,7 +1316,7 @@ export function createCamerasView(documentRef) {
         retry.dataset.cameraPlayRetry = ''; retry.hidden = true;
         const dismiss = make('button', 'cameras-player__dismiss', '×'); dismiss.type = 'button';
         dismiss.dataset.cameraDismiss = '';
-        dismiss.setAttribute('aria-label', `Ocultar ${channel.label} desta visualização`);
+        dismiss.setAttribute('aria-label', `Ocultar ${displayName} desta visualização`);
         const slot = make('div', 'cameras-player__slot');
         const item = { controller: new AbortController(), video, status: notice, retry, liveBadge,
           savedFrame, savedFrameImage, hls: null,
@@ -1469,7 +1512,7 @@ export function createCamerasView(documentRef) {
             canvas.getContext('2d').drawImage(item.video, 0, 0, canvas.width, canvas.height);
             const anchor = make('a', '');
             const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const safeName = channel.label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9-]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'camera';
+            const safeName = channelDisplayName(channel).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9-]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'camera';
             anchor.href = canvas.toDataURL('image/jpeg', 0.9); anchor.download = `energetico-${safeName}-${stamp}.jpg`;
             documentRef.body.append(anchor); anchor.click(); anchor.remove();
             controlStatus.textContent = 'Imagem capturada.';
