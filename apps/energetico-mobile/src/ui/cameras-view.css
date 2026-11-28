@@ -56,6 +56,10 @@
   font-weight: 700;
 }
 .cameras-header__create-tag:disabled { opacity: .55; cursor: default; }
+@media (max-width: 360px) {
+  .cameras-header__bar { gap: 4px; }
+  .cameras-header .cameras-header__create-tag { padding-inline: 8px; }
+}
 .cameras-header__tabs {
   display: flex;
   gap: 4px;

@@ -70,10 +70,11 @@ test('lista e visualizador cabem na orientação natural do telefone e do deskto
       assert.equal(layout.cards.length,9);
       assert.ok(layout.cards.every(card => card.left >= 0 && card.right <= width));
       const { create, filter, createEditor, nameFocused, clear, filteredCount, assignment, checkbox, checked } = layout.tagsLayout;
-      for (const bounds of [create, filter, createEditor, clear, assignment]) {
-        assert.ok(bounds.left >= 0 && bounds.right <= width && bounds.top >= 0 && bounds.bottom <= height);
+      for (const [name, bounds] of Object.entries({ create, filter, createEditor, clear, assignment })) {
+        assert.ok(bounds.left >= 0 && bounds.right <= width && bounds.top >= 0 && bounds.bottom <= height,
+          `${name} at ${width}x${height}: ${JSON.stringify(bounds)}; ${JSON.stringify(layout.tagsLayout)}`);
       }
-      assert.ok(create.right > width / 2 && create.bottom <= layout.tabs.top);
+      assert.ok(create.right > width / 2 && create.right <= layout.tabs.right && create.bottom <= layout.tabs.top);
       assert.ok(filter.height >= 44 && clear.width >= 44 && clear.height >= 44);
       assert.ok(checkbox.width > 0 && checkbox.width <= 24 && checkbox.height <= 24);
       assert.equal(nameFocused, true);

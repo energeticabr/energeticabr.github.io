@@ -167,6 +167,28 @@ test('atualiza as opções quando a mesma conta cria uma tarja em outro disposit
   assert.equal(modal.querySelector('input').checked, true);
 });
 
+test('uma atualização de tarjas que termina depois da troca de aba mantém o foco no visual', async t => {
+  const visual = { id: 'a'.repeat(32), name: 'Entrada', cameraIds: ['site-1'], cameraRevision: 0 };
+  let finishRefresh;
+  let refreshing = false;
+  const tagService = {
+    listTags: async () => refreshing ? new Promise(resolve => { finishRefresh = resolve; }) : [],
+    createTag: async () => {},
+    assignTag: async () => {},
+  };
+  const { document } = setup(t, { tagService, visualService: { listVisuals: async () => [visual] } });
+  await flush();
+  refreshing = true;
+  document.querySelector('[data-camera-tab="cameras"]').click();
+  document.querySelector('[data-camera-tab="visuals"]').click();
+  await flush();
+  const button = document.querySelector('[data-camera-visual-open]');
+  button.focus();
+  finishRefresh([{ id: 1, name: 'Entrada', cameraIds: ['site-1'] }]);
+  await flush();
+  assert.equal(document.activeElement, button);
+});
+
 test('seleciona as câmeras do visual, mantém a ordem e sincroniza a edição no mesmo registro', async t => {
   const original = { id: 'a'.repeat(32), name: 'Portão', cameraRevision: 2, cameraIds: ['site-4', 'site-2', 'site-1'] };
   let saved = original;
