@@ -176,11 +176,13 @@ export function createCamerasView(documentRef) {
 
     function loadCameraGroups(source) {
       return groupCameraChannels(source).map(group => {
-        const numbered = numberCameraChannels(group);
+        // Anchor the alias to a public ID independent of the catalog order.
+        const byId = [...group].sort((first, second) => first.id.localeCompare(second.id));
+        const numbered = numberCameraChannels(byId);
         const primary = numbered[0].channel;
-        const cameraNameId = primary.id;
+        const cameraNameId = byId[0].id;
         const cameraName = readCameraName(nameStoragePrefix, cameraNameId)
-          || readCameraName(legacyNameStoragePrefix, cameraNameId)
+          || readCameraName(legacyNameStoragePrefix, primary.id)
           || primary.cameraLabel || primary.label.replace(CAMERA_CHANNEL_SUFFIX, '').trim() || 'Câmera';
         return numbered.map(({ channel, number }) => ({
           ...channel, cameraNameId, cameraName, channelLabel: `Canal ${number}`,

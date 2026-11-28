@@ -487,6 +487,22 @@ test('preserva Canal no nome cadastrado de uma câmera de canal único', async t
   assert.equal(document.querySelector('.camera-card__heading strong').textContent, 'Canal 1');
 });
 
+test('mantém o nome da câmera quando a ordem muda e o catálogo repete um número', async t => {
+  const timerControl = { cleared: [] };
+  const duplicate = { ...mixedCatalog[2], label: mixedCatalog[0].label };
+  let catalog = [mixedCatalog[0], duplicate];
+  const { document } = setup(t, { cameraList: async () => catalog, accountKey: 'conta', timerControl });
+  Object.defineProperty(document, 'hidden', { value: false });
+  document.defaultView.localStorage.setItem('energetico:camera-name:v2:conta:patio-1', 'Portão');
+  await flush();
+  catalog = [duplicate, mixedCatalog[0]].map(channel => ({ ...channel, cameraGroup: duplicate.id }));
+  timerControl.callback();
+  await flush();
+
+  assert.equal(document.querySelector('.camera-group__title').textContent, 'Portão');
+  assert.equal(document.querySelector('[data-camera-open="patio-2"]').getAttribute('aria-label'), 'Abrir Portão · Canal 2');
+});
+
 test('renomeia a câmera física uma vez e atualiza todos os seus canais sem perder a seleção', async t => {
   const { document } = setup(t, { catalog: mixedCatalog, accountKey: 'conta' });
   await flush();
